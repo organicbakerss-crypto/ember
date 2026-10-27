@@ -239,6 +239,8 @@ export const ipcInputs = {
   'settings:get': z.void(),
   'settings:update': z.object({
     theme: z.string().min(1).max(100).optional(),
+    pageView: z.enum(['pages', 'continuous']).optional(),
+    paperSize: z.enum(['a4', 'letter', 'trade']).optional(),
     spellcheck: z.boolean().optional(),
     spellLanguages: z.array(z.string().max(20)).max(10).optional(),
     dictionary: z.array(z.string().trim().min(1).max(100)).max(50000).optional(),

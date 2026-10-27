@@ -4,6 +4,8 @@ import type { Node as PMNode } from '@tiptap/pm/model'
 import type { ChapterFile, ChapterType } from '@shared/schema'
 import { api, describeError } from '../api'
 import { RECALC_DELAY_MS, type ActiveEcho, type AnalysisOptions } from './analysisDecorations'
+import { PAPER_SIZES } from '@shared/settings'
+import { useSettings } from '../useTheme'
 import { chapterExtensions } from './extensions'
 import { docWords, findScenes, type Scene } from './scenes'
 import { Toolbar } from './Toolbar'
@@ -87,6 +89,8 @@ function editableContent(content: ChapterFile['content']): JSONContent {
 }
 
 const SELECTION_DELAY_MS = 300
+/** Space between sheets in the page view. */
+const PAGE_GAP = 28
 
 /** Paragraph texts of the document (or of a range of it), for stats. */
 function editorParagraphs(doc: PMNode, from = 0, to = doc.content.size): string[] {
@@ -200,6 +204,45 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
   }
   const closeEcho = () => editor.commands.clearActiveEcho()
 
+  // Page view: sheets of a fixed paper shape. Height follows the page's width.
+  const { settings } = useSettings()
+  const paged = settings.pageView === 'pages'
+  const ratio = PAPER_SIZES[settings.paperSize].ratio
+  const stackRef = useRef<HTMLDivElement>(null)
+  const [geometry, setGeometry] = useState({ width: 0, marginBlock: 0 })
+  const [pages, setPages] = useState(1)
+  useEffect(() => {
+    const stack = stackRef.current
+    if (!stack) return
+    const measure = () => {
+      const content = stack.querySelector('.page-content')
+      const marginBlock = content ? parseFloat(getComputedStyle(content).paddingTop) : 0
+      setGeometry((g) =>
+        g.width === stack.clientWidth && g.marginBlock === marginBlock
+          ? g
+          : { width: stack.clientWidth, marginBlock },
+      )
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(stack)
+    return () => observer.disconnect()
+  }, [])
+  const pageHeight = Math.round(geometry.width * ratio)
+  useEffect(() => {
+    editor.commands.onPages(setPages)
+    return () => {
+      if (!editor.isDestroyed) editor.commands.onPages(null)
+    }
+  }, [editor])
+  useEffect(() => {
+    editor.commands.setPageLayout({
+      enabled: paged && pageHeight > 0,
+      contentHeight: pageHeight - 2 * geometry.marginBlock,
+      pitch: pageHeight + PAGE_GAP,
+    })
+  }, [editor, paged, pageHeight, geometry.marginBlock])
+
   const saver = useChapterSaver(
     { seriesId: props.seriesId, volumeId: props.volumeId, chapterId: chapter.id },
     () =>
@@ -303,65 +346,80 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
         </div>
       )}
       <div className="page-scroll">
-        <article
-          className={`page ${meta.type}`}
-          // Clicking the empty paper below the text puts the cursor at the end.
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !contentError) {
-              e.preventDefault()
-              editor.commands.focus('end')
-            }
-          }}
+        <div
+          ref={stackRef}
+          className={`page-stack ${paged ? 'paged' : 'continuous'}`}
+          style={{ '--page-height': `${pageHeight}px` } as React.CSSProperties}
         >
-          <div className="chapter-meta small">
-            <select
-              aria-label="Chapter type"
-              value={meta.type}
-              onChange={(e) => update({ type: e.target.value as ChapterType })}
-            >
-              <option value="chapter">Chapter</option>
-              <option value="interlude">Interlude</option>
-            </select>
-            <input
-              aria-label="Point of view"
-              placeholder="POV"
-              list="pov-options"
-              value={meta.pov ?? ''}
-              onChange={(e) => update({ pov: e.target.value.trim() ? e.target.value : null })}
-            />
-            <datalist id="pov-options">
-              {props.povOptions.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
-          </div>
-          <input
-            // A brand-new chapter starts with its title ready to type.
-            autoFocus={!chapter.title && !chapter.content.content?.length}
-            className="chapter-title"
-            aria-label="Chapter title"
-            value={meta.title}
-            placeholder="Untitled chapter"
-            onChange={(e) => update({ title: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+          {paged &&
+            Array.from({ length: pages }, (_, i) => (
+              <div key={i} className="page-sheet" style={{ top: i * (pageHeight + PAGE_GAP) }}>
+                <span className="page-number" aria-label={`Page ${i + 1} of ${pages}`}>
+                  {i + 1}
+                </span>
+              </div>
+            ))}
+          <article
+            className={`page-content ${meta.type} ${paged ? '' : 'page'}`}
+            style={paged ? { minHeight: pages * (pageHeight + PAGE_GAP) - PAGE_GAP } : undefined}
+            // Clicking the empty paper below the text puts the cursor at the end.
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !contentError) {
                 e.preventDefault()
-                // Focus synchronously, so keys typed right after Enter land in the text.
-                editor.view.focus()
-                editor.commands.setTextSelection(1)
+                editor.commands.focus('end')
               }
             }}
-            onBlur={() => void saver.flush()}
-          />
-          {contentError ? (
-            <div className="card warning">
-              <strong>This chapter contains formatting this version can't show.</strong> It has been
-              left untouched and won't be changed here. ({contentError})
+          >
+            <div className="chapter-meta small">
+              <select
+                aria-label="Chapter type"
+                value={meta.type}
+                onChange={(e) => update({ type: e.target.value as ChapterType })}
+              >
+                <option value="chapter">Chapter</option>
+                <option value="interlude">Interlude</option>
+              </select>
+              <input
+                aria-label="Point of view"
+                placeholder="POV"
+                list="pov-options"
+                value={meta.pov ?? ''}
+                onChange={(e) => update({ pov: e.target.value.trim() ? e.target.value : null })}
+              />
+              <datalist id="pov-options">
+                {props.povOptions.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
             </div>
-          ) : (
-            <EditorContent editor={editor} onBlur={() => void saver.flush()} />
-          )}
-        </article>
+            <input
+              // A brand-new chapter starts with its title ready to type.
+              autoFocus={!chapter.title && !chapter.content.content?.length}
+              className="chapter-title"
+              aria-label="Chapter title"
+              value={meta.title}
+              placeholder="Untitled chapter"
+              onChange={(e) => update({ title: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  // Focus synchronously, so keys typed right after Enter land in the text.
+                  editor.view.focus()
+                  editor.commands.setTextSelection(1)
+                }
+              }}
+              onBlur={() => void saver.flush()}
+            />
+            {contentError ? (
+              <div className="card warning">
+                <strong>This chapter contains formatting this version can't show.</strong> It has
+                been left untouched and won't be changed here. ({contentError})
+              </div>
+            ) : (
+              <EditorContent editor={editor} onBlur={() => void saver.flush()} />
+            )}
+          </article>
+        </div>
       </div>
     </div>
   )

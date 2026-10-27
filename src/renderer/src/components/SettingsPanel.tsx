@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { PAGE_WIDTH, type AnalysisSettings } from '@shared/settings'
+import { PAGE_WIDTH, PAPER_SIZES, type AnalysisSettings, type PaperSize } from '@shared/settings'
 import { DEFAULT_FILLER_WORDS } from '@shared/analysis/fillers'
 import { api } from '../api'
 import { useSettings } from '../useTheme'
@@ -105,7 +105,39 @@ export function SettingsPanel() {
       </fieldset>
       <AnalysisSettingsSection />
       <fieldset>
-        <legend>Page width</legend>
+        <legend>Page</legend>
+        <div className="segmented" role="radiogroup" aria-label="Page view">
+          {(
+            [
+              ['pages', 'Separate pages'],
+              ['continuous', 'Continuous'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              role="radio"
+              aria-checked={settings.pageView === value}
+              className={settings.pageView === value ? 'active' : ''}
+              onClick={() => change({ pageView: value })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <label className="small">
+          Paper size
+          <select
+            value={settings.paperSize}
+            onChange={(e) => change({ paperSize: e.target.value as PaperSize })}
+          >
+            {Object.entries(PAPER_SIZES).map(([id, paper]) => (
+              <option key={id} value={id}>
+                {paper.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="small">Width</span>
         <input
           type="range"
           aria-label="Page width"

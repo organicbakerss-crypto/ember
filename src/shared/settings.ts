@@ -44,6 +44,10 @@ export interface AppSettings {
   theme: string
   /** Width of the text column on the page, in CSS pixels (about 60–75 characters at the default). */
   pageWidth: number
+  /** Separate pages of a fixed paper size, or one continuous sheet. */
+  pageView: 'pages' | 'continuous'
+  /** Paper shape for the page view. The page keeps these proportions at any width. */
+  paperSize: PaperSize
   spellcheck: boolean
   /** Spellcheck languages (e.g. `en-GB`). Empty means the system language. Ignored on macOS. */
   spellLanguages: string[]
@@ -54,6 +58,14 @@ export interface AppSettings {
 }
 
 export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const
+
+/** Height ÷ width of each paper size. */
+export const PAPER_SIZES = {
+  a4: { label: 'A4', ratio: 297 / 210 },
+  letter: { label: 'US Letter', ratio: 11 / 8.5 },
+  trade: { label: 'Trade paperback (6 × 9 in)', ratio: 9 / 6 },
+} as const
+export type PaperSize = keyof typeof PAPER_SIZES
 
 export const DEFAULT_ANALYSIS: AnalysisSettings = {
   fillerWords: [...DEFAULT_FILLER_WORDS],
@@ -69,6 +81,8 @@ export const DEFAULT_STATUS_BAR: StatusItem[] = ['chapterWords', 'sessionWords',
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   theme: 'system',
   pageWidth: PAGE_WIDTH.default,
+  pageView: 'pages',
+  paperSize: 'a4',
   spellcheck: true,
   spellLanguages: [],
   dictionary: [],

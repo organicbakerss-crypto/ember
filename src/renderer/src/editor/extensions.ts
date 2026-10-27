@@ -3,6 +3,7 @@ import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style'
 import { Placeholder } from '@tiptap/extensions'
 import type { Extensions } from '@tiptap/core'
 import { AnalysisDecorations } from './analysisDecorations'
+import { Pagination } from './pagination'
 import { SceneBreak } from './sceneBreak'
 
 /** The editor's schema. Changing it changes what chapter files can contain. */
@@ -21,6 +22,7 @@ export function chapterExtensions(): Extensions {
     FontFamily,
     SceneBreak,
     AnalysisDecorations,
+    Pagination,
     Placeholder.configure({ placeholder: 'Start writing…' }),
   ]
 }

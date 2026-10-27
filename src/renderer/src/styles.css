@@ -668,15 +668,50 @@ button.new-card:hover {
   padding: 2rem 1rem 4rem;
 }
 .page {
-  /* The text column is --text-width wide (an editor setting); the paper adds the margins. */
+  /* Continuous view (and history previews): one sheet, as wide as the page view's sheets. */
   width: min(100%, calc(var(--text-width, 660px) + 2 * var(--page-padding-inline)));
-  min-height: 100%;
-  cursor: text;
+  min-height: var(--page-height, 0);
   margin: 0 auto;
   padding: var(--page-padding-block) var(--page-padding-inline);
   background: var(--page);
   color: var(--page-text);
   box-shadow: var(--page-shadow);
+}
+.page-stack {
+  position: relative;
+  width: min(100%, calc(var(--text-width, 660px) + 2 * var(--page-padding-inline)));
+  margin: 0 auto;
+  cursor: text;
+}
+.page-stack.continuous .page {
+  width: 100%;
+}
+.page-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--page-height);
+  background: var(--page);
+  box-shadow: var(--page-shadow);
+}
+.page-number {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--page-padding-block) / 2.5);
+  text-align: center;
+  font: 0.75rem var(--page-font);
+  color: var(--muted);
+}
+.page-content {
+  position: relative;
+  padding: var(--page-padding-block) var(--page-padding-inline);
+  color: var(--page-text);
+}
+/* A view-only spacer that carries text over to the next sheet. */
+.page-break-space {
+  display: block;
+  pointer-events: none;
 }
 .chapter-meta {
   display: flex;

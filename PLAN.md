@@ -125,8 +125,8 @@ Window positions, split sizes and torn-off windows are device-only and never syn
 
 The writing surface is a **page**, not open empty space: a fixed-width sheet centred on a darker background, with real margins.
 
-- **Page look first:** one continuous page per chapter. Margins, line spacing and page colour follow the theme (dark page in dark themes). The text column's width is an editor setting, 660px by default (about 60–75 characters per line, comfortable for long sessions), adjustable in Settings.
-- **True pagination later:** Word-style page breaks and "page 4 of 12" as a view toggle, built only once the editor is solid.
+- **Separate pages:** by default a chapter is laid out on separate sheets of a fixed paper shape (A4, US Letter or 6 × 9 in trade paperback), with a gap between sheets and a page number on each, like Word. Text flows from one sheet to the next; the page breaks are view-only and never saved. The page keeps its paper proportions at any window size, so it is never stretched. A continuous view (one sheet that grows) is available in Settings.
+- **Page style:** margins, line spacing and page colour follow the theme (dark page in dark themes). The text column's width is an editor setting, 660px by default (about 60–75 characters per line, comfortable for long sessions), adjustable in Settings; the paper's height follows from its width and shape.
 - **Rich text:** bold, italic, underline, headings, scene breaks, fonts, colours, images. Stored as TipTap JSON.
 - **Autosave:** on every pause in typing; writing never waits for sync.
 - **Linked names:** names of world entries are recognised; hover shows a card, click opens the entry. "Quick add" creates a stub world entry from selected text.
@@ -348,7 +348,6 @@ These are all off by default. While off, they leave no trace in the UI: no menu 
 | ElevenLabs voice | Premium voice for the companion | Companion settings |
 | Doodle pad | Freehand scratch canvas, device-only, never synced | App settings |
 | Relationship web | Graph of connections between world entries | World settings |
-| True pagination | Word-style page breaks view | Editor settings |
 
 ## Milestones
 
@@ -356,7 +355,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 
 1. **Foundation:** project scaffold (Electron + React + TypeScript), `app.config.ts` for branding, library folder format, main-process file service with safe writes, IPC skeleton.
 2. **Writing core:** Write mode, binder with arcs and drag-and-drop, TipTap editor on a page, autosave, word counts and goals, light/dark themes.
-3. **Writing polish:** spellcheck with personal dictionary, find and replace, focus mode, version history and restore, local trash, command palette, Diagnostics panel, customisable status bar, Rhythm and Echo.
+3. **Writing polish:** separate pages (fixed paper size, Word-style page breaks), spellcheck with personal dictionary, find and replace, focus mode, version history and restore, local trash, command palette, Diagnostics panel, customisable status bar, Rhythm and Echo.
 4. **World core:** World mode, custom categories and entries, linked names with hover cards, quick add, appearances list.
 5. **Layout:** split screen, tear-off windows, live updates across windows.
 6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export.
@@ -367,7 +366,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
 12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
 13. **Themes:** Cyberpunk, '90s Desktop, Arcade, high contrast, and the starter set.
-14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web, true pagination.
+14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
 ## Open items
 
