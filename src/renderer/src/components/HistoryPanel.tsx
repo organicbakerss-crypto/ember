@@ -9,6 +9,8 @@ import { formatWhen } from './TrashPage'
 
 const REASONS: Record<SnapshotInfo['reason'], string> = {
   auto: '',
+  manual: 'kept by you',
+  'before-deletion': 'before a deletion',
   'before-restore': 'before a restore',
   'before-replace': 'before replace all',
 }
@@ -19,6 +21,8 @@ export function HistoryPanel(props: {
   volumeId: string
   chapterId: string | null
   chapterTitle: string
+  /** Word count of the text on the page now. */
+  currentWords: number | null
   /** Called after a restore so the page reloads the chapter. */
   onRestored: () => void
 }) {
@@ -70,16 +74,35 @@ export function HistoryPanel(props: {
     }
   }
 
+  const keepNow = async () => {
+    if (!chapterId) return
+    try {
+      await flushAll()
+      await api.invoke('history:keep', { seriesId, volumeId, chapterId })
+      toast('This version has been kept.')
+    } catch (err) {
+      toast(describeError(err).message)
+    }
+  }
+
   if (!chapterId) return <p className="muted small">Open a chapter to see its history.</p>
   return (
     <div className="history-panel">
       <h2>History</h2>
       <p className="muted small">
-        Earlier versions of “{props.chapterTitle || 'Untitled chapter'}”, saved automatically while
-        you write.
+        Versions of “{props.chapterTitle || 'Untitled chapter'}”. One is kept every 10 minutes while
+        you write, and always just before you delete a chunk of text (20+ characters).
       </p>
-      {list?.length === 0 && <p className="muted small">No earlier versions yet.</p>}
+      <button onClick={() => void keepNow()}>Keep this version now</button>
       <ol className="history-list">
+        <li>
+          <div className="history-item current">
+            <span>Now (on the page)</span>
+            {props.currentWords !== null && (
+              <span className="muted small">{props.currentWords.toLocaleString()} words</span>
+            )}
+          </div>
+        </li>
         {list?.map((s) => (
           <li key={s.id}>
             <button className="history-item" onClick={() => void open(s)}>
@@ -91,6 +114,11 @@ export function HistoryPanel(props: {
           </li>
         ))}
       </ol>
+      {list?.length === 0 && (
+        <p className="muted small">
+          No earlier versions yet. Click one when it appears to preview it.
+        </p>
+      )}
 
       {preview && (
         <div className="modal-backdrop" onMouseDown={() => setPreview(null)}>

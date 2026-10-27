@@ -21,6 +21,8 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - focus mode
   - version history with preview and restore
   - the command palette (Ctrl/Cmd+K)
+  - a Diagnostics panel and a customisable status bar
+  - Rhythm and Echo highlights (all computed locally)
 
 ## Requirements
 

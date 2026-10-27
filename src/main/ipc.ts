@@ -51,6 +51,10 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
       host.current.listSnapshots(input.seriesId, input.volumeId, input.chapterId),
     'history:read': (input) =>
       host.current.readSnapshot(input.seriesId, input.volumeId, input.chapterId, input.snapshotId),
+    'history:keep': async (input) => {
+      await host.current.keepSnapshot(input.seriesId, input.volumeId, input.chapterId)
+      return null
+    },
     'history:restore': (input) =>
       host.current.restoreSnapshot(
         input.seriesId,
@@ -97,6 +101,8 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
         goals: input.goals,
       }),
     'volume:stats': (input) => host.current.volumeStats(input.seriesId, input.volumeId),
+    'volume:texts': (input) => host.current.volumeTexts(input.seriesId, input.volumeId),
+    'volume:names': (input) => host.current.volumeNames(input.seriesId),
     'world:create': (input) => host.current.createWorld(input),
     'settings:get': () => settings.read(),
     'settings:update': async (input) => {

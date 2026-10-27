@@ -55,6 +55,27 @@ export function Bookshelf(props: {
 
   return (
     <main className="bookshelf">
+      <header className="bookshelf-header">
+        <button
+          className="trash-button"
+          onClick={props.onOpenTrash}
+          title="Deleted items, until you empty the trash"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+          </svg>
+          Trash{snapshot.trashCount > 0 && ` (${snapshot.trashCount})`}
+        </button>
+      </header>
       {snapshot.problems.length > 0 && <Problems problems={snapshot.problems} />}
 
       <section className="shelf">
@@ -138,9 +159,6 @@ export function Bookshelf(props: {
         <span className="library-path" title={snapshot.root}>
           Library: {snapshot.root}
         </span>
-        <button className="link small" onClick={props.onOpenTrash}>
-          Trash
-        </button>
       </footer>
 
       {creatingSeries && (

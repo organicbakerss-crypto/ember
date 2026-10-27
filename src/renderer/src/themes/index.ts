@@ -29,6 +29,19 @@ export const THEME_COLOR_TOKENS = [
   'cover-7',
   'cover-shadow',
   'page-shadow',
+  // Writing analysis: full colours, shown as soft tints (mixed at tint-strength).
+  'rhythm-short',
+  'rhythm-medium',
+  'rhythm-long',
+  'echo-0',
+  'echo-1',
+  'echo-2',
+  'echo-3',
+  'echo-4',
+  'echo-5',
+  'echo-6',
+  'echo-7',
+  'tint-strength',
 ] as const
 
 /** Page style. The text column's width is an editor setting, not part of the theme. */

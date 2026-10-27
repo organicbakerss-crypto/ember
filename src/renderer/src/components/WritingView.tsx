@@ -12,9 +12,13 @@ import {
 } from '../editor/ChapterEditor'
 import type { Scene } from '../editor/scenes'
 import type { SaveState } from '../editor/useChapterSaver'
+import { computeStats } from '@shared/analysis'
+import type { AnalysisOptions } from '../editor/analysisDecorations'
 import { flushAll } from '../saving'
+import { useSettings } from '../useTheme'
 import { loadLocal, saveLocal } from '../storage'
 import { MOD, modKey, useCommands, type Command } from './commands'
+import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { SearchPanel } from './SearchPanel'
 import { SettingsPanel } from './SettingsPanel'
@@ -22,7 +26,7 @@ import { useOverlays } from './overlays'
 import { StatusBar } from './StatusBar'
 import { useLibraryActions } from './useLibraryActions'
 
-type Panel = 'binder' | 'search' | 'history' | 'settings'
+type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'settings'
 
 /** Write mode: top bar, icon rail, side panel (binder), the page, and the status bar. */
 export function WritingView(props: {
@@ -58,6 +62,14 @@ export function WritingView(props: {
   const [reloadToken, setReloadToken] = useState(0)
   const [reveal, setReveal] = useState<(Reveal & { chapterId: string }) | null>(null)
   const [searchFocus, setSearchFocus] = useState(0)
+  // Writing analysis: Rhythm and Echo (off by default), Diagnostics word highlight.
+  const [rhythm, setRhythm] = useState(() => loadLocal('writing.rhythm') === 'on')
+  const [echo, setEcho] = useState(() => loadLocal('writing.echo') === 'on')
+  const [highlightStem, setHighlightStem] = useState<string | null>(null)
+  const [names, setNames] = useState<string[]>([])
+  const [chapterParagraphs, setChapterParagraphs] = useState<string[]>([])
+  const [selectionParagraphs, setSelectionParagraphs] = useState<string[] | null>(null)
+  const { settings } = useSettings()
   const { choose } = useOverlays()
   const actions = useLibraryActions()
 
@@ -66,6 +78,50 @@ export function WritingView(props: {
     api.invoke('volume:stats', ref).then(setStats, () => {})
   }, [ref])
   useEffect(refresh, [refresh])
+  useEffect(() => {
+    api.invoke('volume:names', ref).then(setNames, () => {})
+  }, [ref])
+
+  const toggleRhythm = () =>
+    setRhythm((on) => {
+      saveLocal('writing.rhythm', on ? 'off' : 'on')
+      return !on
+    })
+  const toggleEcho = () =>
+    setEcho((on) => {
+      saveLocal('writing.echo', on ? 'off' : 'on')
+      return !on
+    })
+
+  const { analysis: analysisSettings } = settings
+  const words = useMemo(
+    () => ({
+      fillers: new Set(analysisSettings.fillerWords),
+      names: new Set(names),
+      includeNames: analysisSettings.includeNames,
+    }),
+    [analysisSettings.fillerWords, analysisSettings.includeNames, names],
+  )
+  const analysis = useMemo<AnalysisOptions>(
+    () => ({
+      rhythm,
+      echo,
+      highlightStem,
+      words,
+      echoRange: analysisSettings.echoRange,
+      rhythmMediumFrom: analysisSettings.rhythmMediumFrom,
+      rhythmLongFrom: analysisSettings.rhythmLongFrom,
+    }),
+    [rhythm, echo, highlightStem, words, analysisSettings],
+  )
+  // Chapter statistics for the status bar, only when it shows any.
+  const needsStats = settings.statusBar.some(
+    (i) => !['chapterWords', 'sessionWords', 'projectWords', 'goals', 'sync'].includes(i),
+  )
+  const chapterStats = useMemo(
+    () => (needsStats ? computeStats(chapterParagraphs) : null),
+    [needsStats, chapterParagraphs],
+  )
   useIpcEvent('library:changed', (change) => {
     if (change.kind === 'outline' && change.volumeId === volume.id) refresh()
   })
@@ -80,6 +136,7 @@ export function WritingView(props: {
   const select = (chapterId: string) => {
     setChosenId(chapterId)
     setScenes([])
+    setSelectionParagraphs(null)
     saveLocal(lastChapterKey, chapterId)
   }
 
@@ -108,6 +165,8 @@ export function WritingView(props: {
       if (e.key === 'F2') renameOpenChapter()
       else if (modKey(e) && e.shiftKey && key === 'f') setFocusMode((f) => !f)
       else if (modKey(e) && !e.shiftKey && (key === 'f' || key === 'h')) openSearch()
+      else if (modKey(e) && e.altKey && e.code === 'KeyR') toggleRhythm()
+      else if (modKey(e) && e.altKey && e.code === 'KeyE') toggleEcho()
       else if (e.key === 'Escape' && focusMode) setFocusMode(false)
       else return
       e.preventDefault()
@@ -235,6 +294,19 @@ export function WritingView(props: {
       run: () => setFocusMode((f) => !f),
     },
     { id: 'rename', title: 'Rename chapter', shortcut: 'F2', run: renameOpenChapter },
+    {
+      id: 'rhythm',
+      title: rhythm ? 'Turn off Rhythm (sentence lengths)' : 'Turn on Rhythm (sentence lengths)',
+      shortcut: `${MOD}Alt+R`,
+      run: toggleRhythm,
+    },
+    {
+      id: 'echo',
+      title: echo ? 'Turn off Echo (repeated words)' : 'Turn on Echo (repeated words)',
+      shortcut: `${MOD}Alt+E`,
+      run: toggleEcho,
+    },
+    { id: 'diagnostics', title: 'Diagnostics', run: () => openPanel('diagnostics') },
     {
       id: 'scene-break',
       title: 'Insert scene break',
@@ -387,7 +459,26 @@ export function WritingView(props: {
               volumeId={volume.id}
               chapterId={selectedId}
               chapterTitle={current?.title ?? ''}
+              currentWords={
+                selectedId
+                  ? (liveWords[selectedId] ?? stats?.chapterWords[selectedId] ?? null)
+                  : null
+              }
               onRestored={() => setReloadToken((t) => t + 1)}
+            />
+          )}
+          {panel === 'diagnostics' && (
+            <DiagnosticsPanel
+              seriesId={series.id}
+              volumeId={volume.id}
+              chapterId={selectedId}
+              chapterTitle={current?.title ?? ''}
+              chapterParagraphs={chapterParagraphs}
+              selectionParagraphs={selectionParagraphs}
+              words={words}
+              highlightStem={highlightStem}
+              onHighlight={setHighlightStem}
+              onOpenChapter={select}
             />
           )}
           {panel === 'settings' && <SettingsPanel />}
@@ -410,6 +501,11 @@ export function WritingView(props: {
             onSaveState={onSaveState}
             reveal={reveal?.chapterId === selectedId ? reveal : null}
             bare={focusMode}
+            analysis={analysis}
+            onToggleRhythm={toggleRhythm}
+            onToggleEcho={toggleEcho}
+            onParagraphs={setChapterParagraphs}
+            onSelection={setSelectionParagraphs}
           />
         ) : (
           view && (
@@ -431,8 +527,10 @@ export function WritingView(props: {
         }
         sessionWords={sessionWords}
         projectWords={projectWords}
+        chapterStats={chapterStats}
         saveState={save.state}
         saveError={save.error}
+        onOpenDiagnostics={() => openPanel('diagnostics')}
       />
     </div>
   )

@@ -1,8 +1,15 @@
 import { useEditorState, type Editor } from '@tiptap/react'
+import { MOD } from '../components/commands'
 import { COLOR_CHOICES, FONT_CHOICES } from './extensions'
 
 /** Formatting controls above the page. */
-export function Toolbar(props: { editor: Editor }) {
+export function Toolbar(props: {
+  editor: Editor
+  rhythm: boolean
+  echo: boolean
+  onToggleRhythm: () => void
+  onToggleEcho: () => void
+}) {
   const { editor } = props
   const state = useEditorState({
     editor,
@@ -107,6 +114,23 @@ export function Toolbar(props: { editor: Editor }) {
           </option>
         ))}
       </select>
+      <span className="toolbar-gap" />
+      <ToolButton
+        label="Rhythm: colour sentences by length"
+        shortcut={`${MOD}Alt+R`}
+        active={props.rhythm}
+        onClick={props.onToggleRhythm}
+      >
+        Rhythm
+      </ToolButton>
+      <ToolButton
+        label="Echo: show words repeated close together"
+        shortcut={`${MOD}Alt+E`}
+        active={props.echo}
+        onClick={props.onToggleEcho}
+      >
+        Echo
+      </ToolButton>
       <span className="toolbar-gap" />
       <ToolButton
         label="Undo"

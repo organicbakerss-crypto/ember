@@ -113,4 +113,37 @@ describe('version history', () => {
     })
     expect(volumeFiles.some((f) => String(f).includes('history'))).toBe(false)
   })
+
+  it('keeps the version before a big deletion, even right after another snapshot', async () => {
+    // The reported case: type a line, wait a couple of minutes, delete it.
+    const { ref, save } = await chapter()
+    await save('Opening line.')
+    minutes(1)
+    await save('Opening line. aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    minutes(2)
+    await save('Opening line.')
+    const [latest] = await lib.listSnapshots(...ref)
+    expect(latest!.reason).toBe('before-deletion')
+    const { content } = await lib.readSnapshot(...ref, latest!.id)
+    expect(JSON.stringify(content)).toContain('aaaaaaaaaa')
+  })
+
+  it('does not treat small corrections as big deletions', async () => {
+    const { ref, save } = await chapter()
+    await save('The storm came in from the west.')
+    minutes(1)
+    await save('The storm came in from the east.')
+    minutes(1)
+    await save('The storm came from the east.')
+    expect((await lib.listSnapshots(...ref)).map((s) => s.reason)).toEqual(['auto'])
+  })
+
+  it('keeps a version on request', async () => {
+    const { ref, save } = await chapter()
+    await save('Worth keeping.')
+    minutes(1)
+    await lib.keepSnapshot(...ref)
+    const [latest] = await lib.listSnapshots(...ref)
+    expect(latest).toMatchObject({ reason: 'manual', wordCount: 2 })
+  })
 })

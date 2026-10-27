@@ -28,7 +28,19 @@
     "cover-6": "#54402f",
     "cover-7": "#474f59",
     "cover-shadow": "0 1px 2px rgb(0 0 0 / 0.4), 0 8px 20px rgb(0 0 0 / 0.45)",
-    "page-shadow": "0 2px 16px rgb(0 0 0 / 0.5)"
+    "page-shadow": "0 2px 16px rgb(0 0 0 / 0.5)",
+    "rhythm-short": "#4cc07d",
+    "rhythm-medium": "#e6c04a",
+    "rhythm-long": "#f0705f",
+    "echo-0": "#6aa5f0",
+    "echo-1": "#d27ae4",
+    "echo-2": "#3fcab9",
+    "echo-3": "#f0a050",
+    "echo-4": "#a088f0",
+    "echo-5": "#ea6b98",
+    "echo-6": "#78c25a",
+    "echo-7": "#cfa85a",
+    "tint-strength": "30%"
   },
   "fonts": {
     "ui": "system-ui, -apple-system, 'Segoe UI', sans-serif",

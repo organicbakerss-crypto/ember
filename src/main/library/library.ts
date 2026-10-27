@@ -22,6 +22,7 @@ import {
   seriesFileSchema,
   timelineFileSchema,
   volumeFileSchema,
+  worldEntryFileSchema,
   worldFileSchema,
   type ChapterFile,
   type ChapterType,
@@ -49,7 +50,8 @@ import type {
 } from '@shared/ipc'
 import { SNAPSHOT_ID } from '@shared/ipc'
 import { COVER_EXTENSIONS, detectImageType, type CoverInfo, type CoverTarget } from '@shared/media'
-import { docWordCount } from '@shared/text'
+import { docToText, docWordCount } from '@shared/text'
+import { docParagraphs } from '@shared/analysis/doc'
 import {
   findInText,
   replaceInDoc,
@@ -73,6 +75,9 @@ export type ChapterPatch = Partial<
 const MAX_SEARCH_HITS = 500
 const SNIPPET = 40
 
+/** A save that removes at least this many characters keeps the version before it. */
+export const BIG_DELETION_CHARS = 20
+
 /** At most one automatic snapshot per chapter in this span. */
 export const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000
 
@@ -82,7 +87,9 @@ const snapshotFileSchema = z.looseObject({
   chapterId: z.string(),
   volumeId: z.string(),
   savedAt: z.iso.datetime(),
-  reason: z.enum(['auto', 'before-restore', 'before-replace']).catch('auto'),
+  reason: z
+    .enum(['auto', 'manual', 'before-deletion', 'before-restore', 'before-replace'])
+    .catch('auto'),
   title: z.string(),
   wordCount: z.number().int().nonnegative(),
   contentHash: z.string(),
@@ -238,7 +245,8 @@ export class Library {
     }
     series.sort(byName)
     worlds.sort(byName)
-    return { root: this.root, series, worlds, problems }
+    const trashCount = (await this.listTrash()).length
+    return { root: this.root, series, worlds, problems, trashCount }
   }
 
   /** Volumes in the series' order, followed by any found on disk but missing from it. */
@@ -563,7 +571,17 @@ export class Library {
     const saved = await this.lock.run(`volume:${volumeId}`, async () => {
       const existing = await this.readChapter(seriesId, volumeId, chapterId)
       // History: keep the version being replaced, at most every few minutes.
-      if (patch.content) await this.snapshotChapter(volumeId, existing, 'auto')
+      if (patch.content) {
+        // A big deletion always keeps the version from just before it, whatever the timing.
+        const removed = docToText(existing.content).length - docToText(patch.content).length
+        const bigDeletion = removed >= BIG_DELETION_CHARS
+        await this.snapshotChapter(
+          volumeId,
+          existing,
+          bigDeletion ? 'before-deletion' : 'auto',
+          bigDeletion,
+        )
+      }
       const next: ChapterFile = {
         ...existing,
         ...definedOnly(patch),
@@ -1058,6 +1076,64 @@ export class Library {
 
   private historyDir(volumeId: string, chapterId: string): string {
     return join(this.paths.localDir, 'history', volumeId, chapterId)
+  }
+
+  /** Every chapter's paragraphs in reading order. Unreadable chapters are skipped. */
+  async volumeTexts(
+    seriesId: string,
+    volumeId: string,
+  ): Promise<{ id: string; title: string; paragraphs: string[] }[]> {
+    const out: { id: string; title: string; paragraphs: string[] }[] = []
+    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId)) {
+      try {
+        const chapter = await this.readChapter(seriesId, volumeId, chapterId)
+        out.push({
+          id: chapterId,
+          title: chapter.title,
+          paragraphs: docParagraphs(chapter.content),
+        })
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+      }
+    }
+    return out
+  }
+
+  /**
+   * Lowercase words from the names and aliases of the world entries linked
+   * to a volume's series (so analysis can leave names out).
+   */
+  async volumeNames(seriesId: string): Promise<string[]> {
+    const { worldId } = await this.getSeries(seriesId)
+    if (!worldId) return []
+    const dir = join(this.paths.worldDir(worldId), 'entries')
+    const words = new Set<string>()
+    let names: string[]
+    try {
+      names = await fs.promises.readdir(dir)
+    } catch {
+      return []
+    }
+    for (const name of names.filter((n) => n.endsWith('.json'))) {
+      try {
+        const entry = await readJsonFile(join(dir, name), worldEntryFileSchema)
+        for (const label of [entry.name, ...entry.aliases]) {
+          for (const word of label.toLowerCase().match(/[\p{L}\p{N}'’-]+/gu) ?? []) words.add(word)
+        }
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+      }
+    }
+    return [...words]
+  }
+
+  /** Keeps the chapter's current version now (the "Keep this version" button). */
+  async keepSnapshot(seriesId: string, volumeId: string, chapterId: string): Promise<void> {
+    await this.lock.run(`volume:${volumeId}`, async () => {
+      const chapter = await this.readChapter(seriesId, volumeId, chapterId)
+      await this.snapshotChapter(volumeId, chapter, 'manual', true)
+    })
+    this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId })
   }
 
   /** Earlier versions of a chapter, newest first. Unreadable snapshots are skipped. */

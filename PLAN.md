@@ -116,7 +116,7 @@ Layout of a writing window (there is no library sidebar; navigation goes through
 - **Side panel:** collapsible. The binder shows arcs (collapsible, finished arcs folded by default) and chapters, with drag-and-drop.
 - **Page:** the writing surface (see Editor).
 - **World pane (right, optional):** a slim view of the entry under the cursor or the last one clicked.
-- **Status bar:** session and project word counts, goal progress, and the only place sync status appears ("Synced" or "Offline, 3 changes saved locally"). No sync popups.
+- **Status bar:** customisable. Right-click to choose what it shows (chapter, session and project words, goal progress, save/sync status, and any Diagnostics statistic for the chapter) and drag items to reorder them. Default: chapter words, session words, goal progress, sync status. It is the only place sync status appears ("Synced" or "Offline, 3 changes saved locally"). No sync popups.
 - **Focus mode:** hides every panel and bar, leaving only the page (Ctrl/Cmd+Shift+F; Esc leaves it).
 
 Window positions, split sizes and torn-off windows are device-only and never synced.
@@ -134,10 +134,20 @@ The writing surface is a **page**, not open empty space: a fixed-width sheet cen
 - **Spellcheck:** Google Docs style. Unknown words are flagged; right-click for suggestions or to add the word to the personal dictionary. The dictionary is part of the app settings (so it syncs with them) and can be edited in Settings, along with the language and an on/off switch. On Linux and Windows the dictionary for a language is downloaded once on first use; macOS uses the system's.
 - **Find and replace** across the whole volume (Ctrl/Cmd+F): match case and whole-word options, results grouped by chapter, click to jump to a match, replace one or replace all. Before a replace-all, every chapter it changes is snapshotted, so it can be undone from history. A match must sit inside one run of text with the same formatting.
 - **Goals:** session goal and project goal, shown in the status bar. No streaks.
-- **Version history:** automatic snapshots. When a chapter's text is saved and the last snapshot is over 10 minutes old, the version being replaced is kept (identical versions are skipped). Keep everything from the last 2 weeks, one per day for 3 months, then one per week. Preview and restore any snapshot from the History panel; restoring first snapshots the current text, so a restore can be undone too. Snapshots live in the device folder until sync uploads them.
+- **Version history:** automatic snapshots. When a chapter's text is saved and the last snapshot is over 10 minutes old, the version being replaced is kept, and a save that deletes 20+ characters always keeps the version from just before it (identical versions are skipped). A "Keep this version now" button saves one on demand, and the panel always shows the current version at the top. Keep everything from the last 2 weeks, one per day for 3 months, then one per week. Preview and restore any snapshot from the History panel; restoring first snapshots the current text, so a restore can be undone too. Snapshots live in the device folder until sync uploads them.
 - **Trash:** deleted series, volumes, worlds, chapters (and later world entries) go to a local trash, kept until emptied. Restoring puts an item back where it was (a chapter returns to its arc and position; a deleted arc is recreated). Device-only, opened from the bookshelf.
 - **Import:** .docx files, split into chapters at headings or "Chapter X" lines, with a preview to fix splits before anything is created.
 - **Export:** DOCX, PDF, EPUB, Markdown, and copy-for-Royal-Road (per chapter, formatting that pastes cleanly).
+
+### Writing analysis
+
+Everything here is computed locally (no AI), and every number shows its unit. These are descriptive signals, not quality scores.
+
+- **Diagnostics panel** (command palette or the status bar). Scope: Selection, Chapter or Volume. Shows word count, novel pages (words ÷ 250), reading time (250 words a minute), sentence count, average and longest sentence (words), paragraph count, average and longest paragraph (words), dialogue % (words inside quotation marks), vocabulary variety (distinct words per 100, averaged over 100-word stretches) and -ly adverb count. Lists the most-used content words; clicking one highlights every use in the current chapter. In Volume scope, a bar per chapter (with the median marked) shows uneven chapter lengths.
+- **Rhythm** (toolbar toggle, Ctrl/Cmd+Alt+R, palette): tints each sentence by length: under 10 words green, 10–19 yellow, 20+ red. Hovering a sentence shows its word count. Thresholds and colours are adjustable in Settings.
+- **Echo** (toolbar toggle, Ctrl/Cmd+Alt+E, palette): highlights content words that repeat within about 50 words (adjustable). Simple forms count as one word (walk, walks, walked, walking). Each repeated word has its own colour. Clicking one selects its nearby repeats, with a small bar to step between them.
+- Rhythm and Echo are off by default, can be on together, and are view-only highlights: never saved into the chapter, exported or synced. Their soft tints come from the theme.
+- **Shared rules:** sentence splitting understands fiction (dialogue in quotes, `?` and `!` inside quotes, ellipses, em dashes, abbreviations like Mr. and Dr., initials). Repeated words and Echo share one editable filler-word list (and, the, I, a, to, was, said…). Character and place names from the world are left out by default, with one setting to include them. Everything recalculates a moment after typing stops, never on every keystroke.
 
 ## Worldbuilding
 
@@ -346,7 +356,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 
 1. **Foundation:** project scaffold (Electron + React + TypeScript), `app.config.ts` for branding, library folder format, main-process file service with safe writes, IPC skeleton.
 2. **Writing core:** Write mode, binder with arcs and drag-and-drop, TipTap editor on a page, autosave, word counts and goals, light/dark themes.
-3. **Writing polish:** spellcheck with personal dictionary, find and replace, focus mode, version history and restore, local trash, command palette.
+3. **Writing polish:** spellcheck with personal dictionary, find and replace, focus mode, version history and restore, local trash, command palette, Diagnostics panel, customisable status bar, Rhythm and Echo.
 4. **World core:** World mode, custom categories and entries, linked names with hover cards, quick add, appearances list.
 5. **Layout:** split screen, tear-off windows, live updates across windows.
 6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export.

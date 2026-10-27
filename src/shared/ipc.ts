@@ -6,7 +6,7 @@
  */
 import { z } from 'zod'
 import { MAX_COVER_BYTES, type CoverInfo, type CoverTarget } from './media'
-import { PAGE_WIDTH, type AppSettings } from './settings'
+import { PAGE_WIDTH, STATUS_ITEMS, type AppSettings } from './settings'
 
 export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
 import {
@@ -55,6 +55,8 @@ export interface LibrarySnapshot {
   worlds: WorldSummary[]
   /** Files that could not be read. They are reported, never deleted or rewritten. */
   problems: LibraryProblem[]
+  /** Items in this device's trash. */
+  trashCount: number
 }
 
 export interface OutlineView {
@@ -116,7 +118,7 @@ export interface SnapshotInfo {
   title: string
   wordCount: number
   /** Why it was taken: on a schedule while writing, or just before a restore or replace-all. */
-  reason: 'auto' | 'before-restore' | 'before-replace'
+  reason: 'auto' | 'manual' | 'before-deletion' | 'before-restore' | 'before-replace'
 }
 
 export const SNAPSHOT_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/
@@ -175,6 +177,7 @@ export const ipcInputs = {
     chapterId: id('chapter'),
     snapshotId: z.string().regex(SNAPSHOT_ID),
   }),
+  'history:keep': z.object({ ...volumeRef, chapterId: id('chapter') }),
   'history:restore': z.object({
     ...volumeRef,
     chapterId: id('chapter'),
@@ -229,12 +232,43 @@ export const ipcInputs = {
     goals: volumeGoalsSchema.optional(),
   }),
   'volume:stats': z.object(volumeRef),
+  /** Every chapter's paragraphs, in reading order (for volume-wide diagnostics). */
+  'volume:texts': z.object(volumeRef),
+  /** Words from the names of characters and places in the volume's world. */
+  'volume:names': z.object(volumeRef),
   'settings:get': z.void(),
   'settings:update': z.object({
     theme: z.string().min(1).max(100).optional(),
     spellcheck: z.boolean().optional(),
     spellLanguages: z.array(z.string().max(20)).max(10).optional(),
     dictionary: z.array(z.string().trim().min(1).max(100)).max(50000).optional(),
+    analysis: z
+      .object({
+        fillerWords: z.array(z.string().trim().toLowerCase().min(1).max(50)).max(2000),
+        includeNames: z.boolean(),
+        echoRange: z.number().int().min(5).max(500),
+        rhythmMediumFrom: z.number().int().min(2).max(100),
+        rhythmLongFrom: z.number().int().min(3).max(200),
+        rhythmColors: z.object({
+          short: z
+            .string()
+            .regex(/^#[0-9a-f]{6}$/i)
+            .nullable(),
+          medium: z
+            .string()
+            .regex(/^#[0-9a-f]{6}$/i)
+            .nullable(),
+          long: z
+            .string()
+            .regex(/^#[0-9a-f]{6}$/i)
+            .nullable(),
+        }),
+      })
+      .refine((a) => a.rhythmLongFrom > a.rhythmMediumFrom, {
+        message: 'Long sentences must start above the medium threshold.',
+      })
+      .optional(),
+    statusBar: z.array(z.enum(STATUS_ITEMS)).max(STATUS_ITEMS.length).optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
@@ -264,6 +298,7 @@ export interface IpcResults {
   'arc:delete': OutlineView
   'history:list': SnapshotInfo[]
   'history:read': { info: SnapshotInfo; content: RichTextDoc }
+  'history:keep': null
   'history:restore': ChapterFile
   'search:volume': SearchResult
   'search:replaceAll': { chapters: number; replacements: number }
@@ -283,6 +318,8 @@ export interface IpcResults {
   'world:create': WorldFile
   'volume:update': VolumeFile
   'volume:stats': VolumeStats
+  'volume:texts': { id: string; title: string; paragraphs: string[] }[]
+  'volume:names': string[]
   'settings:get': AppSettings
   'settings:update': AppSettings
   'window:flushed': null

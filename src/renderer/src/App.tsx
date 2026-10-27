@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { LibraryStatus } from '@shared/ipc'
 import { api, useIpcEvent } from './api'
 import { flushAll } from './saving'
-import { useAppSettings } from './useTheme'
+import { SettingsProvider } from './useTheme'
 import { Home } from './components/Home'
 import { CommandProvider, useCommands } from './components/commands'
 import { OverlayProvider } from './components/overlays'
@@ -14,7 +14,6 @@ export function App() {
   const refresh = useCallback(() => void api.invoke('library:status').then(setStatus), [])
 
   useEffect(refresh, [refresh])
-  useAppSettings()
   // The window is closing: save everything first, then let it close.
   useIpcEvent('window:flush', () => {
     void flushAll().finally(() => api.invoke('window:flushed'))
@@ -25,16 +24,18 @@ export function App() {
 
   if (!status) return null
   return (
-    <OverlayProvider>
-      <CommandProvider>
-        <ThemeCommands />
-        {status.state === 'none' ? (
-          <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
-        ) : (
-          <Home key={status.root} />
-        )}
-      </CommandProvider>
-    </OverlayProvider>
+    <SettingsProvider>
+      <OverlayProvider>
+        <CommandProvider>
+          <ThemeCommands />
+          {status.state === 'none' ? (
+            <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
+          ) : (
+            <Home key={status.root} />
+          )}
+        </CommandProvider>
+      </OverlayProvider>
+    </SettingsProvider>
   )
 }
 

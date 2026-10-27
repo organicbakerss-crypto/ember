@@ -24,6 +24,10 @@ export interface MenuItem {
   disabled?: boolean
   /** Shown on the right, e.g. "F2". */
   hint?: string
+  /** A tick-box item (shown with ✓ when on). */
+  checked?: boolean
+  /** Leave the menu open after choosing, to tick several items. */
+  keepOpen?: boolean
 }
 
 interface MenuState {
@@ -186,6 +190,11 @@ function ContextMenu(props: { state: MenuState; onClose: () => void }) {
       setActive(0)
       return
     }
+    if (item.keepOpen) {
+      item.onSelect?.()
+      setItems((list) => list.map((x) => (x === item ? { ...x, checked: !x.checked } : x)))
+      return
+    }
     props.onClose()
     item.onSelect?.()
   }
@@ -211,7 +220,8 @@ function ContextMenu(props: { state: MenuState; onClose: () => void }) {
       {items.map((item, i) => (
         <button
           key={item.label}
-          role="menuitem"
+          role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+          aria-checked={item.checked}
           aria-haspopup={item.submenu ? 'menu' : undefined}
           aria-keyshortcuts={item.hint}
           className={`menu-item ${i === active ? 'active' : ''} ${item.danger ? 'danger' : ''}`}
@@ -219,7 +229,14 @@ function ContextMenu(props: { state: MenuState; onClose: () => void }) {
           onMouseEnter={() => setActive(i)}
           onClick={() => run(item)}
         >
-          <span>{item.label}</span>
+          <span>
+            {item.checked !== undefined && (
+              <span className="menu-check" aria-hidden>
+                {item.checked ? '✓' : ''}
+              </span>
+            )}
+            {item.label}
+          </span>
           {item.submenu ? (
             <span className="muted" aria-hidden>
               ▸

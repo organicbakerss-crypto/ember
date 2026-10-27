@@ -3,6 +3,7 @@ import { EditorContent, useEditor, type JSONContent } from '@tiptap/react'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import type { ChapterFile, ChapterType } from '@shared/schema'
 import { api, describeError } from '../api'
+import { RECALC_DELAY_MS, type ActiveEcho, type AnalysisOptions } from './analysisDecorations'
 import { chapterExtensions } from './extensions'
 import { docWords, findScenes, type Scene } from './scenes'
 import { Toolbar } from './Toolbar'
@@ -47,6 +48,14 @@ interface Props {
   reveal?: Reveal | null
   /** Focus mode: just the page, no toolbar. */
   bare?: boolean
+  /** Rhythm, Echo and word highlights (view only). */
+  analysis: AnalysisOptions
+  onToggleRhythm: () => void
+  onToggleEcho: () => void
+  /** The chapter's paragraphs, reported a moment after typing stops. */
+  onParagraphs: (paragraphs: string[]) => void
+  /** The selected text as paragraphs, or null when nothing is selected. */
+  onSelection: (paragraphs: string[] | null) => void
 }
 
 /** Loads a chapter, then shows it as an editable page. */
@@ -77,6 +86,25 @@ function editableContent(content: ChapterFile['content']): JSONContent {
     : { type: 'doc', content: [{ type: 'paragraph' }] }
 }
 
+const SELECTION_DELAY_MS = 300
+
+/** Paragraph texts of the document (or of a range of it), for stats. */
+function editorParagraphs(doc: PMNode, from = 0, to = doc.content.size): string[] {
+  const out: string[] = []
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isTextblock) return true
+    const start = Math.max(0, from - pos - 1)
+    const end = Math.min(node.content.size, to - pos - 1)
+    out.push(
+      node.textBetween(start, end, undefined, (leaf) =>
+        leaf.type.name === 'hardBreak' ? '\n' : ' ',
+      ),
+    )
+    return false
+  })
+  return out
+}
+
 /** Document positions of a range inside the n-th text node (search results count text nodes). */
 function textNodeRange(doc: PMNode, n: number, start: number, end: number) {
   let index = 0
@@ -104,6 +132,17 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
   const unreadable = useRef(false)
   const scroller = useRef<HTMLDivElement>(null)
 
+  const paragraphTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const selectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(
+    () => () => {
+      clearTimeout(paragraphTimer.current)
+      clearTimeout(selectionTimer.current)
+    },
+    [],
+  )
+  const [activeEcho, setActiveEcho] = useState<ActiveEcho | null>(null)
+
   const editor = useEditor({
     extensions: chapterExtensions(),
     content: editableContent(chapter.content),
@@ -116,17 +155,50 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
       if (unreadable.current) e.setEditable(false)
       onWords(docWords(e.state.doc))
       onScenes(findScenes(e.state.doc))
+      props.onParagraphs(editorParagraphs(e.state.doc))
+    },
+    onSelectionUpdate: ({ editor: e }) => {
+      clearTimeout(selectionTimer.current)
+      selectionTimer.current = setTimeout(() => {
+        if (e.isDestroyed) return
+        const { from, to, empty } = e.state.selection
+        props.onSelection(empty ? null : editorParagraphs(e.state.doc, from, to))
+      }, SELECTION_DELAY_MS)
     },
     onUpdate: ({ editor: e }) => {
       if (unreadable.current) return
       saver.changeContent()
       onWords(docWords(e.state.doc))
       onScenes(findScenes(e.state.doc))
+      // Stats recalculate a moment after typing stops, not on every key.
+      clearTimeout(paragraphTimer.current)
+      paragraphTimer.current = setTimeout(() => {
+        if (!e.isDestroyed) props.onParagraphs(editorParagraphs(e.state.doc))
+      }, RECALC_DELAY_MS)
     },
     editorProps: { attributes: { class: 'chapter-content', spellcheck: 'true' } },
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
   })
+
+  // Rhythm / Echo / highlight options, and the Echo the writer clicked.
+  const { analysis } = props
+  useEffect(() => {
+    editor.commands.setAnalysis(analysis)
+  }, [editor, analysis])
+  useEffect(() => {
+    editor.commands.onActiveEcho(setActiveEcho)
+    return () => {
+      if (!editor.isDestroyed) editor.commands.onActiveEcho(null)
+    }
+  }, [editor])
+  const showEcho = (index: number) => {
+    if (!activeEcho) return
+    const i = (index + activeEcho.ranges.length) % activeEcho.ranges.length
+    setActiveEcho({ ...activeEcho, index: i })
+    editor.chain().focus().setTextSelection(activeEcho.ranges[i]!).scrollIntoView().run()
+  }
+  const closeEcho = () => editor.commands.clearActiveEcho()
 
   const saver = useChapterSaver(
     { seriesId: props.seriesId, volumeId: props.volumeId, chapterId: chapter.id },
@@ -195,7 +267,41 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
 
   return (
     <div className="editor" ref={scroller}>
-      {!contentError && !props.bare && <Toolbar editor={editor} />}
+      {!contentError && !props.bare && (
+        <Toolbar
+          editor={editor}
+          rhythm={analysis.rhythm}
+          echo={analysis.echo}
+          onToggleRhythm={props.onToggleRhythm}
+          onToggleEcho={props.onToggleEcho}
+        />
+      )}
+      {activeEcho && analysis.echo && (
+        <div className="echo-bar small" role="status">
+          <span>
+            Echo: “{activeEcho.word}” · {activeEcho.index + 1} of {activeEcho.ranges.length} nearby
+          </span>
+          <button
+            className="icon"
+            title="Previous"
+            aria-label="Previous repeat"
+            onClick={() => showEcho(activeEcho.index - 1)}
+          >
+            ‹
+          </button>
+          <button
+            className="icon"
+            title="Next"
+            aria-label="Next repeat"
+            onClick={() => showEcho(activeEcho.index + 1)}
+          >
+            ›
+          </button>
+          <button className="icon" title="Close" aria-label="Close" onClick={closeEcho}>
+            ✕
+          </button>
+        </div>
+      )}
       <div className="page-scroll">
         <article
           className={`page ${meta.type}`}
