@@ -5,6 +5,7 @@
  * listen for change broadcasts so every open window stays live.
  */
 import { z } from 'zod'
+import { MAX_COVER_BYTES, type CoverInfo, type CoverTarget } from './media'
 import {
   chapterFileSchema,
   chapterTypeSchema,
@@ -28,14 +29,25 @@ export interface LibraryProblem {
   message: string
 }
 
+export interface VolumeSummary extends VolumeFile {
+  cover: CoverInfo | null
+  wordCount: number
+}
+
 export interface SeriesSummary extends SeriesFile {
-  volumes: VolumeFile[]
+  cover: CoverInfo | null
+  /** In reading order. */
+  volumes: VolumeSummary[]
+}
+
+export interface WorldSummary extends WorldFile {
+  cover: CoverInfo | null
 }
 
 export interface LibrarySnapshot {
   root: string
   series: SeriesSummary[]
-  worlds: WorldFile[]
+  worlds: WorldSummary[]
   /** Files that could not be read. They are reported, never deleted or rewritten. */
   problems: LibraryProblem[]
 }
@@ -54,6 +66,13 @@ export type LibraryChange =
   | { kind: 'outline'; seriesId: string; volumeId: string }
   | { kind: 'chapter'; seriesId: string; volumeId: string; chapterId: string }
   | { kind: 'world'; worldId: string }
+
+/** What a cover belongs to. Covers live inside that item's folder. */
+export const coverTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('series'), seriesId: id('series') }),
+  z.object({ kind: z.literal('volume'), seriesId: id('series'), volumeId: id('volume') }),
+  z.object({ kind: z.literal('world'), worldId: id('world') }),
+]) satisfies z.ZodType<CoverTarget>
 
 /* ---------- request inputs (validated in the main process) ---------- */
 
@@ -86,6 +105,13 @@ export const ipcInputs = {
   'chapter:read': z.object({ ...volumeRef, chapterId: id('chapter') }),
   'chapter:save': z.object({ ...volumeRef, chapter: chapterFileSchema }),
   'world:create': z.object({ name: nameSchema }),
+  'cover:set': z.object({
+    target: coverTargetSchema,
+    data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_COVER_BYTES, {
+      message: 'That image is too large (20 MB at most).',
+    }),
+  }),
+  'cover:remove': z.object({ target: coverTargetSchema }),
 } satisfies Record<string, z.ZodType>
 
 export type IpcChannel = keyof typeof ipcInputs
@@ -106,6 +132,8 @@ export interface IpcResults {
   'chapter:read': ChapterFile
   'chapter:save': ChapterFile
   'world:create': WorldFile
+  'cover:set': CoverInfo
+  'cover:remove': null
 }
 
 export type IpcResult<C extends IpcChannel> = IpcResults[C]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countWords, docToPlainText, isPlainDoc, plainTextToDoc } from './plainText'
+import { docToPlainText, isPlainDoc, plainTextToDoc } from './plainText'
 
 describe('plain text bridge', () => {
   it('round-trips text, including blank lines', () => {
@@ -27,10 +27,5 @@ describe('plain text bridge', () => {
     expect(isPlainDoc(bold)).toBe(false)
     expect(isPlainDoc(heading)).toBe(false)
     expect(isPlainDoc(aligned)).toBe(false)
-  })
-
-  it('counts words', () => {
-    expect(countWords('')).toBe(0)
-    expect(countWords("It wasn't a well-lit room — 3 doors.")).toBe(7)
   })
 })

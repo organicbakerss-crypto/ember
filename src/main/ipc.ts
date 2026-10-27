@@ -52,6 +52,11 @@ export function registerIpc(host: LibraryHost): void {
     'chapter:save': (input) =>
       host.current.saveChapter(input.seriesId, input.volumeId, input.chapter),
     'world:create': (input) => host.current.createWorld(input),
+    'cover:set': (input) => host.current.setCover(input.target, input.data),
+    'cover:remove': async (input) => {
+      await host.current.removeCover(input.target)
+      return null
+    },
   }
 
   for (const channel of Object.keys(handlers) as IpcChannel[]) {

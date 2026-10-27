@@ -296,6 +296,80 @@ describe('damaged files', () => {
   })
 })
 
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 4, 5, 6])
+
+describe('covers', () => {
+  it('stores a volume cover inside the volume folder and records it in the manifest', async () => {
+    const { series, volume, ref } = await makeVolume()
+    const target = { kind: 'volume' as const, seriesId: series.id, volumeId: volume.id }
+    const info = await lib.setCover(target, PNG)
+
+    const dir = lib.paths.volumeDir(...ref)
+    const file = join(dir, 'cover.png')
+    expect(await lib.getCoverFile(target)).toBe(file)
+    expect(new Uint8Array(await fs.promises.readFile(file))).toEqual(PNG)
+    const manifest = await readJsonFile(join(dir, 'manifest.json'), manifestFileSchema)
+    expect(manifest.files['cover.png']?.hash).toBe(sha256(PNG))
+
+    const snap = await lib.snapshot()
+    expect(snap.series[0]!.volumes[0]!.cover).toEqual(info)
+    expect(changes.at(-1)).toEqual({ kind: 'volume', seriesId: series.id, volumeId: volume.id })
+  })
+
+  it('replaces a cover of a different type and moves the old one to the trash', async () => {
+    const { series } = await makeVolume()
+    const target = { kind: 'series' as const, seriesId: series.id }
+    await lib.setCover(target, PNG)
+    await lib.setCover(target, JPEG)
+
+    const names = await fs.promises.readdir(lib.paths.seriesDir(series.id))
+    expect(names.filter((n) => n.startsWith('cover'))).toEqual(['cover.jpg'])
+    const trash = await fs.promises.readdir(join(lib.paths.localDir, 'trash', 'covers'))
+    expect(trash).toHaveLength(1)
+    expect(trash[0]).toMatch(/cover\.png$/)
+  })
+
+  it('removes a cover and its manifest entry', async () => {
+    const world = await lib.createWorld({ name: 'W' })
+    const target = { kind: 'world' as const, worldId: world.id }
+    await lib.setCover(target, PNG)
+    await lib.removeCover(target)
+    expect(await lib.getCoverFile(target)).toBeNull()
+    const dir = lib.paths.worldDir(world.id)
+    const manifest = await readJsonFile(join(dir, 'manifest.json'), manifestFileSchema)
+    expect(manifest.files['cover.png']).toBeUndefined()
+    expect((await lib.snapshot()).worlds[0]!.cover).toBeNull()
+  })
+
+  it('refuses files that are not images', async () => {
+    const { series } = await makeVolume()
+    const target = { kind: 'series' as const, seriesId: series.id }
+    await expect(lib.setCover(target, new TextEncoder().encode('<svg>'))).rejects.toMatchObject({
+      code: 'invalid-input',
+    })
+  })
+
+  it('refuses covers for items that do not exist', async () => {
+    await expect(
+      lib.setCover({ kind: 'series', seriesId: 'ser_0000000000000000' }, PNG),
+    ).rejects.toMatchObject({ code: 'not-found' })
+    expect(fs.existsSync(lib.paths.seriesDir('ser_0000000000000000'))).toBe(false)
+  })
+})
+
+describe('word counts', () => {
+  it('totals the words in a volume', async () => {
+    const { ref } = await makeVolume()
+    const a = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'A' })
+    const b = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'B' })
+    const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
+    await lib.saveChapter(...ref, { ...a, content: { type: 'doc', content: [para('one two')] } })
+    await lib.saveChapter(...ref, { ...b, content: { type: 'doc', content: [para('three')] } })
+    expect((await lib.snapshot()).series[0]!.volumes[0]!.wordCount).toBe(3)
+  })
+})
+
 describe('manifests', () => {
   it('records the hash of every file written in a volume', async () => {
     const { ref } = await makeVolume()

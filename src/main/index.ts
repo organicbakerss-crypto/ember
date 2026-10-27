@@ -4,12 +4,14 @@ import { appConfig } from '../../app.config'
 import { DeviceSettingsStore } from './deviceSettings'
 import { broadcast, registerIpc } from './ipc'
 import { LibraryHost } from './libraryHost'
+import { handleMediaRequests, registerMediaScheme } from './media'
 
 // Name and data folder come from the app config, not package.json.
 app.setName(appConfig.name)
 app.setPath('userData', join(app.getPath('appData'), appConfig.name))
 
 if (!app.requestSingleInstanceLock()) app.quit()
+registerMediaScheme()
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -61,6 +63,7 @@ void app.whenReady().then(async () => {
   )
   await host.restore()
   registerIpc(host)
+  handleMediaRequests(host)
   createWindow()
 
   app.on('activate', () => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { LibraryStatus } from '@shared/ipc'
 import { api, useIpcEvent } from './api'
-import { LibraryView } from './components/LibraryView'
+import { Home } from './components/Home'
 import { Welcome } from './components/Welcome'
 
 export function App() {
@@ -16,5 +16,5 @@ export function App() {
   if (!status) return null
   if (status.state === 'none')
     return <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
-  return <LibraryView key={status.root} />
+  return <Home key={status.root} />
 }

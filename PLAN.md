@@ -52,13 +52,16 @@ The library holds two kinds of top-level item: **Series** (with their Volumes) a
 library/
   series/<series-id>/
     series.json                 name, linked world id, volume order
+    cover.<ext>                 optional cover image
     volumes/<volume-id>/
       volume.json               name, settings, goals
+      cover.<ext>               optional cover image
       outline.json              arcs + chapter order (the only file changed by reordering)
       chapters/<chapter-id>.json   TipTap JSON + metadata (type, POV, notes)
       manifest.json             file list, versions, hashes (for sync)
   worlds/<world-id>/
     world.json                  name, category definitions
+    cover.<ext>                 optional cover image
     entries/<entry-id>.json     one file per character, place, etc.
     maps/<map-id>.json + image  map image + pins linked to entry ids
     timeline.json
@@ -78,16 +81,28 @@ Rules:
 
 ## App shell and layout
 
-One app, two modes: **Write** and **World**. Each mode keeps its own toolbar and sidebar, so neither shows the other's clutter.
+One app, two modes: **Write** and **World**. Each mode keeps its own toolbar and sidebar, so neither shows the other's clutter. Moving between books happens on the **bookshelf**, not in a sidebar.
 
-- **Launch screen:** pick Write or World, plus a recent-projects list.
+**Bookshelf (home screen).** A visual library of everything in it:
+
+- **Series shelf:** every series as a cover card with its title underneath. A series with one volume shows a single cover; a series with two or more shows its covers stacked like a deck of cards, the latest volume on top and the others peeking out slightly behind it. Hovering a stack fans it out a little so two or three covers show (a smooth, subtle animation that respects reduced-motion settings).
+- **Worlds shelf:** below the series, every world as a card in the same style.
+- **"+ New series"** and **"+ New world"** cards at the end of each shelf. New series uses the new story flow (connect a world, create one, or skip).
+- Files that can't be read are listed at the top of the bookshelf, untouched.
+
+**Series page.** Clicking a series shows all its volumes as covers in reading order, each with its title and word count, plus a "+ New volume" card and the series' own cover. Clicking a volume opens it in the writing view. A series with exactly one volume skips this page and opens straight into that volume. A back button returns to the bookshelf.
+
+**Covers.** Series, volumes and worlds can each have a cover image, added by upload or by dropping an image onto the cover. The image is stored inside that item's folder as `cover.<ext>` (PNG, JPEG, WebP or GIF), so it syncs with it; a replaced cover goes to the local trash. A volume without its own cover uses the series cover. With no image at all, a generated placeholder shows the title on a solid colour from the current theme, so a cover never looks broken. Covers use a book-like 2:3 portrait ratio.
+
+**Windows and panes:**
+
 - **Split screen:** open the other mode beside the current one with a shortcut or button; drag the divider to resize.
 - **Tear-off windows:** drag a pane's tab out to pop it into its own window, opened at the same route (for example `/world/<entry-id>`). Drag it back to re-dock.
 - **Internal links:** clicking a linked name in the writer opens or focuses the World pane on that entry, wherever it is (split, torn off, or not yet open).
 
-Layout of a window:
+Layout of a writing window (there is no library sidebar; navigation goes through the bookshelf):
 
-- **Top bar:** breadcrumb (volume, arc, chapter), mode switch, command palette (Ctrl/Cmd+K).
+- **Top bar:** back button (to the series page, or the bookshelf for a single-volume series), breadcrumb (series, volume, arc, chapter; the series opens its series page), mode switch, command palette (Ctrl/Cmd+K).
 - **Icon rail (left):** switches the side panel between binder, world list, AI chat and history. Settings at the bottom.
 - **Side panel:** collapsible. The binder shows arcs (collapsible, finished arcs folded by default) and chapters, with drag-and-drop.
 - **Page:** the writing surface (see Editor).
@@ -321,7 +336,7 @@ These are all off by default. While off, they leave no trace in the UI: no menu 
 Build in this order. Each milestone ends with a working app the user can actually write in; don't start the next until the current one is solid. Keep each to a size that fits one or two Claude Code sessions.
 
 1. **Foundation:** project scaffold (Electron + React + TypeScript), `app.config.ts` for branding, library folder format, main-process file service with safe writes, IPC skeleton.
-2. **Writing core:** launch screen, Write mode, binder with arcs and drag-and-drop, TipTap editor on a page, autosave, word counts and goals, light/dark themes.
+2. **Writing core:** Write mode, binder with arcs and drag-and-drop, TipTap editor on a page, autosave, word counts and goals, light/dark themes.
 3. **Writing polish:** spellcheck with personal dictionary, find and replace, focus mode, version history and restore, local trash, command palette.
 4. **World core:** World mode, custom categories and entries, linked names with hover cards, quick add, appearances list.
 5. **Layout:** split screen, tear-off windows, live updates across windows.

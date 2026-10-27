@@ -4,9 +4,10 @@ A personal desktop app for writing novels and building the worlds they live in.
 See [PLAN.md](PLAN.md) for the full build plan and ground rules.
 
 **Status:** Milestone 1 (Foundation) — project scaffold, library file format,
-main-process file service with safe writes, typed IPC, and a bare window to
-create series, volumes, arcs, chapters and worlds. The plain-text chapter box
-is temporary; the real page editor arrives in Milestone 2.
+main-process file service with safe writes, typed IPC — plus the bookshelf home
+screen (series and worlds as covers, series pages, cover images) and a basic
+writing view (binder + page). The plain-text chapter box is temporary; the real
+page editor arrives in Milestone 2.
 
 ## Requirements
 
@@ -50,13 +51,15 @@ A library is a folder of plain JSON files, readable without the app:
 ```
 library.json                                  library id and format version
 series/<series-id>/series.json                name, linked world, volume order
+series/<series-id>/cover.<ext>                optional cover image
 series/<series-id>/volumes/<volume-id>/
   volume.json                                 name, settings, goals
+  cover.<ext>                                 optional cover image
   outline.json                                arcs and chapter order
   chapters/<chapter-id>.json                  TipTap JSON + type, POV, notes
   manifest.json                               hash of every file (for sync)
 worlds/<world-id>/
-  world.json  timeline.json  manifest.json
+  world.json  timeline.json  manifest.json   (+ optional cover.<ext>)
   entries/<entry-id>.json
 .ember-local/                                 device-only, never synced
 ```

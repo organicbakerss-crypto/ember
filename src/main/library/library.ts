@@ -37,14 +37,34 @@ import type {
   LibrarySnapshot,
   OutlineView,
   SeriesSummary,
+  VolumeSummary,
+  WorldSummary,
 } from '@shared/ipc'
+import { COVER_EXTENSIONS, detectImageType, type CoverInfo, type CoverTarget } from '@shared/media'
+import { docWordCount } from '@shared/text'
 import { AppError } from '../errors'
-import { isTempFileName, removeStaleTempFiles } from '../fs/atomicWrite'
+import { isTempFileName, removeStaleTempFiles, writeFileAtomic } from '../fs/atomicWrite'
 import { KeyedLock } from '../fs/keyedLock'
 import { pathExists, readJsonFile, sha256, writeJsonFile } from '../fs/jsonFile'
 import { LibraryPaths, unitPaths } from './paths'
 
 type UnitType = ManifestFile['unitType']
+
+interface SyncUnit {
+  type: UnitType
+  dir: string
+  id: string
+}
+
+interface ResolvedCoverTarget {
+  dir: string
+  lockKey: string
+  /** Used to name the file when a cover is moved to the trash. */
+  label: string
+  /** The sync unit the cover belongs to, if any (series folders have no manifest yet). */
+  unit: SyncUnit | null
+  change: LibraryChange
+}
 
 export interface LibraryOptions {
   /** Create a new library if the folder is empty or missing. */
@@ -113,12 +133,16 @@ export class Library {
     for (const seriesId of await listDirs(this.paths.seriesRoot)) {
       const file = await this.tryRead(this.paths.seriesFile(seriesId), seriesFileSchema, problems)
       if (!file) continue
-      series.push({ ...file, volumes: await this.readVolumes(file, problems) })
+      series.push({
+        ...file,
+        cover: await coverInfo(this.paths.seriesDir(seriesId)),
+        volumes: await this.readVolumes(file, problems),
+      })
     }
-    const worlds: WorldFile[] = []
+    const worlds: WorldSummary[] = []
     for (const worldId of await listDirs(this.paths.worldsRoot)) {
       const file = await this.tryRead(this.paths.worldFile(worldId), worldFileSchema, problems)
-      if (file) worlds.push(file)
+      if (file) worlds.push({ ...file, cover: await coverInfo(this.paths.worldDir(worldId)) })
     }
     series.sort(byName)
     worlds.sort(byName)
@@ -126,19 +150,42 @@ export class Library {
   }
 
   /** Volumes in the series' order, followed by any found on disk but missing from it. */
-  private async readVolumes(series: SeriesFile, problems: LibraryProblem[]): Promise<VolumeFile[]> {
+  private async readVolumes(
+    series: SeriesFile,
+    problems: LibraryProblem[],
+  ): Promise<VolumeSummary[]> {
     const onDisk = await listDirs(this.paths.volumesDir(series.id))
     const ordered = [
       ...series.volumeOrder.filter((id) => onDisk.includes(id)),
       ...onDisk.filter((id) => !series.volumeOrder.includes(id)),
     ]
-    const volumes: VolumeFile[] = []
+    const volumes: VolumeSummary[] = []
     for (const volumeId of ordered) {
-      const path = join(this.paths.volumeDir(series.id, volumeId), unitPaths.volume)
-      const file = await this.tryRead(path, volumeFileSchema, problems)
-      if (file) volumes.push(file)
+      const dir = this.paths.volumeDir(series.id, volumeId)
+      const file = await this.tryRead(join(dir, unitPaths.volume), volumeFileSchema, problems)
+      if (!file) continue
+      volumes.push({
+        ...file,
+        cover: await coverInfo(dir),
+        wordCount: await this.volumeWordCount(series.id, volumeId),
+      })
     }
     return volumes
+  }
+
+  /** Total words across a volume's chapters. Unreadable chapters count as zero. */
+  private async volumeWordCount(seriesId: string, volumeId: string): Promise<number> {
+    let total = 0
+    const dir = this.paths.chaptersDir(seriesId, volumeId)
+    for (const chapterId of await this.chapterIdsOnDisk(seriesId, volumeId)) {
+      try {
+        const chapter = await readJsonFile(join(dir, `${chapterId}.json`), chapterFileSchema)
+        total += docWordCount(chapter.content)
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+      }
+    }
+    return total
   }
 
   async getSeries(seriesId: string): Promise<SeriesFile> {
@@ -446,6 +493,98 @@ export class Library {
     return world
   }
 
+  /* ---------- covers ---------- */
+
+  /** The cover image file for an item, if it has one. Used to serve images to windows. */
+  async getCoverFile(target: CoverTarget): Promise<string | null> {
+    const { dir } = await this.resolveCoverTarget(target)
+    const [name] = await findCoverFiles(dir)
+    return name ? join(dir, name) : null
+  }
+
+  /**
+   * Sets an item's cover. The image is stored inside the item's folder as
+   * `cover.<ext>` so it travels with it. A previous cover is moved to the
+   * device's trash, not deleted.
+   */
+  async setCover(target: CoverTarget, data: Uint8Array): Promise<CoverInfo> {
+    const type = detectImageType(data)
+    if (!type) throw new AppError('invalid-input', 'Covers must be PNG, JPEG, WebP or GIF images.')
+    const resolved = await this.resolveCoverTarget(target)
+    const info = await this.lock.run(resolved.lockKey, async () => {
+      await this.trashCovers(resolved)
+      const name = `cover.${type.ext}`
+      await writeFileAtomic(join(resolved.dir, name), data)
+      if (resolved.unit) {
+        await this.recordInManifest(resolved.unit, name, {
+          hash: sha256(data),
+          size: data.byteLength,
+        })
+      }
+      return (await coverInfo(resolved.dir))!
+    })
+    this.onChange(resolved.change)
+    return info
+  }
+
+  /** Removes an item's cover (moved to the device's trash). */
+  async removeCover(target: CoverTarget): Promise<void> {
+    const resolved = await this.resolveCoverTarget(target)
+    await this.lock.run(resolved.lockKey, () => this.trashCovers(resolved))
+    this.onChange(resolved.change)
+  }
+
+  private async resolveCoverTarget(target: CoverTarget): Promise<ResolvedCoverTarget> {
+    switch (target.kind) {
+      case 'series':
+        await this.getSeries(target.seriesId)
+        return {
+          dir: this.paths.seriesDir(target.seriesId),
+          lockKey: `series:${target.seriesId}`,
+          label: target.seriesId,
+          unit: null,
+          change: { kind: 'series', seriesId: target.seriesId },
+        }
+      case 'volume': {
+        const { seriesId, volumeId } = target
+        await this.getVolume(seriesId, volumeId)
+        const dir = this.paths.volumeDir(seriesId, volumeId)
+        return {
+          dir,
+          lockKey: `volume:${volumeId}`,
+          label: volumeId,
+          unit: { type: 'volume', dir, id: volumeId },
+          change: { kind: 'volume', seriesId, volumeId },
+        }
+      }
+      case 'world': {
+        await this.getWorld(target.worldId)
+        const dir = this.paths.worldDir(target.worldId)
+        return {
+          dir,
+          lockKey: `world:${target.worldId}`,
+          label: target.worldId,
+          unit: { type: 'world', dir, id: target.worldId },
+          change: { kind: 'world', worldId: target.worldId },
+        }
+      }
+    }
+  }
+
+  /** Call only while holding the target's lock. */
+  private async trashCovers(target: ResolvedCoverTarget): Promise<void> {
+    const trashDir = join(this.paths.localDir, 'trash', 'covers')
+    for (const name of await findCoverFiles(target.dir)) {
+      await fs.promises.mkdir(trashDir, { recursive: true })
+      const stamp = this.timestamp().replace(/[:.]/g, '-')
+      await fs.promises.rename(
+        join(target.dir, name),
+        join(trashDir, `${stamp}-${target.label}-${name}`),
+      )
+      if (target.unit) await this.recordInManifest(target.unit, name, null)
+    }
+  }
+
   /* ---------- manifests ---------- */
 
   /** Rebuilds a unit's manifest from the files on disk. */
@@ -514,18 +653,28 @@ export class Library {
     rel: string,
     value: unknown,
   ): Promise<void> {
-    const { hash, size } = await writeJsonFile(join(unitDir, rel), value)
-    const manifestPath = join(unitDir, unitPaths.manifest)
+    const written = await writeJsonFile(join(unitDir, rel), value)
+    await this.recordInManifest({ type: unitType, dir: unitDir, id: unitId }, rel, written)
+  }
+
+  /** Updates one file's manifest entry (`null` = the file was removed). */
+  private async recordInManifest(
+    unit: SyncUnit,
+    rel: string,
+    written: { hash: string; size: number } | null,
+  ): Promise<void> {
+    const manifestPath = join(unit.dir, unitPaths.manifest)
     let manifest: ManifestFile
     try {
       manifest = await readJsonFile(manifestPath, manifestFileSchema)
     } catch (err) {
       if (!(err instanceof AppError)) throw err
       // Missing or damaged manifest: it is derived data, so rebuild it from the files.
-      await this.rebuildManifest(unitType, unitDir, unitId)
+      await this.rebuildManifest(unit.type, unit.dir, unit.id)
       return
     }
-    manifest.files[rel] = { hash, size, modifiedAt: this.timestamp() }
+    if (written) manifest.files[rel] = { ...written, modifiedAt: this.timestamp() }
+    else delete manifest.files[rel]
     await writeJsonFile(manifestPath, manifest)
   }
 
@@ -553,6 +702,34 @@ export class Library {
 }
 
 /* ---------- helpers ---------- */
+
+const COVER_NAMES = new Set(COVER_EXTENSIONS.map((ext) => `cover.${ext}`))
+
+/** Cover files in a folder, newest first. Normally there is at most one. */
+async function findCoverFiles(dir: string): Promise<string[]> {
+  let names: string[]
+  try {
+    names = await fs.promises.readdir(dir)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw err
+  }
+  const covers = names.filter((name) => COVER_NAMES.has(name))
+  const times = await Promise.all(
+    covers.map(async (name) => (await fs.promises.stat(join(dir, name))).mtimeMs),
+  )
+  return covers
+    .map((name, i) => ({ name, time: times[i]! }))
+    .sort((a, b) => b.time - a.time)
+    .map((c) => c.name)
+}
+
+async function coverInfo(dir: string): Promise<CoverInfo | null> {
+  const [name] = await findCoverFiles(dir)
+  if (!name) return null
+  const stat = await fs.promises.stat(join(dir, name))
+  return { version: `${name}-${Math.round(stat.mtimeMs)}-${stat.size}` }
+}
 
 const byName = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })

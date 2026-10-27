@@ -50,7 +50,3 @@ export function plainTextToDoc(text: string): RichTextDoc {
       ),
   }
 }
-
-export function countWords(text: string): number {
-  return text.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)?.length ?? 0
-}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChapterFile } from '@shared/schema'
 import { api, describeError } from '../api'
-import { countWords, docToPlainText, isPlainDoc, plainTextToDoc } from '../plainText'
+import { countWords } from '@shared/text'
+import { docToPlainText, isPlainDoc, plainTextToDoc } from '../plainText'
 
 const AUTOSAVE_DELAY_MS = 800
 
