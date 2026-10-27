@@ -1,5 +1,6 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { EditorContent, useEditor, type JSONContent } from '@tiptap/react'
+import type { Node as PMNode } from '@tiptap/pm/model'
 import type { ChapterFile, ChapterType } from '@shared/schema'
 import { api, describeError } from '../api'
 import { chapterExtensions } from './extensions'
@@ -18,6 +19,19 @@ export interface EditorHandle {
   jumpTo: (pos: number) => void
   /** Renames the chapter (from the binder), through the editor's own autosave. */
   setTitle: (title: string) => void
+  /** Selects and shows a search match: the n-th text node, from start to end. */
+  showMatch: (node: number, start: number, end: number) => void
+  /** Replaces the selection if it is the searched text. Returns whether it did. */
+  replaceSelection: (replacement: string, query: string, matchCase: boolean) => boolean
+  insertSceneBreak: () => void
+}
+
+/** A search match to select once the chapter is open. */
+export interface Reveal {
+  node: number
+  start: number
+  end: number
+  token: number
 }
 
 interface Props {
@@ -30,6 +44,9 @@ interface Props {
   onWords: (words: number) => void
   onScenes: (scenes: Scene[]) => void
   onSaveState: (state: SaveState, error: string | null) => void
+  reveal?: Reveal | null
+  /** Focus mode: just the page, no toolbar. */
+  bare?: boolean
 }
 
 /** Loads a chapter, then shows it as an editable page. */
@@ -58,6 +75,21 @@ function editableContent(content: ChapterFile['content']): JSONContent {
   return content.content?.length
     ? (content as JSONContent)
     : { type: 'doc', content: [{ type: 'paragraph' }] }
+}
+
+/** Document positions of a range inside the n-th text node (search results count text nodes). */
+function textNodeRange(doc: PMNode, n: number, start: number, end: number) {
+  let index = 0
+  let found: { from: number; to: number } | null = null
+  doc.descendants((node, pos) => {
+    if (found) return false
+    if (node.isText) {
+      if (index === n && end <= node.text!.length) found = { from: pos + start, to: pos + end }
+      index++
+    }
+    return true
+  })
+  return found
 }
 
 function EditorPage(props: Props & { chapter: ChapterFile }) {
@@ -106,6 +138,14 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
 
   useEffect(() => onSaveState(saver.state, saver.error), [saver.state, saver.error, onSaveState])
 
+  // Show a search match once the chapter is open (or when another one is picked).
+  const { reveal } = props
+  useEffect(() => {
+    if (!reveal || unreadable.current) return
+    const range = textNodeRange(editor.state.doc, reveal.node, reveal.start, reveal.end)
+    if (range) editor.chain().focus().setTextSelection(range).scrollIntoView().run()
+  }, [reveal, editor])
+
   const update = (patch: Partial<ChapterMeta>) => {
     const next = { ...meta, ...patch }
     setMeta(next)
@@ -116,6 +156,22 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
     setTitle(title: string) {
       update({ title })
       void saver.flush()
+    },
+    showMatch(node: number, start: number, end: number) {
+      const range = textNodeRange(editor.state.doc, node, start, end)
+      if (!range) return
+      editor.chain().focus().setTextSelection(range).scrollIntoView().run()
+    },
+    replaceSelection(replacement: string, query: string, matchCase: boolean) {
+      const { from, to } = editor.state.selection
+      const selected = editor.state.doc.textBetween(from, to)
+      const same = matchCase ? selected === query : selected.toLowerCase() === query.toLowerCase()
+      if (!selected || !same) return false
+      editor.view.dispatch(editor.state.tr.insertText(replacement, from, to))
+      return true
+    },
+    insertSceneBreak() {
+      editor.chain().focus().insertSceneBreak().run()
     },
     jumpTo(pos: number) {
       if (pos === 0) {
@@ -139,7 +195,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
 
   return (
     <div className="editor" ref={scroller}>
-      {!contentError && <Toolbar editor={editor} />}
+      {!contentError && !props.bare && <Toolbar editor={editor} />}
       <div className="page-scroll">
         <article
           className={`page ${meta.type}`}

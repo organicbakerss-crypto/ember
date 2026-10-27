@@ -3,17 +3,24 @@
 A personal desktop app for writing novels and building the worlds they live in.
 See [PLAN.md](PLAN.md) for the full build plan and ground rules.
 
-**Status:** Milestones 1 and 2 are done.
+**Status:** Milestones 1–3 are done.
 
 - **Foundation:** library file format, main-process file service with safe
   writes, typed IPC.
-- **Bookshelf:** series and worlds as covers, series pages, cover images.
-- **Writing core:** Write mode with an icon rail and a binder:
-  - arcs and chapters, drag-and-drop, scene jump points, POV filter
-  - the TipTap page editor: formatting, scene breaks, fonts, colours
-  - autosave, which also runs when a window closes
-  - session and project word counts with goals
+- **Bookshelf:** series and worlds as covers, series pages, cover images,
+  right-click menus, inline renaming, and a local trash with restore.
+- **Writing core:**
+  - binder with arcs, drag-and-drop and scene jump points
+  - the TipTap page editor and autosave (which also runs when a window closes)
+  - word counts and goals
   - light and dark themes stored as data files
+  - adjustable page width
+- **Writing polish:**
+  - spellcheck with a personal dictionary
+  - find and replace across a volume
+  - focus mode
+  - version history with preview and restore
+  - the command palette (Ctrl/Cmd+K)
 
 ## Requirements
 

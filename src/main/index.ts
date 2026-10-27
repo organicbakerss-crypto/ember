@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { join } from 'node:path'
 import { appConfig } from '../../app.config'
 import { AppSettingsStore } from './appSettings'
@@ -7,6 +7,8 @@ import { DeviceSettingsStore } from './deviceSettings'
 import { broadcast, registerIpc } from './ipc'
 import { LibraryHost } from './libraryHost'
 import { handleMediaRequests, registerMediaScheme } from './media'
+import { setAppMenu } from './menu'
+import { applySpelling, attachTextMenu } from './spelling'
 
 // Name and data folder come from the app config, not package.json.
 app.setName(appConfig.name)
@@ -15,7 +17,7 @@ app.setPath('userData', join(app.getPath('appData'), appConfig.name))
 if (!app.requestSingleInstanceLock()) app.quit()
 registerMediaScheme()
 
-function createWindow(): BrowserWindow {
+function createWindow(settings: AppSettingsStore): BrowserWindow {
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -34,6 +36,7 @@ function createWindow(): BrowserWindow {
   })
   window.once('ready-to-show', () => window.show())
   guardClose(window)
+  attachTextMenu(window, settings, (next) => broadcast('settings:changed', next))
 
   // Renderer windows never navigate away or open arbitrary windows; links go to the browser.
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -59,18 +62,21 @@ app.on('second-instance', () => {
 })
 
 void app.whenReady().then(async () => {
+  setAppMenu()
   const settings = new DeviceSettingsStore(app.getPath('userData'))
   const defaultPath = join(app.getPath('documents'), `${appConfig.name} Library`)
   const host = new LibraryHost(settings, defaultPath, (change) =>
     broadcast('library:changed', change),
   )
   await host.restore()
-  registerIpc(host, new AppSettingsStore(app.getPath('userData')))
+  const appSettings = new AppSettingsStore(app.getPath('userData'))
+  applySpelling(session.defaultSession, await appSettings.read())
+  registerIpc(host, appSettings)
   handleMediaRequests(host)
-  createWindow()
+  createWindow(appSettings)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(appSettings)
   })
 })
 

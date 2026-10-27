@@ -110,13 +110,14 @@ Delete always moves to the local trash, with an Undo notice. Double-clicking a t
 
 Layout of a writing window (there is no library sidebar; navigation goes through the bookshelf):
 
+- **Command palette (Ctrl/Cmd+K):** commands for the current view (new chapter, find, focus mode, rename, scene break, panels), jumping to any chapter, series or volume, and switching theme.
 - **Top bar:** back arrow (to the bookshelf) and a breadcrumb where every part is clickable: series (its series page), volume (its binder), arc (unfolds it in the binder), chapter (top of the chapter). Mode switch, command palette (Ctrl/Cmd+K).
-- **Icon rail (left):** switches the side panel between binder, world list, AI chat and history. Settings at the bottom.
+- **Icon rail (left):** switches the side panel between binder, find, history, and later the world list and AI chat. Settings at the bottom.
 - **Side panel:** collapsible. The binder shows arcs (collapsible, finished arcs folded by default) and chapters, with drag-and-drop.
 - **Page:** the writing surface (see Editor).
 - **World pane (right, optional):** a slim view of the entry under the cursor or the last one clicked.
 - **Status bar:** session and project word counts, goal progress, and the only place sync status appears ("Synced" or "Offline, 3 changes saved locally"). No sync popups.
-- **Focus mode:** hides every panel and bar, leaving only the page.
+- **Focus mode:** hides every panel and bar, leaving only the page (Ctrl/Cmd+Shift+F; Esc leaves it).
 
 Window positions, split sizes and torn-off windows are device-only and never synced.
 
@@ -130,10 +131,10 @@ The writing surface is a **page**, not open empty space: a fixed-width sheet cen
 - **Autosave:** on every pause in typing; writing never waits for sync.
 - **Linked names:** names of world entries are recognised; hover shows a card, click opens the entry. "Quick add" creates a stub world entry from selected text.
 - **POV and interludes:** each chapter has a type and POV tag; the binder can filter by POV. Two chapters can open side by side.
-- **Spellcheck:** Google Docs style. Unknown words are flagged; right-click to add to the personal dictionary.
-- **Find and replace** across the whole volume.
+- **Spellcheck:** Google Docs style. Unknown words are flagged; right-click for suggestions or to add the word to the personal dictionary. The dictionary is part of the app settings (so it syncs with them) and can be edited in Settings, along with the language and an on/off switch. On Linux and Windows the dictionary for a language is downloaded once on first use; macOS uses the system's.
+- **Find and replace** across the whole volume (Ctrl/Cmd+F): match case and whole-word options, results grouped by chapter, click to jump to a match, replace one or replace all. Before a replace-all, every chapter it changes is snapshotted, so it can be undone from history. A match must sit inside one run of text with the same formatting.
 - **Goals:** session goal and project goal, shown in the status bar. No streaks.
-- **Version history:** automatic snapshots. Keep everything from the last 2 weeks, one per day for 3 months, then one per week. Restore any snapshot.
+- **Version history:** automatic snapshots. When a chapter's text is saved and the last snapshot is over 10 minutes old, the version being replaced is kept (identical versions are skipped). Keep everything from the last 2 weeks, one per day for 3 months, then one per week. Preview and restore any snapshot from the History panel; restoring first snapshots the current text, so a restore can be undone too. Snapshots live in the device folder until sync uploads them.
 - **Trash:** deleted series, volumes, worlds, chapters (and later world entries) go to a local trash, kept until emptied. Restoring puts an item back where it was (a chapter returns to its arc and position; a deleted arc is recreated). Device-only, opened from the bookshelf.
 - **Import:** .docx files, split into chapters at headings or "Chapter X" lines, with a preview to fix splits before anything is created.
 - **Export:** DOCX, PDF, EPUB, Markdown, and copy-for-Royal-Road (per chapter, formatting that pastes cleanly).

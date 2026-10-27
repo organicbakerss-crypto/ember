@@ -4,17 +4,25 @@ import type { OutlineArc, OutlineFile } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
 import { Binder } from '../binder/Binder'
 import { chapterOrder, toContainers } from '../binder/model'
-import { ChapterEditor, type ChapterMeta, type EditorHandle } from '../editor/ChapterEditor'
+import {
+  ChapterEditor,
+  type ChapterMeta,
+  type EditorHandle,
+  type Reveal,
+} from '../editor/ChapterEditor'
 import type { Scene } from '../editor/scenes'
 import type { SaveState } from '../editor/useChapterSaver'
 import { flushAll } from '../saving'
 import { loadLocal, saveLocal } from '../storage'
+import { MOD, modKey, useCommands, type Command } from './commands'
+import { HistoryPanel } from './HistoryPanel'
+import { SearchPanel } from './SearchPanel'
 import { SettingsPanel } from './SettingsPanel'
 import { useOverlays } from './overlays'
 import { StatusBar } from './StatusBar'
 import { useLibraryActions } from './useLibraryActions'
 
-type Panel = 'binder' | 'settings'
+type Panel = 'binder' | 'search' | 'history' | 'settings'
 
 /** Write mode: top bar, icon rail, side panel (binder), the page, and the status bar. */
 export function WritingView(props: {
@@ -45,6 +53,11 @@ export function WritingView(props: {
   const editor = useRef<EditorHandle>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [revealArcId, setRevealArcId] = useState<string | null>(null)
+  const [focusMode, setFocusMode] = useState(false)
+  // Bumped to reload the open chapter from disk (after a restore or replace-all).
+  const [reloadToken, setReloadToken] = useState(0)
+  const [reveal, setReveal] = useState<(Reveal & { chapterId: string }) | null>(null)
+  const [searchFocus, setSearchFocus] = useState(0)
   const { choose } = useOverlays()
   const actions = useLibraryActions()
 
@@ -76,13 +89,28 @@ export function WritingView(props: {
   }
   const togglePanel = (which: Panel) => openPanel(panel === which ? null : which)
 
-  // F2 renames the open chapter, in the binder.
+  const renameOpenChapter = () => {
+    if (!selectedId) return
+    setFocusMode(false)
+    openPanel('binder')
+    setRenamingId(selectedId)
+  }
+  const openSearch = () => {
+    setFocusMode(false)
+    openPanel('search')
+    setSearchFocus((n) => n + 1)
+  }
+
+  // Keyboard: F2 rename, Ctrl/Cmd+F find, Ctrl/Cmd+Shift+F focus mode, Esc leaves focus mode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'F2' || !selectedId) return
+      const key = e.key.toLowerCase()
+      if (e.key === 'F2') renameOpenChapter()
+      else if (modKey(e) && e.shiftKey && key === 'f') setFocusMode((f) => !f)
+      else if (modKey(e) && !e.shiftKey && (key === 'f' || key === 'h')) openSearch()
+      else if (e.key === 'Escape' && focusMode) setFocusMode(false)
+      else return
       e.preventDefault()
-      openPanel('binder')
-      setRenamingId(selectedId)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -196,8 +224,45 @@ export function WritingView(props: {
     (i) => i.type === 'arc' && selectedId && i.chapterIds.includes(selectedId),
   )
 
+  const commands: Command[] = [
+    { id: 'new-chapter', title: 'New chapter', run: () => void createChapter() },
+    { id: 'find', title: 'Find in volume', shortcut: `${MOD}F`, run: openSearch },
+    { id: 'replace', title: 'Find and replace in volume', shortcut: `${MOD}H`, run: openSearch },
+    {
+      id: 'focus',
+      title: focusMode ? 'Leave focus mode' : 'Focus mode',
+      shortcut: `${MOD}Shift+F`,
+      run: () => setFocusMode((f) => !f),
+    },
+    { id: 'rename', title: 'Rename chapter', shortcut: 'F2', run: renameOpenChapter },
+    {
+      id: 'scene-break',
+      title: 'Insert scene break',
+      run: () => editor.current?.insertSceneBreak(),
+    },
+    { id: 'binder', title: 'Show binder', run: () => openPanel('binder') },
+    { id: 'history', title: 'Version history of this chapter', run: () => openPanel('history') },
+    { id: 'settings', title: 'Settings', run: () => openPanel('settings') },
+    { id: 'series', title: `Go to series page: ${series.name}`, run: props.onOpenSeries },
+    ...(view ? chapterOrder(toContainers(view.outline)) : []).map((id) => ({
+      id: `chapter:${id}`,
+      group: 'Go to chapter',
+      title: liveMeta[id]?.title || view?.chapters[id]?.title || 'Untitled chapter',
+      run: () => {
+        setFocusMode(false)
+        select(id)
+      },
+    })),
+  ]
+  useCommands('writing', commands)
+
   return (
-    <div className={`writing-view ${panel ? 'panel-open' : ''}`}>
+    <div className={`writing-view ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''}`}>
+      {focusMode && (
+        <button className="focus-exit small" onClick={() => setFocusMode(false)}>
+          Leave focus mode (Esc)
+        </button>
+      )}
       <header className="top-bar">
         <button className="link" onClick={props.onBack} title="Back to the bookshelf">
           ← Bookshelf
@@ -252,6 +317,22 @@ export function WritingView(props: {
         >
           <path d="M5 5h14M5 10h14M8 15h11M8 20h11" />
         </RailButton>
+        <RailButton
+          label={`Find in volume (${MOD}F)`}
+          active={panel === 'search'}
+          onClick={() => (panel === 'search' ? togglePanel('search') : openSearch())}
+        >
+          <circle cx="10.5" cy="10.5" r="6" />
+          <path d="M15 15l5.5 5.5" />
+        </RailButton>
+        <RailButton
+          label="History"
+          active={panel === 'history'}
+          onClick={() => togglePanel('history')}
+        >
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.5V12l3 2" />
+        </RailButton>
         <span className="rail-spacer" />
         <RailButton
           label="Settings"
@@ -285,6 +366,30 @@ export function WritingView(props: {
               revealArcId={revealArcId}
             />
           )}
+          {panel === 'search' && (
+            <SearchPanel
+              seriesId={series.id}
+              volumeId={volume.id}
+              focusToken={searchFocus}
+              onOpenHit={(hit) => {
+                if (hit.chapterId !== selectedId) select(hit.chapterId)
+                setReveal({ ...hit, chapterId: hit.chapterId, token: Date.now() })
+              }}
+              onReplaceSelection={(replacement, query, matchCase) =>
+                editor.current?.replaceSelection(replacement, query, matchCase) ?? false
+              }
+              onReplacedAll={() => setReloadToken((t) => t + 1)}
+            />
+          )}
+          {panel === 'history' && (
+            <HistoryPanel
+              seriesId={series.id}
+              volumeId={volume.id}
+              chapterId={selectedId}
+              chapterTitle={current?.title ?? ''}
+              onRestored={() => setReloadToken((t) => t + 1)}
+            />
+          )}
           {panel === 'settings' && <SettingsPanel />}
           {error && <p className="error small">{error}</p>}
         </aside>
@@ -293,7 +398,7 @@ export function WritingView(props: {
       <main className="page-area">
         {selectedId && view && selectedId in view.chapters ? (
           <ChapterEditor
-            key={selectedId}
+            key={`${selectedId}:${reloadToken}`}
             seriesId={series.id}
             volumeId={volume.id}
             chapterId={selectedId}
@@ -303,6 +408,8 @@ export function WritingView(props: {
             onWords={onWords}
             onScenes={setScenes}
             onSaveState={onSaveState}
+            reveal={reveal?.chapterId === selectedId ? reveal : null}
+            bare={focusMode}
           />
         ) : (
           view && (

@@ -18,6 +18,9 @@ const appSettingsSchema = z.looseObject({
     .max(PAGE_WIDTH.max)
     .catch(PAGE_WIDTH.default)
     .default(PAGE_WIDTH.default),
+  spellcheck: z.boolean().catch(true).default(true),
+  spellLanguages: z.array(z.string()).catch([]).default([]),
+  dictionary: z.array(z.string()).catch([]).default([]),
 })
 
 export class AppSettingsStore {

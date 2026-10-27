@@ -8,6 +8,7 @@
  * - reordering touches only outline.json and can never drop a chapter.
  */
 import fs from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { join, relative, sep } from 'node:path'
 import {
@@ -17,6 +18,7 @@ import {
   libraryFileSchema,
   manifestFileSchema,
   outlineFileSchema,
+  richTextDocSchema,
   seriesFileSchema,
   timelineFileSchema,
   volumeFileSchema,
@@ -36,19 +38,30 @@ import type {
   LibraryProblem,
   LibrarySnapshot,
   OutlineView,
+  SearchResult,
   SeriesSummary,
+  SnapshotInfo,
   TrashEntry,
   TrashTarget,
   VolumeStats,
   VolumeSummary,
   WorldSummary,
 } from '@shared/ipc'
+import { SNAPSHOT_ID } from '@shared/ipc'
 import { COVER_EXTENSIONS, detectImageType, type CoverInfo, type CoverTarget } from '@shared/media'
 import { docWordCount } from '@shared/text'
+import {
+  findInText,
+  replaceInDoc,
+  searchPattern,
+  textNodes,
+  type SearchOptions,
+} from '@shared/search'
 import { AppError } from '../errors'
 import { isTempFileName, removeStaleTempFiles, writeFileAtomic } from '../fs/atomicWrite'
 import { KeyedLock } from '../fs/keyedLock'
 import { pathExists, readJsonFile, sha256, writeJsonFile } from '../fs/jsonFile'
+import { snapshotsToKeep } from './retention'
 import { LibraryPaths, unitPaths } from './paths'
 
 type UnitType = ManifestFile['unitType']
@@ -56,6 +69,41 @@ type UnitType = ManifestFile['unitType']
 export type ChapterPatch = Partial<
   Pick<ChapterFile, 'title' | 'type' | 'pov' | 'notes' | 'content'>
 >
+
+const MAX_SEARCH_HITS = 500
+const SNIPPET = 40
+
+/** At most one automatic snapshot per chapter in this span. */
+export const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000
+
+const snapshotFileSchema = z.looseObject({
+  formatVersion: z.number().int().positive(),
+  id: z.string().regex(SNAPSHOT_ID),
+  chapterId: z.string(),
+  volumeId: z.string(),
+  savedAt: z.iso.datetime(),
+  reason: z.enum(['auto', 'before-restore', 'before-replace']).catch('auto'),
+  title: z.string(),
+  wordCount: z.number().int().nonnegative(),
+  contentHash: z.string(),
+  content: richTextDocSchema,
+})
+type SnapshotFile = z.infer<typeof snapshotFileSchema>
+
+const toSnapshotInfo = (file: SnapshotFile): SnapshotInfo => ({
+  id: file.id,
+  savedAt: file.savedAt,
+  title: file.title,
+  wordCount: file.wordCount,
+  reason: file.reason,
+})
+
+/** Snapshot ids start with their time, with `:` and `.` written as `-`. */
+function snapshotTime(snapshotId: string): Date {
+  const [, date, h, m, sec, ms] =
+    /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/.exec(snapshotId) ?? []
+  return new Date(`${date}T${h}:${m}:${sec}.${ms}Z`)
+}
 
 const TRASH_NOTE = 'item.json'
 const TRASH_CONTENT = 'content'
@@ -119,6 +167,8 @@ export class Library {
   private readonly lock = new KeyedLock()
   private readonly onChange: (change: LibraryChange) => void
   private readonly now: () => Date
+  /** Newest snapshot per chapter (time and content hash), to decide when to take the next. */
+  private readonly lastSnapshot = new Map<string, { time: number; hash: string }>()
   /** Volume word totals when first opened in this run, for session word counts. */
   private readonly sessionStart = new Map<string, number>()
 
@@ -512,6 +562,8 @@ export class Library {
   ): Promise<ChapterFile> {
     const saved = await this.lock.run(`volume:${volumeId}`, async () => {
       const existing = await this.readChapter(seriesId, volumeId, chapterId)
+      // History: keep the version being replaced, at most every few minutes.
+      if (patch.content) await this.snapshotChapter(volumeId, existing, 'auto')
       const next: ChapterFile = {
         ...existing,
         ...definedOnly(patch),
@@ -912,6 +964,245 @@ export class Library {
 
   private volumeUnit(seriesId: string, volumeId: string): SyncUnit {
     return { type: 'volume', dir: this.paths.volumeDir(seriesId, volumeId), id: volumeId }
+  }
+
+  /* ---------- version history ---------- */
+
+  /**
+   * Snapshots a chapter's current version (call while holding the volume
+   * lock, before overwriting it). Skipped if nothing changed since the last
+   * snapshot, or if the last one is recent, unless `force` is set.
+   */
+  private async snapshotChapter(
+    volumeId: string,
+    chapter: ChapterFile,
+    reason: SnapshotInfo['reason'],
+    force = false,
+  ): Promise<void> {
+    const hash = sha256(JSON.stringify(chapter.content))
+    const last = await this.latestSnapshot(volumeId, chapter.id)
+    const now = this.now()
+    if (last && last.hash === hash) return
+    if (!force && last && now.getTime() - last.time < SNAPSHOT_INTERVAL_MS) return
+
+    const dir = this.historyDir(volumeId, chapter.id)
+    const id = `${now.toISOString().replace(/[:.]/g, '-')}-${randomBytes(3).toString('hex')}`
+    const snapshot: SnapshotFile = {
+      formatVersion: FORMAT_VERSION,
+      id,
+      chapterId: chapter.id,
+      volumeId,
+      savedAt: now.toISOString(),
+      reason,
+      title: chapter.title,
+      wordCount: docWordCount(chapter.content),
+      contentHash: hash,
+      content: chapter.content,
+    }
+    await fs.promises.mkdir(dir, { recursive: true })
+    await writeJsonFile(join(dir, `${id}.json`), snapshot)
+    this.lastSnapshot.set(chapter.id, { time: now.getTime(), hash })
+    await this.pruneSnapshots(volumeId, chapter.id)
+  }
+
+  private async latestSnapshot(
+    volumeId: string,
+    chapterId: string,
+  ): Promise<{ time: number; hash: string } | null> {
+    const cached = this.lastSnapshot.get(chapterId)
+    if (cached) return cached
+    const [newest] = await this.snapshotIds(volumeId, chapterId)
+    if (!newest) return null
+    try {
+      const file = await this.readSnapshotFile(volumeId, chapterId, newest)
+      const latest = { time: Date.parse(file.savedAt), hash: file.contentHash }
+      this.lastSnapshot.set(chapterId, latest)
+      return latest
+    } catch {
+      return null
+    }
+  }
+
+  /** Snapshot ids, newest first. */
+  private async snapshotIds(volumeId: string, chapterId: string): Promise<string[]> {
+    let names: string[]
+    try {
+      names = await fs.promises.readdir(this.historyDir(volumeId, chapterId))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw err
+    }
+    return names
+      .filter((n) => n.endsWith('.json') && SNAPSHOT_ID.test(n.slice(0, -5)))
+      .map((n) => n.slice(0, -5))
+      .sort()
+      .reverse()
+  }
+
+  private async pruneSnapshots(volumeId: string, chapterId: string): Promise<void> {
+    const ids = await this.snapshotIds(volumeId, chapterId)
+    const times = ids.map(snapshotTime)
+    const keep = snapshotsToKeep(times, this.now())
+    const dir = this.historyDir(volumeId, chapterId)
+    for (const [i, snapshotId] of ids.entries()) {
+      if (!keep.has(i)) await fs.promises.rm(join(dir, `${snapshotId}.json`), { force: true })
+    }
+  }
+
+  private readSnapshotFile(volumeId: string, chapterId: string, snapshotId: string) {
+    return readJsonFile(
+      join(this.historyDir(volumeId, chapterId), `${snapshotId}.json`),
+      snapshotFileSchema,
+    )
+  }
+
+  private historyDir(volumeId: string, chapterId: string): string {
+    return join(this.paths.localDir, 'history', volumeId, chapterId)
+  }
+
+  /** Earlier versions of a chapter, newest first. Unreadable snapshots are skipped. */
+  async listSnapshots(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+  ): Promise<SnapshotInfo[]> {
+    await this.getVolume(seriesId, volumeId)
+    const list: SnapshotInfo[] = []
+    for (const snapshotId of await this.snapshotIds(volumeId, chapterId)) {
+      try {
+        list.push(toSnapshotInfo(await this.readSnapshotFile(volumeId, chapterId, snapshotId)))
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+      }
+    }
+    return list
+  }
+
+  async readSnapshot(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+    snapshotId: string,
+  ): Promise<{ info: SnapshotInfo; content: ChapterFile['content'] }> {
+    await this.getVolume(seriesId, volumeId)
+    const file = await this.readSnapshotFile(volumeId, chapterId, snapshotId)
+    return { info: toSnapshotInfo(file), content: file.content }
+  }
+
+  /**
+   * Puts an earlier version's text back. The current text is snapshotted
+   * first, so a restore can itself be undone from the history.
+   */
+  async restoreSnapshot(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+    snapshotId: string,
+  ): Promise<ChapterFile> {
+    const restored = await this.lock.run(`volume:${volumeId}`, async () => {
+      const snapshot = await this.readSnapshotFile(volumeId, chapterId, snapshotId)
+      const existing = await this.readChapter(seriesId, volumeId, chapterId)
+      await this.snapshotChapter(volumeId, existing, 'before-restore', true)
+      const next: ChapterFile = {
+        ...existing,
+        content: snapshot.content,
+        updatedAt: this.timestamp(),
+      }
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapterId), next)
+      return next
+    })
+    this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId })
+    return restored
+  }
+
+  /* ---------- find and replace ---------- */
+
+  /** Chapter ids in reading order (outline order, then any missing from it). */
+  private async chaptersInOrder(seriesId: string, volumeId: string): Promise<string[]> {
+    const { outline } = await this.getOutline(seriesId, volumeId)
+    return outline.items.flatMap((i) => (i.type === 'arc' ? i.chapterIds : [i.id]))
+  }
+
+  async searchVolume(
+    seriesId: string,
+    volumeId: string,
+    query: string,
+    options: SearchOptions,
+  ): Promise<SearchResult> {
+    const pattern = searchPattern(query, options)
+    const result: SearchResult = { hits: [], chapters: [], total: 0, truncated: false }
+    if (!pattern) return result
+    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId)) {
+      let chapter: ChapterFile
+      try {
+        chapter = await this.readChapter(seriesId, volumeId, chapterId)
+      } catch (err) {
+        if (err instanceof AppError) continue
+        throw err
+      }
+      let found = false
+      textNodes(chapter.content).forEach((node, index) => {
+        const text = node.text ?? ''
+        for (const range of findInText(text, pattern)) {
+          found = true
+          result.total++
+          if (result.hits.length >= MAX_SEARCH_HITS) {
+            result.truncated = true
+            continue
+          }
+          result.hits.push({
+            chapterId,
+            node: index,
+            ...range,
+            before: text.slice(Math.max(0, range.start - SNIPPET), range.start),
+            match: text.slice(range.start, range.end),
+            after: text.slice(range.end, range.end + SNIPPET),
+          })
+        }
+      })
+      if (found) result.chapters.push({ id: chapterId, title: chapter.title })
+    }
+    return result
+  }
+
+  /**
+   * Replaces every match in a volume. Each chapter that changes is
+   * snapshotted first, so the replacement can be undone from its history.
+   */
+  async replaceAllInVolume(
+    seriesId: string,
+    volumeId: string,
+    query: string,
+    replacement: string,
+    options: SearchOptions,
+  ): Promise<{ chapters: number; replacements: number }> {
+    const pattern = searchPattern(query, options)
+    let chapters = 0
+    let replacements = 0
+    if (!pattern) return { chapters, replacements }
+    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId)) {
+      const changed = await this.lock.run(`volume:${volumeId}`, async () => {
+        let existing: ChapterFile
+        try {
+          existing = await this.readChapter(seriesId, volumeId, chapterId)
+        } catch (err) {
+          if (err instanceof AppError) return 0
+          throw err
+        }
+        const { doc, count } = replaceInDoc(existing.content, pattern, replacement)
+        if (!count) return 0
+        await this.snapshotChapter(volumeId, existing, 'before-replace', true)
+        const next = { ...existing, content: doc, updatedAt: this.timestamp() }
+        await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapterId), next)
+        return count
+      })
+      if (changed) {
+        chapters++
+        replacements += changed
+        this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId })
+      }
+    }
+    return { chapters, replacements }
   }
 
   /* ---------- covers ---------- */

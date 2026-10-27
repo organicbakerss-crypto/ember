@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { LibrarySnapshot } from '@shared/ipc'
 import { api, describeError, useIpcEvent } from '../api'
 import { Bookshelf } from './Bookshelf'
+import { useCommands } from './commands'
 import { SeriesPage } from './SeriesPage'
 import { TrashPage } from './TrashPage'
 import { WritingView } from './WritingView'
@@ -31,6 +32,30 @@ export function Home() {
     if ((change.kind === 'chapter' || change.kind === 'trash') && writing) return
     refresh()
   })
+
+  useCommands(
+    'library',
+    snapshot
+      ? [
+          { id: 'shelf', title: 'Go to bookshelf', run: () => setRoute({ view: 'shelf' }) },
+          { id: 'trash', title: 'Open trash', run: () => setRoute({ view: 'trash' }) },
+          ...snapshot.series.flatMap((s) => [
+            {
+              id: `series:${s.id}`,
+              group: 'Open series',
+              title: s.name,
+              run: () => setRoute({ view: 'series', seriesId: s.id }),
+            },
+            ...s.volumes.map((v) => ({
+              id: `volume:${v.id}`,
+              group: 'Open volume',
+              title: `${s.name} › ${v.name}`,
+              run: () => setRoute({ view: 'volume', seriesId: s.id, volumeId: v.id }),
+            })),
+          ]),
+        ]
+      : [],
+  )
 
   if (error) return <p className="error page-message">{error}</p>
   if (!snapshot) return null

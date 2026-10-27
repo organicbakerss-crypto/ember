@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { PAGE_WIDTH, type AppSettings } from '@shared/ipc'
+import { DEFAULT_APP_SETTINGS, type AppSettings } from '@shared/settings'
 import { api, useIpcEvent } from './api'
 import { applyTheme, resolveTheme, SYSTEM_THEME } from './themes'
 
@@ -7,10 +7,7 @@ const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
 /** Applies the user's theme (or the system's light/dark choice) and keeps it up to date. */
 export function useAppSettings(): AppSettings {
-  const [settings, setSettings] = useState<AppSettings>({
-    theme: SYSTEM_THEME,
-    pageWidth: PAGE_WIDTH.default,
-  })
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS)
   const [prefersDark, setPrefersDark] = useState(darkQuery.matches)
 
   useEffect(() => {

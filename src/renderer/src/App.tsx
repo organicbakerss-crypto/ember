@@ -4,7 +4,9 @@ import { api, useIpcEvent } from './api'
 import { flushAll } from './saving'
 import { useAppSettings } from './useTheme'
 import { Home } from './components/Home'
+import { CommandProvider, useCommands } from './components/commands'
 import { OverlayProvider } from './components/overlays'
+import { SYSTEM_THEME, themes } from './themes'
 import { Welcome } from './components/Welcome'
 
 export function App() {
@@ -24,11 +26,28 @@ export function App() {
   if (!status) return null
   return (
     <OverlayProvider>
-      {status.state === 'none' ? (
-        <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
-      ) : (
-        <Home key={status.root} />
-      )}
+      <CommandProvider>
+        <ThemeCommands />
+        {status.state === 'none' ? (
+          <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
+        ) : (
+          <Home key={status.root} />
+        )}
+      </CommandProvider>
     </OverlayProvider>
   )
+}
+
+function ThemeCommands() {
+  const options = [{ id: SYSTEM_THEME, name: 'Match system' }, ...themes]
+  useCommands(
+    'themes',
+    options.map((t) => ({
+      id: `theme:${t.id}`,
+      group: 'Theme',
+      title: t.name,
+      run: () => void api.invoke('settings:update', { theme: t.id }),
+    })),
+  )
+  return null
 }

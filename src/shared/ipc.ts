@@ -6,6 +6,9 @@
  */
 import { z } from 'zod'
 import { MAX_COVER_BYTES, type CoverInfo, type CoverTarget } from './media'
+import { PAGE_WIDTH, type AppSettings } from './settings'
+
+export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
 import {
   chapterTypeSchema,
   id,
@@ -14,6 +17,7 @@ import {
   richTextDocSchema,
   volumeGoalsSchema,
   type ChapterFile,
+  type RichTextDoc,
   type OutlineFile,
   type SeriesFile,
   type VolumeFile,
@@ -67,15 +71,26 @@ export interface VolumeStats {
   sessionStartWords: number
 }
 
-/** App-wide settings (synced only by hand, later). */
-export interface AppSettings {
-  /** `system`, or the id of a theme file. */
-  theme: string
-  /** Width of the text column on the page, in CSS pixels (about 60–75 characters at the default). */
-  pageWidth: number
+/** One place a search matched, with a little text around it. */
+export interface SearchHit {
+  chapterId: string
+  /** Which text node in the chapter (reading order) and where in it. */
+  node: number
+  start: number
+  end: number
+  before: string
+  match: string
+  after: string
 }
 
-export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const
+export interface SearchResult {
+  hits: SearchHit[]
+  /** Chapter titles for the hits, keyed by id, in reading order. */
+  chapters: { id: string; title: string }[]
+  total: number
+  /** True when there were more hits than are listed. */
+  truncated: boolean
+}
 
 /** Something that can be moved to the trash. */
 export type TrashTarget =
@@ -93,6 +108,18 @@ export interface TrashEntry {
   /** Where it came from, for display ("in The Long Night › Landfall"). */
   from: string | null
 }
+
+/** A saved earlier version of a chapter. */
+export interface SnapshotInfo {
+  id: string
+  savedAt: string
+  title: string
+  wordCount: number
+  /** Why it was taken: on a schedule while writing, or just before a restore or replace-all. */
+  reason: 'auto' | 'before-restore' | 'before-replace'
+}
+
+export const SNAPSHOT_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/
 
 export type LibraryChange =
   | { kind: 'library' }
@@ -142,6 +169,31 @@ export const ipcInputs = {
     /** What happens to the arc's chapters: moved out to the top level, or trashed too. */
     chapters: z.enum(['keep', 'trash']),
   }),
+  'history:list': z.object({ ...volumeRef, chapterId: id('chapter') }),
+  'history:read': z.object({
+    ...volumeRef,
+    chapterId: id('chapter'),
+    snapshotId: z.string().regex(SNAPSHOT_ID),
+  }),
+  'history:restore': z.object({
+    ...volumeRef,
+    chapterId: id('chapter'),
+    snapshotId: z.string().regex(SNAPSHOT_ID),
+  }),
+  'search:volume': z.object({
+    ...volumeRef,
+    query: z.string().min(1).max(500),
+    matchCase: z.boolean(),
+    wholeWord: z.boolean(),
+  }),
+  'search:replaceAll': z.object({
+    ...volumeRef,
+    query: z.string().min(1).max(500),
+    replacement: z.string().max(500),
+    matchCase: z.boolean(),
+    wholeWord: z.boolean(),
+  }),
+  'spelling:languages': z.void(),
   'trash:add': z.object({ target: trashTargetSchema }),
   'trash:list': z.void(),
   'trash:restore': z.object({ trashId: id('trash') }),
@@ -180,6 +232,9 @@ export const ipcInputs = {
   'settings:get': z.void(),
   'settings:update': z.object({
     theme: z.string().min(1).max(100).optional(),
+    spellcheck: z.boolean().optional(),
+    spellLanguages: z.array(z.string().max(20)).max(10).optional(),
+    dictionary: z.array(z.string().trim().min(1).max(100)).max(50000).optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
@@ -207,6 +262,12 @@ export interface IpcResults {
   'series:rename': SeriesFile
   'world:rename': WorldFile
   'arc:delete': OutlineView
+  'history:list': SnapshotInfo[]
+  'history:read': { info: SnapshotInfo; content: RichTextDoc }
+  'history:restore': ChapterFile
+  'search:volume': SearchResult
+  'search:replaceAll': { chapters: number; replacements: number }
+  'spelling:languages': string[]
   'trash:add': TrashEntry
   'trash:list': TrashEntry[]
   'trash:restore': TrashEntry

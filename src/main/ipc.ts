@@ -1,5 +1,5 @@
 /** Registers every IPC request handler. Inputs are validated before they reach the library. */
-import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, dialog, ipcMain, session, type IpcMainInvokeEvent } from 'electron'
 import {
   IPC_EVENT_PREFIX,
   IPC_INVOKE_PREFIX,
@@ -12,6 +12,7 @@ import {
 import type { z } from 'zod'
 import type { AppSettingsStore } from './appSettings'
 import { confirmFlushed } from './closeGuard'
+import { applySpelling } from './spelling'
 import { AppError } from './errors'
 import type { LibraryHost } from './libraryHost'
 
@@ -46,6 +47,28 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
     'world:rename': (input) => host.current.renameWorld(input.worldId, input.name),
     'arc:delete': (input) =>
       host.current.deleteArc(input.seriesId, input.volumeId, input.arcId, input.chapters),
+    'history:list': (input) =>
+      host.current.listSnapshots(input.seriesId, input.volumeId, input.chapterId),
+    'history:read': (input) =>
+      host.current.readSnapshot(input.seriesId, input.volumeId, input.chapterId, input.snapshotId),
+    'history:restore': (input) =>
+      host.current.restoreSnapshot(
+        input.seriesId,
+        input.volumeId,
+        input.chapterId,
+        input.snapshotId,
+      ),
+    'search:volume': (input) =>
+      host.current.searchVolume(input.seriesId, input.volumeId, input.query, input),
+    'search:replaceAll': (input) =>
+      host.current.replaceAllInVolume(
+        input.seriesId,
+        input.volumeId,
+        input.query,
+        input.replacement,
+        input,
+      ),
+    'spelling:languages': () => session.defaultSession.availableSpellCheckerLanguages,
     'trash:add': (input) => host.current.moveToTrash(input.target),
     'trash:list': () => host.current.listTrash(),
     'trash:restore': (input) => host.current.restoreFromTrash(input.trashId),
@@ -77,7 +100,9 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
     'world:create': (input) => host.current.createWorld(input),
     'settings:get': () => settings.read(),
     'settings:update': async (input) => {
+      const previous = await settings.read()
       const next = await settings.update(input)
+      applySpelling(session.defaultSession, next, previous)
       broadcast('settings:changed', next)
       return next
     },
