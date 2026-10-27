@@ -61,10 +61,14 @@ export function useChapterSaver(
         const { content, ...fields } = patch
         pending.current = { ...fields, ...pending.current }
         if (content) contentDirty.current = true
-        setError(describeError(err).message)
+        const { code, message } = describeError(err)
+        setError(message)
         setState('error')
         clearTimeout(timer.current)
-        timer.current = setTimeout(() => void flushRef.current(), RETRY_MS)
+        // A chapter that no longer exists (trashed elsewhere) can't be saved; don't retry forever.
+        if (code !== 'not-found') {
+          timer.current = setTimeout(() => void flushRef.current(), RETRY_MS)
+        }
       }
     })
     return queue.current

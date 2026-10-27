@@ -1,19 +1,57 @@
 import { useState } from 'react'
-import type { LibrarySnapshot, SeriesSummary } from '@shared/ipc'
+import type { LibrarySnapshot, SeriesSummary, WorldSummary } from '@shared/ipc'
 import { api } from '../api'
 import { formatVolumes, seriesStack, worldCover } from '../covers'
 import { CoverDropZone } from './Cover'
 import { CoverStack } from './CoverStack'
+import { EditableText } from './EditableText'
 import { NewCard } from './NewCard'
 import { NewSeriesForm } from './NewSeriesForm'
+import { useOverlays, type MenuItem } from './overlays'
+import { useLibraryActions } from './useLibraryActions'
 
 /** The home screen: every series as a cover (or a deck of covers), then the worlds. */
 export function Bookshelf(props: {
   snapshot: LibrarySnapshot
-  onOpenSeries: (series: SeriesSummary) => void
+  onOpenSeries: (series: SeriesSummary, options?: { newVolume?: boolean }) => void
+  onOpenTrash: () => void
 }) {
   const { snapshot } = props
   const [creatingSeries, setCreatingSeries] = useState(false)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const { openMenu } = useOverlays()
+  const actions = useLibraryActions()
+
+  const seriesMenu = (series: SeriesSummary): MenuItem[] => [
+    { label: 'New volume', onSelect: () => props.onOpenSeries(series, { newVolume: true }) },
+    { label: 'Rename', hint: 'F2', onSelect: () => setRenaming(series.id) },
+    {
+      label: 'Change cover',
+      onSelect: () => actions.pickCover({ kind: 'series', seriesId: series.id }),
+    },
+    {
+      label: 'Delete',
+      danger: true,
+      onSelect: () =>
+        void actions.moveToTrash({ kind: 'series', seriesId: series.id }, series.name),
+    },
+  ]
+  const worldMenu = (world: WorldSummary): MenuItem[] => [
+    { label: 'Rename', hint: 'F2', onSelect: () => setRenaming(world.id) },
+    {
+      label: 'Change cover',
+      onSelect: () => actions.pickCover({ kind: 'world', worldId: world.id }),
+    },
+    {
+      label: 'Delete',
+      danger: true,
+      onSelect: () => void actions.moveToTrash({ kind: 'world', worldId: world.id }, world.name),
+    },
+  ]
+  const menu = (items: MenuItem[]) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    openMenu(e, items)
+  }
 
   return (
     <main className="bookshelf">
@@ -23,14 +61,17 @@ export function Bookshelf(props: {
         <h2>Series</h2>
         <div className="shelf-row">
           {snapshot.series.map((series) => (
-            <div key={series.id} className="shelf-item">
+            <div key={series.id} className="shelf-item" onContextMenu={menu(seriesMenu(series))}>
               <div
                 className="shelf-card"
                 role="button"
                 tabIndex={0}
                 aria-label={`Open ${series.name}`}
                 onClick={() => props.onOpenSeries(series)}
-                onKeyDown={(e) => e.key === 'Enter' && props.onOpenSeries(series)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') props.onOpenSeries(series)
+                  if (e.key === 'F2') setRenaming(series.id)
+                }}
               >
                 <CoverDropZone
                   target={{ kind: 'series', seriesId: series.id }}
@@ -40,7 +81,13 @@ export function Bookshelf(props: {
                 </CoverDropZone>
               </div>
               <div className="shelf-caption">
-                <span className="shelf-title">{series.name}</span>
+                <EditableText
+                  className="shelf-title"
+                  value={series.name}
+                  editing={renaming === series.id}
+                  onEditingChange={(on) => setRenaming(on ? series.id : null)}
+                  onRename={(name) => api.invoke('series:rename', { seriesId: series.id, name })}
+                />
                 <span className="muted small">{formatVolumes(series.volumes.length)}</span>
               </div>
             </div>
@@ -53,8 +100,13 @@ export function Bookshelf(props: {
         <h2>Worlds</h2>
         <div className="shelf-row">
           {snapshot.worlds.map((world) => (
-            <div key={world.id} className="shelf-item">
-              <div className="shelf-card">
+            <div key={world.id} className="shelf-item" onContextMenu={menu(worldMenu(world))}>
+              <div
+                className="shelf-card"
+                tabIndex={0}
+                aria-label={world.name}
+                onKeyDown={(e) => e.key === 'F2' && setRenaming(world.id)}
+              >
                 <CoverDropZone
                   target={{ kind: 'world', worldId: world.id }}
                   hasCover={!!world.cover}
@@ -64,7 +116,13 @@ export function Bookshelf(props: {
                 </CoverDropZone>
               </div>
               <div className="shelf-caption">
-                <span className="shelf-title">{world.name}</span>
+                <EditableText
+                  className="shelf-title"
+                  value={world.name}
+                  editing={renaming === world.id}
+                  onEditingChange={(on) => setRenaming(on ? world.id : null)}
+                  onRename={(name) => api.invoke('world:rename', { worldId: world.id, name })}
+                />
               </div>
             </div>
           ))}
@@ -76,8 +134,13 @@ export function Bookshelf(props: {
         </div>
       </section>
 
-      <footer className="muted small library-path" title={snapshot.root}>
-        Library: {snapshot.root}
+      <footer className="shelf-footer muted small">
+        <span className="library-path" title={snapshot.root}>
+          Library: {snapshot.root}
+        </span>
+        <button className="link small" onClick={props.onOpenTrash}>
+          Trash
+        </button>
       </footer>
 
       {creatingSeries && (

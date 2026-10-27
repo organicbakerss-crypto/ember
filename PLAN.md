@@ -73,7 +73,7 @@ library/
 
 Rules:
 
-- **Stable IDs everywhere.** Every series, volume, arc, chapter and world entry has a permanent random ID. Links use IDs, never names, so renaming a character never breaks a link.
+- **Stable IDs everywhere.** Every series, volume, arc, chapter and world entry has a permanent random ID. Links use IDs, never names, so renaming a character never breaks a link. Renaming anything changes only its display name; IDs and folders stay the same.
 - **One file per item.** Chapters and world entries are separate small files, so sync moves only what changed.
 - **Reorganizing is cheap.** Moving a chapter between arcs, or reordering, edits only `outline.json`. Nothing is renamed or moved on disk.
 - **New story flow:** creating a series asks to connect it to a world: pick an existing one, create a new one, or skip. Volumes can be moved to another world later.
@@ -90,9 +90,17 @@ One app, two modes: **Write** and **World**. Each mode keeps its own toolbar and
 - **"+ New series"** and **"+ New world"** cards at the end of each shelf. New series uses the new story flow (connect a world, create one, or skip).
 - Files that can't be read are listed at the top of the bookshelf, untouched.
 
-**Series page.** Clicking a series shows all its volumes as covers in reading order, each with its title and word count, plus a "+ New volume" card and the series' own cover. Clicking a volume opens it in the writing view. A series with exactly one volume skips this page and opens straight into that volume. A back button returns to the bookshelf.
+**Series page.** Clicking a series shows all its volumes as covers in reading order, each with its title and word count, plus a "+ New volume" card and the series' own cover. Clicking a volume opens it in the writing view. Clicking a series always opens this page, even when it has only one volume. A back button returns to the bookshelf.
 
 **Covers.** Series, volumes and worlds can each have a cover image, added by upload or by dropping an image onto the cover. The image is stored inside that item's folder as `cover.<ext>` (PNG, JPEG, WebP or GIF), so it syncs with it; a replaced cover goes to the local trash. A volume without its own cover uses the series cover. With no image at all, a generated placeholder shows the title on a solid colour from the current theme, so a cover never looks broken. Covers use a book-like 2:3 portrait ratio.
+
+**Right-click menus and renaming.** Short context menus:
+
+- Series: New volume, Rename, Change cover, Delete. Volume and world: Rename, Change cover, Delete.
+- Arc (in the binder): Rename, Delete. Deleting an arc that holds chapters asks whether to move them out of the arc (to where it was) or send them to the trash too.
+- Chapter (in the binder): Rename, Move to arc, Delete.
+
+Delete always moves to the local trash, with an Undo notice. Double-clicking a title (binder, series page, card labels) renames it inline, and F2 renames the selected item.
 
 **Windows and panes:**
 
@@ -102,7 +110,7 @@ One app, two modes: **Write** and **World**. Each mode keeps its own toolbar and
 
 Layout of a writing window (there is no library sidebar; navigation goes through the bookshelf):
 
-- **Top bar:** back button (to the series page, or the bookshelf for a single-volume series), breadcrumb (series, volume, arc, chapter; the series opens its series page), mode switch, command palette (Ctrl/Cmd+K).
+- **Top bar:** back arrow (to the bookshelf) and a breadcrumb where every part is clickable: series (its series page), volume (its binder), arc (unfolds it in the binder), chapter (top of the chapter). Mode switch, command palette (Ctrl/Cmd+K).
 - **Icon rail (left):** switches the side panel between binder, world list, AI chat and history. Settings at the bottom.
 - **Side panel:** collapsible. The binder shows arcs (collapsible, finished arcs folded by default) and chapters, with drag-and-drop.
 - **Page:** the writing surface (see Editor).
@@ -116,7 +124,7 @@ Window positions, split sizes and torn-off windows are device-only and never syn
 
 The writing surface is a **page**, not open empty space: a fixed-width sheet centred on a darker background, with real margins.
 
-- **Page look first:** one continuous page per chapter. Paper size, margins, line spacing and page colour follow the theme (dark page in dark themes).
+- **Page look first:** one continuous page per chapter. Margins, line spacing and page colour follow the theme (dark page in dark themes). The text column's width is an editor setting, 660px by default (about 60–75 characters per line, comfortable for long sessions), adjustable in Settings.
 - **True pagination later:** Word-style page breaks and "page 4 of 12" as a view toggle, built only once the editor is solid.
 - **Rich text:** bold, italic, underline, headings, scene breaks, fonts, colours, images. Stored as TipTap JSON.
 - **Autosave:** on every pause in typing; writing never waits for sync.
@@ -126,7 +134,7 @@ The writing surface is a **page**, not open empty space: a fixed-width sheet cen
 - **Find and replace** across the whole volume.
 - **Goals:** session goal and project goal, shown in the status bar. No streaks.
 - **Version history:** automatic snapshots. Keep everything from the last 2 weeks, one per day for 3 months, then one per week. Restore any snapshot.
-- **Trash:** deleted chapters and entries go to a local trash, kept until emptied. Device-only.
+- **Trash:** deleted series, volumes, worlds, chapters (and later world entries) go to a local trash, kept until emptied. Restoring puts an item back where it was (a chapter returns to its arc and position; a deleted arc is recreated). Device-only, opened from the bookshelf.
 - **Import:** .docx files, split into chapters at headings or "Chapter X" lines, with a preview to fix splits before anything is created.
 - **Export:** DOCX, PDF, EPUB, Markdown, and copy-for-Royal-Road (per chapter, formatting that pastes cleanly).
 

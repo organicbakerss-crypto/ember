@@ -16,6 +16,8 @@ export interface ChapterMeta {
 export interface EditorHandle {
   /** Scrolls to a scene (by the position of its scene break). */
   jumpTo: (pos: number) => void
+  /** Renames the chapter (from the binder), through the editor's own autosave. */
+  setTitle: (title: string) => void
 }
 
 interface Props {
@@ -104,7 +106,17 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
 
   useEffect(() => onSaveState(saver.state, saver.error), [saver.state, saver.error, onSaveState])
 
+  const update = (patch: Partial<ChapterMeta>) => {
+    const next = { ...meta, ...patch }
+    setMeta(next)
+    onMeta(next)
+    saver.changeFields(patch)
+  }
   useImperativeHandle(props.handle, () => ({
+    setTitle(title: string) {
+      update({ title })
+      void saver.flush()
+    },
     jumpTo(pos: number) {
       if (pos === 0) {
         scroller.current?.closest('.page-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })
@@ -124,13 +136,6 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
       }
     },
   }))
-
-  const update = (patch: Partial<ChapterMeta>) => {
-    const next = { ...meta, ...patch }
-    setMeta(next)
-    onMeta(next)
-    saver.changeFields(patch)
-  }
 
   return (
     <div className="editor" ref={scroller}>

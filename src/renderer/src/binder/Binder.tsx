@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   closestCenter,
   DndContext,
@@ -26,7 +26,9 @@ import type { OutlineView } from '@shared/ipc'
 import type { OutlineArc, OutlineFile } from '@shared/schema'
 import type { ChapterMeta } from '../editor/ChapterEditor'
 import type { Scene } from '../editor/scenes'
+import { EditableText } from '../components/EditableText'
 import { InlineCreate } from '../components/InlineCreate'
+import { useOverlays, type MenuItem } from '../components/overlays'
 import {
   chapterOrder,
   findContainer,
@@ -35,6 +37,7 @@ import {
   isChapterId,
   isListId,
   listId,
+  moveChapterTo,
   moveItem,
   ROOT,
   toContainers,
@@ -54,6 +57,14 @@ interface BinderProps {
   onSave: (outline: OutlineFile) => Promise<void>
   onCreateChapter: (arcId?: string) => void
   onCreateArc: (name: string) => Promise<unknown>
+  /** The item being renamed inline (a chapter or arc id), shared so F2 can start it. */
+  renamingId: string | null
+  onRenamingChange: (id: string | null) => void
+  onRenameChapter: (chapterId: string, title: string) => Promise<unknown>
+  onTrashChapter: (chapterId: string) => void
+  onDeleteArc: (arc: OutlineArc) => void
+  /** Unfold this arc (e.g. clicked in the breadcrumb). */
+  revealArcId: string | null
 }
 
 /** Arcs and chapters, reordered by drag-and-drop. Only outline.json changes. */
@@ -63,6 +74,13 @@ export function Binder(props: BinderProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [povFilter, setPovFilter] = useState<string>('')
   const collapsed = useCollapsed()
+  const { openMenu } = useOverlays()
+
+  const { revealArcId } = props
+  const { setCollapsed } = collapsed
+  useEffect(() => {
+    if (revealArcId) setCollapsed(revealArcId, false)
+  }, [revealArcId, setCollapsed])
 
   // Follow saved changes, except mid-drag (adjusting state while rendering, not in an effect).
   const [syncedOutline, setSyncedOutline] = useState(view.outline)
@@ -145,13 +163,46 @@ export function Binder(props: BinderProps) {
 
   const arcs = new Map<string, OutlineArc>()
   for (const item of view.outline.items) if (item.type === 'arc') arcs.set(item.id, item)
-  const saveArc = (arcId: string, patch: Partial<OutlineArc> | null) => {
-    const items: OutlineFile['items'] = []
-    for (const item of view.outline.items) {
-      if (item.type !== 'arc' || item.id !== arcId) items.push(item)
-      else if (patch !== null) items.push({ ...item, ...patch })
-    }
+  const saveArc = (arcId: string, patch: Partial<OutlineArc>) => {
+    const items = view.outline.items.map((item) =>
+      item.type === 'arc' && item.id === arcId ? { ...item, ...patch } : item,
+    )
     void props.onSave({ ...view.outline, items })
+  }
+  const moveToArc = (chapterId: string, arcId: string | null) =>
+    void props.onSave(fromContainers(view.outline, moveChapterTo(containers, chapterId, arcId)))
+
+  const chapterMenu = (id: string): MenuItem[] => {
+    const current = findContainer(containers, id)
+    return [
+      { label: 'Rename', hint: 'F2', onSelect: () => props.onRenamingChange(id) },
+      {
+        label: 'Move to arc',
+        disabled: arcs.size === 0 && current === ROOT,
+        submenu: [
+          ...[...arcs.values()].map((arc) => ({
+            label: arc.name,
+            disabled: current === arc.id,
+            onSelect: () => moveToArc(id, arc.id),
+          })),
+          {
+            label: 'No arc (top level)',
+            disabled: current === ROOT,
+            onSelect: () => moveToArc(id, null),
+          },
+        ],
+      },
+      { label: 'Delete', danger: true, onSelect: () => props.onTrashChapter(id) },
+    ]
+  }
+  const arcMenu = (arc: OutlineArc): MenuItem[] => [
+    { label: 'Rename', hint: 'F2', onSelect: () => props.onRenamingChange(arc.id) },
+    { label: 'Delete', danger: true, onSelect: () => props.onDeleteArc(arc) },
+  ]
+  const menu = (items: () => MenuItem[]) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    openMenu(e, items())
   }
 
   const chapterRow = (id: string) => (
@@ -160,8 +211,12 @@ export function Binder(props: BinderProps) {
         meta={meta(id)}
         selected={id === props.selectedId}
         scenes={id === props.selectedId ? props.scenes : []}
+        renaming={props.renamingId === id}
+        onRenamingChange={(on) => props.onRenamingChange(on ? id : null)}
+        onRename={(title) => props.onRenameChapter(id, title)}
         onSelect={() => props.onSelect(id)}
         onJump={props.onJump}
+        onContextMenu={menu(() => chapterMenu(id))}
       />
     </SortableChapter>
   )
@@ -212,11 +267,14 @@ export function Binder(props: BinderProps) {
                         count={chapterIds.length}
                         folded={folded}
                         handle={handle}
+                        renaming={props.renamingId === id}
+                        onRenamingChange={(on) => props.onRenamingChange(on ? id : null)}
                         onToggle={() => collapsed.setCollapsed(id, !folded)}
                         onRename={(name) => saveArc(id, { name })}
                         onFinished={(finished) => saveArc(id, { finished })}
-                        onDelete={chapterIds.length === 0 ? () => saveArc(id, null) : undefined}
+                        onDelete={() => props.onDeleteArc(arc)}
                         onAddChapter={() => props.onCreateChapter(id)}
+                        onContextMenu={menu(() => arcMenu(arc))}
                       />
                       {!folded && (
                         <SortableContext items={chapterIds} strategy={verticalListSortingStrategy}>
@@ -325,24 +383,22 @@ function ArcHeader(props: {
   count: number
   folded: boolean
   handle: DragHandle
+  renaming: boolean
+  onRenamingChange: (renaming: boolean) => void
   onToggle: () => void
   onRename: (name: string) => void
   onFinished: (finished: boolean) => void
-  onDelete?: () => void
+  onDelete: () => void
   onAddChapter: () => void
+  onContextMenu: (e: React.MouseEvent) => void
 }) {
   const { arc } = props
-  const [renaming, setRenaming] = useState(false)
-  const [name, setName] = useState(arc.name)
-
-  const commit = () => {
-    setRenaming(false)
-    if (name.trim() && name.trim() !== arc.name) props.onRename(name.trim())
-    else setName(arc.name)
-  }
-
   return (
-    <div className={`binder-arc-header ${arc.finished ? 'finished' : ''}`}>
+    <div
+      className={`binder-arc-header ${arc.finished ? 'finished' : ''}`}
+      onContextMenu={props.onContextMenu}
+      data-arc-id={arc.id}
+    >
       <button
         className="icon chevron"
         aria-label={props.folded ? 'Expand arc' : 'Collapse arc'}
@@ -351,33 +407,20 @@ function ArcHeader(props: {
       >
         {props.folded ? '▸' : '▾'}
       </button>
-      {renaming ? (
-        <input
-          autoFocus
-          className="binder-rename"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') commit()
-            if (e.key === 'Escape') {
-              setName(arc.name)
-              setRenaming(false)
-            }
-          }}
+      <span
+        className="binder-arc-name"
+        title="Drag to move. Double-click to rename."
+        {...(props.renaming ? {} : props.handle)}
+      >
+        {arc.finished && !props.renaming && <span aria-label="Finished">✓ </span>}
+        <EditableText
+          value={arc.name}
+          editing={props.renaming}
+          onEditingChange={props.onRenamingChange}
+          onRename={props.onRename}
         />
-      ) : (
-        <span
-          className="binder-arc-name"
-          title="Drag to move. Double-click to rename."
-          onDoubleClick={() => setRenaming(true)}
-          {...props.handle}
-        >
-          {arc.finished && <span aria-label="Finished">✓ </span>}
-          {arc.name}
-          {props.folded && <span className="muted small"> · {props.count}</span>}
-        </span>
-      )}
+        {props.folded && !props.renaming && <span className="muted small"> · {props.count}</span>}
+      </span>
       <span className="binder-arc-actions">
         <button className="icon" title="Add a chapter to this arc" onClick={props.onAddChapter}>
           +
@@ -389,14 +432,9 @@ function ArcHeader(props: {
         >
           ✓
         </button>
-        <button className="icon" title="Rename" onClick={() => setRenaming(true)}>
-          ✎
+        <button className="icon" title="Delete arc" onClick={props.onDelete}>
+          ✕
         </button>
-        {props.onDelete && (
-          <button className="icon" title="Delete this empty arc" onClick={props.onDelete}>
-            ✕
-          </button>
-        )}
       </span>
     </div>
   )
@@ -406,20 +444,33 @@ function ChapterRow(props: {
   meta: ChapterMeta
   selected: boolean
   scenes: Scene[]
+  renaming: boolean
+  onRenamingChange: (renaming: boolean) => void
+  onRename: (title: string) => Promise<unknown>
   onSelect: () => void
   onJump: (pos: number) => void
+  onContextMenu: (e: React.MouseEvent) => void
 }) {
   const { meta } = props
   return (
     <>
-      <button
+      <div
         className={`binder-row ${props.selected ? 'selected' : ''} ${meta.type}`}
         onClick={props.onSelect}
+        onContextMenu={props.onContextMenu}
       >
-        <span className="binder-title">{meta.title || 'Untitled chapter'}</span>
+        <EditableText
+          className="binder-title"
+          value={meta.title}
+          placeholder="Untitled chapter"
+          allowEmpty
+          editing={props.renaming}
+          onEditingChange={props.onRenamingChange}
+          onRename={props.onRename}
+        />
         {meta.type === 'interlude' && <span className="binder-tag">Interlude</span>}
         {meta.pov && <span className="binder-pov">{meta.pov}</span>}
-      </button>
+      </div>
       {props.scenes.length > 1 && (
         <ol className="binder-scenes">
           {props.scenes.map((scene, i) => (

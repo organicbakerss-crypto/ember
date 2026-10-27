@@ -4,11 +4,17 @@ import { describeError } from '../api'
 /** The "+ New …" card at the end of a shelf. Either asks for a name inline or runs `onClick`. */
 export function NewCard(
   props: { label: string } & (
-    | { onClick: () => void; onCreate?: never; placeholder?: never }
-    | { onCreate: (name: string) => Promise<unknown>; placeholder: string; onClick?: never }
+    | { onClick: () => void; onCreate?: never; placeholder?: never; startNaming?: never }
+    | {
+        onCreate: (name: string) => Promise<unknown>
+        placeholder: string
+        onClick?: never
+        /** Open with the name field ready. */
+        startNaming?: boolean
+      }
   ),
 ) {
-  const [naming, setNaming] = useState(false)
+  const [naming, setNaming] = useState(props.startNaming ?? false)
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
 

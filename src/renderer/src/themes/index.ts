@@ -31,9 +31,10 @@ export const THEME_COLOR_TOKENS = [
   'page-shadow',
 ] as const
 
+/** Page style. The text column's width is an editor setting, not part of the theme. */
 export const THEME_PAGE_TOKENS = [
-  'width',
-  'padding',
+  'padding-block',
+  'padding-inline',
   'font-size',
   'line-height',
   'paragraph-spacing',

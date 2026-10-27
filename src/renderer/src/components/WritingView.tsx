@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { OutlineView, SeriesSummary, VolumeStats, VolumeSummary } from '@shared/ipc'
-import type { OutlineFile } from '@shared/schema'
+import type { OutlineArc, OutlineFile } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
 import { Binder } from '../binder/Binder'
 import { chapterOrder, toContainers } from '../binder/model'
 import { ChapterEditor, type ChapterMeta, type EditorHandle } from '../editor/ChapterEditor'
 import type { Scene } from '../editor/scenes'
 import type { SaveState } from '../editor/useChapterSaver'
+import { flushAll } from '../saving'
 import { loadLocal, saveLocal } from '../storage'
 import { SettingsPanel } from './SettingsPanel'
+import { useOverlays } from './overlays'
 import { StatusBar } from './StatusBar'
+import { useLibraryActions } from './useLibraryActions'
 
 type Panel = 'binder' | 'settings'
 
@@ -17,7 +20,7 @@ type Panel = 'binder' | 'settings'
 export function WritingView(props: {
   series: SeriesSummary
   volume: VolumeSummary
-  backLabel: string
+  /** Back to the bookshelf. */
   onBack: () => void
   onOpenSeries: () => void
 }) {
@@ -40,6 +43,10 @@ export function WritingView(props: {
     loadLocal('writing.panel') === 'closed' ? null : 'binder',
   )
   const editor = useRef<EditorHandle>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [revealArcId, setRevealArcId] = useState<string | null>(null)
+  const { choose } = useOverlays()
+  const actions = useLibraryActions()
 
   const refresh = useCallback(() => {
     api.invoke('outline:get', ref).then(setView, (err) => setError(describeError(err).message))
@@ -63,10 +70,71 @@ export function WritingView(props: {
     saveLocal(lastChapterKey, chapterId)
   }
 
-  const togglePanel = (which: Panel) => {
-    const next = panel === which ? null : which
+  const openPanel = (next: Panel | null) => {
     setPanel(next)
     saveLocal('writing.panel', next ? 'open' : 'closed')
+  }
+  const togglePanel = (which: Panel) => openPanel(panel === which ? null : which)
+
+  // F2 renames the open chapter, in the binder.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'F2' || !selectedId) return
+      e.preventDefault()
+      openPanel('binder')
+      setRenamingId(selectedId)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const renameChapter = async (chapterId: string, title: string) => {
+    if (chapterId === selectedId && editor.current) {
+      // The open chapter: go through its editor so the page and autosave agree.
+      editor.current.setTitle(title)
+      return
+    }
+    await api.invoke('chapter:save', { ...ref, chapterId, patch: { title } })
+    const stored = view?.chapters[chapterId]
+    if (stored) setLiveMeta((m) => ({ ...m, [chapterId]: { ...stored, ...m[chapterId], title } }))
+  }
+
+  const trashChapter = (chapterId: string) => {
+    const title = liveMeta[chapterId]?.title ?? view?.chapters[chapterId]?.title ?? ''
+    void actions.moveToTrash({ kind: 'chapter', ...ref, chapterId }, title || 'Untitled chapter')
+  }
+
+  const deleteArc = async (arc: OutlineArc) => {
+    let chapters: 'keep' | 'trash' = 'keep'
+    if (arc.chapterIds.length > 0) {
+      const n = arc.chapterIds.length
+      const answer = await choose(
+        `Delete the arc “${arc.name}”?`,
+        [
+          {
+            value: 'keep',
+            label: `Keep the ${n === 1 ? 'chapter' : `${n} chapters`}`,
+            primary: true,
+          },
+          {
+            value: 'trash',
+            label: `Move ${n === 1 ? 'it' : 'them'} to the trash too`,
+            danger: true,
+          },
+        ],
+        `It holds ${n === 1 ? 'one chapter' : `${n} chapters`}. Kept chapters move out of the arc, to where it was.`,
+      )
+      if (!answer) return
+      chapters = answer
+    }
+    try {
+      if (chapters === 'trash') await flushAll()
+      setView(await api.invoke('arc:delete', { ...ref, arcId: arc.id, chapters }))
+      if (chapters === 'trash')
+        actions.toast('Chapters moved to the trash. Restore them from the Trash on the bookshelf.')
+    } catch (err) {
+      setError(describeError(err).message)
+    }
   }
 
   const saveOutline = async (outline: OutlineFile) => {
@@ -131,25 +199,46 @@ export function WritingView(props: {
   return (
     <div className={`writing-view ${panel ? 'panel-open' : ''}`}>
       <header className="top-bar">
-        <button className="link" onClick={props.onBack}>
-          ← {props.backLabel}
+        <button className="link" onClick={props.onBack} title="Back to the bookshelf">
+          ← Bookshelf
         </button>
         <nav className="breadcrumb small" aria-label="Breadcrumb">
-          <button className="link" onClick={props.onOpenSeries}>
+          <button className="link" onClick={props.onOpenSeries} title="Open the series page">
             {series.name}
           </button>
           <span className="muted">/</span>
-          <span>{volume.name}</span>
+          <button
+            className="link"
+            onClick={() => openPanel('binder')}
+            title="Show this volume's binder"
+          >
+            {volume.name}
+          </button>
           {arc?.type === 'arc' && (
             <>
               <span className="muted">/</span>
-              <span>{arc.name}</span>
+              <button
+                className="link"
+                title="Show this arc in the binder"
+                onClick={() => {
+                  openPanel('binder')
+                  setRevealArcId(arc.id)
+                }}
+              >
+                {arc.name}
+              </button>
             </>
           )}
           {current && (
             <>
               <span className="muted">/</span>
-              <span className="breadcrumb-current">{current.title || 'Untitled chapter'}</span>
+              <button
+                className="link breadcrumb-current"
+                title="Go to the start of this chapter"
+                onClick={() => editor.current?.jumpTo(0)}
+              >
+                {current.title || 'Untitled chapter'}
+              </button>
             </>
           )}
         </nav>
@@ -188,6 +277,12 @@ export function WritingView(props: {
               onSave={saveOutline}
               onCreateChapter={(arcId) => void createChapter(arcId)}
               onCreateArc={(name) => api.invoke('arc:create', { ...ref, name })}
+              renamingId={renamingId}
+              onRenamingChange={setRenamingId}
+              onRenameChapter={renameChapter}
+              onTrashChapter={trashChapter}
+              onDeleteArc={(arc) => void deleteArc(arc)}
+              revealArcId={revealArcId}
             />
           )}
           {panel === 'settings' && <SettingsPanel />}

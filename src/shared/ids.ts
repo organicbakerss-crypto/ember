@@ -16,6 +16,7 @@ export const ID_KINDS = {
   section: 'sec',
   event: 'evt',
   library: 'lib',
+  trash: 'trs',
 } as const
 
 export type IdKind = keyof typeof ID_KINDS

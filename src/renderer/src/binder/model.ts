@@ -96,3 +96,19 @@ export function moveItem(containers: Containers, activeId: string, overId: strin
 export function chapterOrder(containers: Containers): string[] {
   return (containers[ROOT] ?? []).flatMap((id) => (isArcId(id) ? (containers[id] ?? []) : [id]))
 }
+
+/** Moves a chapter to the end of an arc, or to the end of the top level when `arcId` is null. */
+export function moveChapterTo(
+  containers: Containers,
+  chapterId: string,
+  arcId: string | null,
+): Containers {
+  const from = findContainer(containers, chapterId)
+  const to = arcId ?? ROOT
+  if (!from || !(to in containers) || from === to) return containers
+  return {
+    ...containers,
+    [from]: containers[from]!.filter((id) => id !== chapterId),
+    [to]: [...containers[to]!, chapterId],
+  }
+}

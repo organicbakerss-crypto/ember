@@ -5,12 +5,19 @@
 import fs from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
-import type { AppSettings } from '@shared/ipc'
+import { PAGE_WIDTH, type AppSettings } from '@shared/ipc'
 import { writeFileAtomic } from './fs/atomicWrite'
 import { serializeJson } from './fs/jsonFile'
 
 const appSettingsSchema = z.looseObject({
   theme: z.string().min(1).catch('system').default('system'),
+  pageWidth: z
+    .number()
+    .int()
+    .min(PAGE_WIDTH.min)
+    .max(PAGE_WIDTH.max)
+    .catch(PAGE_WIDTH.default)
+    .default(PAGE_WIDTH.default),
 })
 
 export class AppSettingsStore {

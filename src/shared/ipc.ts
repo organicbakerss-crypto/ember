@@ -71,10 +71,32 @@ export interface VolumeStats {
 export interface AppSettings {
   /** `system`, or the id of a theme file. */
   theme: string
+  /** Width of the text column on the page, in CSS pixels (about 60–75 characters at the default). */
+  pageWidth: number
+}
+
+export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const
+
+/** Something that can be moved to the trash. */
+export type TrashTarget =
+  | { kind: 'series'; seriesId: string }
+  | { kind: 'volume'; seriesId: string; volumeId: string }
+  | { kind: 'world'; worldId: string }
+  | { kind: 'chapter'; seriesId: string; volumeId: string; chapterId: string }
+
+/** An item in the device's trash. */
+export interface TrashEntry {
+  id: string
+  kind: TrashTarget['kind']
+  name: string
+  deletedAt: string
+  /** Where it came from, for display ("in The Long Night › Landfall"). */
+  from: string | null
 }
 
 export type LibraryChange =
   | { kind: 'library' }
+  | { kind: 'trash' }
   | { kind: 'series'; seriesId: string }
   | { kind: 'volume'; seriesId: string; volumeId: string }
   | { kind: 'outline'; seriesId: string; volumeId: string }
@@ -92,6 +114,13 @@ export const coverTargetSchema = z.discriminatedUnion('kind', [
 
 const volumeRef = { seriesId: id('series'), volumeId: id('volume') }
 
+export const trashTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('series'), seriesId: id('series') }),
+  z.object({ kind: z.literal('volume'), seriesId: id('series'), volumeId: id('volume') }),
+  z.object({ kind: z.literal('world'), worldId: id('world') }),
+  z.object({ kind: z.literal('chapter'), ...volumeRef, chapterId: id('chapter') }),
+]) satisfies z.ZodType<TrashTarget>
+
 export const ipcInputs = {
   'library:status': z.void(),
   'library:choose': z.void(),
@@ -105,6 +134,19 @@ export const ipcInputs = {
       z.object({ mode: z.literal('new'), name: nameSchema }),
     ]),
   }),
+  'series:rename': z.object({ seriesId: id('series'), name: nameSchema }),
+  'world:rename': z.object({ worldId: id('world'), name: nameSchema }),
+  'arc:delete': z.object({
+    ...volumeRef,
+    arcId: id('arc'),
+    /** What happens to the arc's chapters: moved out to the top level, or trashed too. */
+    chapters: z.enum(['keep', 'trash']),
+  }),
+  'trash:add': z.object({ target: trashTargetSchema }),
+  'trash:list': z.void(),
+  'trash:restore': z.object({ trashId: id('trash') }),
+  'trash:purge': z.object({ trashId: id('trash') }),
+  'trash:empty': z.void(),
   'series:setWorld': z.object({ seriesId: id('series'), worldId: id('world').nullable() }),
   'volume:create': z.object({ seriesId: id('series'), name: nameSchema }),
   'outline:get': z.object(volumeRef),
@@ -136,7 +178,10 @@ export const ipcInputs = {
   }),
   'volume:stats': z.object(volumeRef),
   'settings:get': z.void(),
-  'settings:update': z.object({ theme: z.string().min(1).max(100).optional() }),
+  'settings:update': z.object({
+    theme: z.string().min(1).max(100).optional(),
+    pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
+  }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
   'window:flushed': z.void(),
   'world:create': z.object({ name: nameSchema }),
@@ -159,6 +204,14 @@ export interface IpcResults {
   'library:snapshot': LibrarySnapshot
   'series:create': SeriesFile
   'series:setWorld': SeriesFile
+  'series:rename': SeriesFile
+  'world:rename': WorldFile
+  'arc:delete': OutlineView
+  'trash:add': TrashEntry
+  'trash:list': TrashEntry[]
+  'trash:restore': TrashEntry
+  'trash:purge': null
+  'trash:empty': null
   'volume:create': VolumeFile
   'outline:get': OutlineView
   'outline:save': OutlineView

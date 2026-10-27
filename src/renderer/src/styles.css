@@ -199,6 +199,7 @@ label {
   overflow-wrap: anywhere;
 }
 .library-path {
+  min-width: 0;
   margin-top: auto;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -667,11 +668,12 @@ button.new-card:hover {
   padding: 2rem 1rem 4rem;
 }
 .page {
-  width: min(100%, var(--page-width));
+  /* The text column is --text-width wide (an editor setting); the paper adds the margins. */
+  width: min(100%, calc(var(--text-width, 660px) + 2 * var(--page-padding-inline)));
   min-height: 100%;
   cursor: text;
   margin: 0 auto;
-  padding: var(--page-padding);
+  padding: var(--page-padding-block) var(--page-padding-inline);
   background: var(--page);
   color: var(--page-text);
   box-shadow: var(--page-shadow);
@@ -844,4 +846,137 @@ label.radio input {
   display: grid;
   gap: 0.25rem;
   margin: 0.2rem 0;
+}
+
+.settings-panel {
+  display: grid;
+  gap: 1.25rem;
+}
+.settings-panel input[type='range'] {
+  width: 100%;
+  padding: 0;
+}
+
+/* ---------- menus, toasts, dialogs ---------- */
+
+.context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 11rem;
+  padding: 0.3rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+  outline: none;
+}
+.menu-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  border-radius: 5px;
+}
+.menu-item.active:not(:disabled) {
+  background: var(--accent-soft);
+}
+.menu-item.danger {
+  color: var(--danger);
+}
+
+.toasts {
+  position: fixed;
+  bottom: 3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 150;
+  display: grid;
+  gap: 0.4rem;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.55rem 0.9rem;
+  background: var(--text);
+  color: var(--bg);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+}
+.toast .link {
+  color: var(--accent-soft);
+  font-weight: 600;
+}
+
+.dialog {
+  max-width: 30rem;
+}
+.dialog h3 {
+  margin: 0;
+}
+.dialog p {
+  margin: 0;
+}
+.dialog-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+button.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.editable-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+.editable-field input {
+  padding: 0.1rem 0.3rem;
+  font: inherit;
+}
+
+/* ---------- bookshelf footer and trash ---------- */
+
+.shelf-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.trash-heading {
+  justify-content: space-between;
+  width: 100%;
+  max-width: 48rem;
+}
+.trash-heading h1 {
+  margin: 0;
+}
+.trash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+  max-width: 48rem;
+}
+.trash-item {
+  max-width: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.trash-info {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
 }

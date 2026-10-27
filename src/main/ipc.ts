@@ -42,6 +42,21 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
     },
     'library:snapshot': () => host.current.snapshot(),
     'series:create': (input) => host.current.createSeries(input),
+    'series:rename': (input) => host.current.renameSeries(input.seriesId, input.name),
+    'world:rename': (input) => host.current.renameWorld(input.worldId, input.name),
+    'arc:delete': (input) =>
+      host.current.deleteArc(input.seriesId, input.volumeId, input.arcId, input.chapters),
+    'trash:add': (input) => host.current.moveToTrash(input.target),
+    'trash:list': () => host.current.listTrash(),
+    'trash:restore': (input) => host.current.restoreFromTrash(input.trashId),
+    'trash:purge': async (input) => {
+      await host.current.purgeTrash(input.trashId)
+      return null
+    },
+    'trash:empty': async () => {
+      await host.current.emptyTrash()
+      return null
+    },
     'series:setWorld': (input) => host.current.setSeriesWorld(input.seriesId, input.worldId),
     'volume:create': (input) => host.current.createVolume(input),
     'outline:get': (input) => host.current.getOutline(input.seriesId, input.volumeId),

@@ -4,6 +4,7 @@ import { api, useIpcEvent } from './api'
 import { flushAll } from './saving'
 import { useAppSettings } from './useTheme'
 import { Home } from './components/Home'
+import { OverlayProvider } from './components/overlays'
 import { Welcome } from './components/Welcome'
 
 export function App() {
@@ -21,7 +22,13 @@ export function App() {
   })
 
   if (!status) return null
-  if (status.state === 'none')
-    return <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
-  return <Home key={status.root} />
+  return (
+    <OverlayProvider>
+      {status.state === 'none' ? (
+        <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
+      ) : (
+        <Home key={status.root} />
+      )}
+    </OverlayProvider>
+  )
 }

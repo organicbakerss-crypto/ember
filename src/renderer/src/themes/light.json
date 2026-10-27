@@ -35,8 +35,8 @@
     "page": "Georgia, 'Iowan Old Style', 'Palatino Linotype', serif"
   },
   "page": {
-    "width": "44rem",
-    "padding": "4.5rem 5rem",
+    "padding-block": "4.5rem",
+    "padding-inline": "4.5rem",
     "font-size": "1.125rem",
     "line-height": "1.75",
     "paragraph-spacing": "0.85em",

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { OutlineFile } from '@shared/schema'
-import { chapterOrder, fromContainers, listId, moveItem, ROOT, toContainers } from './model'
+import {
+  chapterOrder,
+  fromContainers,
+  listId,
+  moveChapterTo,
+  moveItem,
+  ROOT,
+  toContainers,
+} from './model'
 
 const outline: OutlineFile = {
   formatVersion: 1,
@@ -76,5 +84,15 @@ describe('binder model', () => {
   it('returns the same object when nothing moves', () => {
     const containers = toContainers(outline)
     expect(moveItem(containers, 'chp_a', 'chp_a')).toBe(containers)
+  })
+
+  it('moves a chapter to another arc or to the top level from a menu', () => {
+    const into = moveChapterTo(toContainers(outline), 'chp_prologue', 'arc_two')
+    expect(into[ROOT]).toEqual(['arc_one', 'arc_two', 'chp_epilogue'])
+    expect(into['arc_two']).toEqual(['chp_prologue'])
+    const out = moveChapterTo(into, 'chp_a', null)
+    expect(out['arc_one']).toEqual(['chp_b'])
+    expect(out[ROOT]).toEqual(['arc_one', 'arc_two', 'chp_epilogue', 'chp_a'])
+    expect(moveChapterTo(out, 'chp_a', null)).toBe(out)
   })
 })

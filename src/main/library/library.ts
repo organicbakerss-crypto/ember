@@ -8,7 +8,7 @@
  * - reordering touches only outline.json and can never drop a chapter.
  */
 import fs from 'node:fs'
-import type { z } from 'zod'
+import { z } from 'zod'
 import { join, relative, sep } from 'node:path'
 import {
   FORMAT_VERSION,
@@ -30,13 +30,15 @@ import {
   type VolumeFile,
   type WorldFile,
 } from '@shared/schema'
-import { newId } from '@shared/ids'
+import { idPattern, newId } from '@shared/ids'
 import type {
   LibraryChange,
   LibraryProblem,
   LibrarySnapshot,
   OutlineView,
   SeriesSummary,
+  TrashEntry,
+  TrashTarget,
   VolumeStats,
   VolumeSummary,
   WorldSummary,
@@ -54,6 +56,39 @@ type UnitType = ManifestFile['unitType']
 export type ChapterPatch = Partial<
   Pick<ChapterFile, 'title' | 'type' | 'pov' | 'notes' | 'content'>
 >
+
+const TRASH_NOTE = 'item.json'
+const TRASH_CONTENT = 'content'
+
+const trashItemSchema = z.looseObject({
+  formatVersion: z.number().int().positive(),
+  id: z.string().regex(idPattern('trash')),
+  kind: z.enum(['series', 'volume', 'world', 'chapter']),
+  name: z.string(),
+  from: z.string().nullable(),
+  deletedAt: z.string(),
+  origin: z.looseObject({
+    seriesId: z.string().regex(idPattern('series')).optional(),
+    volumeId: z.string().regex(idPattern('volume')).optional(),
+    worldId: z.string().regex(idPattern('world')).optional(),
+    chapterId: z.string().regex(idPattern('chapter')).optional(),
+    arc: z
+      .object({ id: z.string().regex(idPattern('arc')), name: z.string(), index: z.number() })
+      .nullable()
+      .optional(),
+    index: z.number().int().nonnegative().optional(),
+    linkedSeries: z.array(z.string().regex(idPattern('series'))).optional(),
+  }),
+})
+type TrashItem = z.infer<typeof trashItemSchema>
+
+const toTrashEntry = (item: TrashItem): TrashEntry => ({
+  id: item.id,
+  kind: item.kind,
+  name: item.name,
+  deletedAt: item.deletedAt,
+  from: item.from,
+})
 
 interface SyncUnit {
   type: UnitType
@@ -537,6 +572,346 @@ export class Library {
     })
     this.onChange({ kind: 'world', worldId: world.id })
     return world
+  }
+
+  /* ---------- renaming (display names only; ids and folders never change) ---------- */
+
+  async renameSeries(seriesId: string, name: string): Promise<SeriesFile> {
+    const updated = await this.lock.run(`series:${seriesId}`, async () => {
+      const series = await this.getSeries(seriesId)
+      const next = { ...series, name: name.trim(), updatedAt: this.timestamp() }
+      await writeJsonFile(this.paths.seriesFile(seriesId), next)
+      return next
+    })
+    this.onChange({ kind: 'series', seriesId })
+    return updated
+  }
+
+  async renameWorld(worldId: string, name: string): Promise<WorldFile> {
+    const updated = await this.lock.run(`world:${worldId}`, async () => {
+      const world = await this.getWorld(worldId)
+      const next = { ...world, name: name.trim(), updatedAt: this.timestamp() }
+      await this.writeWorldFile(worldId, unitPaths.world, next)
+      return next
+    })
+    this.onChange({ kind: 'world', worldId })
+    return updated
+  }
+
+  /* ---------- trash ---------- */
+
+  /**
+   * Moves an item to this device's trash: its file or folder is moved (not
+   * copied) under the local data folder, with a note of where it came from
+   * so it can be put back exactly. Nothing is erased until the trash is emptied.
+   */
+  async moveToTrash(target: TrashTarget): Promise<TrashEntry> {
+    let item: TrashItem
+    switch (target.kind) {
+      case 'chapter':
+        item = await this.trashChapter(target.seriesId, target.volumeId, target.chapterId)
+        break
+      case 'volume': {
+        const { seriesId, volumeId } = target
+        item = await this.lock.run(`series:${seriesId}`, async () => {
+          const [series, volume] = await Promise.all([
+            this.getSeries(seriesId),
+            this.getVolume(seriesId, volumeId),
+          ])
+          const entry = this.newTrashItem('volume', volume.name, series.name, {
+            seriesId,
+            volumeId,
+            index: Math.max(0, series.volumeOrder.indexOf(volumeId)),
+          })
+          await this.lock.run(`volume:${volumeId}`, () =>
+            this.putInTrash(entry, this.paths.volumeDir(seriesId, volumeId)),
+          )
+          const next = {
+            ...series,
+            volumeOrder: series.volumeOrder.filter((id) => id !== volumeId),
+            updatedAt: this.timestamp(),
+          }
+          await writeJsonFile(this.paths.seriesFile(seriesId), next)
+          return entry
+        })
+        this.onChange({ kind: 'series', seriesId })
+        break
+      }
+      case 'series': {
+        const { seriesId } = target
+        item = await this.lock.run(`series:${seriesId}`, async () => {
+          const series = await this.getSeries(seriesId)
+          const entry = this.newTrashItem('series', series.name, null, { seriesId })
+          await this.putInTrash(entry, this.paths.seriesDir(seriesId))
+          return entry
+        })
+        this.onChange({ kind: 'library' })
+        break
+      }
+      case 'world': {
+        const { worldId } = target
+        const world = await this.getWorld(worldId)
+        // Unlink series that use this world; restoring the world links them again.
+        const linked: string[] = []
+        for (const series of (await this.snapshot()).series) {
+          if (series.worldId === worldId) {
+            await this.setSeriesWorld(series.id, null)
+            linked.push(series.id)
+          }
+        }
+        item = this.newTrashItem('world', world.name, null, { worldId, linkedSeries: linked })
+        await this.lock.run(`world:${worldId}`, () =>
+          this.putInTrash(item, this.paths.worldDir(worldId)),
+        )
+        this.onChange({ kind: 'world', worldId })
+        break
+      }
+    }
+    this.onChange({ kind: 'trash' })
+    return toTrashEntry(item)
+  }
+
+  private async trashChapter(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+  ): Promise<TrashItem> {
+    const [series, volume] = await Promise.all([
+      this.getSeries(seriesId),
+      this.getVolume(seriesId, volumeId),
+    ])
+    const item = await this.lock.run(`volume:${volumeId}`, async () => {
+      const rel = unitPaths.chapter(chapterId)
+      const path = join(this.paths.volumeDir(seriesId, volumeId), rel)
+      if (!(await pathExists(path)))
+        throw new AppError('not-found', 'That chapter no longer exists.')
+      let title = '(unreadable chapter)'
+      try {
+        title = (await this.readChapter(seriesId, volumeId, chapterId)).title || 'Untitled chapter'
+      } catch (err) {
+        // A damaged chapter can still be trashed; it is moved, not read.
+        if (!(err instanceof AppError)) throw err
+      }
+
+      const outline = await this.readStoredOutline(seriesId, volumeId)
+      let arc: TrashItem['origin']['arc'] = null
+      let index = outline.items.findIndex((i) => i.type === 'chapter' && i.id === chapterId)
+      outline.items.forEach((i, rootIndex) => {
+        if (i.type === 'arc' && i.chapterIds.includes(chapterId)) {
+          arc = { id: i.id, name: i.name, index: rootIndex }
+          index = i.chapterIds.indexOf(chapterId)
+        }
+      })
+      const entry = this.newTrashItem('chapter', title, `${series.name} › ${volume.name}`, {
+        seriesId,
+        volumeId,
+        chapterId,
+        arc,
+        index: Math.max(0, index),
+      })
+      await this.putInTrash(entry, path)
+
+      outline.items = outline.items
+        .filter((i) => !(i.type === 'chapter' && i.id === chapterId))
+        .map((i) =>
+          i.type === 'arc' ? { ...i, chapterIds: i.chapterIds.filter((c) => c !== chapterId) } : i,
+        )
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.outline, outline)
+      await this.recordInManifest(this.volumeUnit(seriesId, volumeId), rel, null)
+      return entry
+    })
+    this.onChange({ kind: 'outline', seriesId, volumeId })
+    return item
+  }
+
+  /**
+   * Deletes an arc. Its chapters either move out to the top level (where the
+   * arc was) or go to the trash, remembering the arc so a restore can bring
+   * it back.
+   */
+  async deleteArc(
+    seriesId: string,
+    volumeId: string,
+    arcId: string,
+    chapters: 'keep' | 'trash',
+  ): Promise<OutlineView> {
+    const stored = await this.readStoredOutline(seriesId, volumeId)
+    const arc = stored.items.find((i) => i.type === 'arc' && i.id === arcId)
+    if (arc?.type !== 'arc') throw new AppError('not-found', 'That arc no longer exists.')
+    if (chapters === 'trash') {
+      for (const chapterId of arc.chapterIds) {
+        await this.trashChapter(seriesId, volumeId, chapterId)
+      }
+      this.onChange({ kind: 'trash' })
+    }
+    await this.lock.run(`volume:${volumeId}`, async () => {
+      const outline = await this.readStoredOutline(seriesId, volumeId)
+      outline.items = outline.items.flatMap((i) =>
+        i.type === 'arc' && i.id === arcId
+          ? i.chapterIds.map((id) => ({ type: 'chapter' as const, id }))
+          : [i],
+      )
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.outline, outline)
+    })
+    this.onChange({ kind: 'outline', seriesId, volumeId })
+    return this.getOutline(seriesId, volumeId)
+  }
+
+  async listTrash(): Promise<TrashEntry[]> {
+    const entries: TrashEntry[] = []
+    for (const trashId of await listDirs(this.trashItemsDir)) {
+      const item = await this.readTrashItem(trashId).catch(() => null)
+      if (item && (await pathExists(join(this.trashItemsDir, trashId, TRASH_CONTENT)))) {
+        entries.push(toTrashEntry(item))
+      }
+    }
+    return entries.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt))
+  }
+
+  /** Puts an item back where it was. Its parent (series or volume) must still exist. */
+  async restoreFromTrash(trashId: string): Promise<TrashEntry> {
+    const item = await this.readTrashItem(trashId)
+    const content = join(this.trashItemsDir, trashId, TRASH_CONTENT)
+    const { origin } = item
+    const putBack = async (dest: string) => {
+      if (await pathExists(dest)) {
+        throw new AppError('conflict', `Something already exists where “${item.name}” was.`)
+      }
+      await fs.promises.rename(content, dest)
+    }
+    const needParent = async (check: () => Promise<unknown>, what: string) => {
+      try {
+        await check()
+      } catch (err) {
+        if (err instanceof AppError && err.code === 'not-found') {
+          throw new AppError('not-found', `Restore the ${what} “${item.name}” was in first.`)
+        }
+        throw err
+      }
+    }
+
+    switch (item.kind) {
+      case 'chapter': {
+        const { seriesId, volumeId, chapterId } = origin as Required<TrashItem['origin']>
+        await needParent(() => this.getVolume(seriesId, volumeId), 'volume')
+        await this.lock.run(`volume:${volumeId}`, async () => {
+          const rel = unitPaths.chapter(chapterId)
+          const dest = join(this.paths.volumeDir(seriesId, volumeId), rel)
+          await putBack(dest)
+          const outline = await this.readStoredOutline(seriesId, volumeId)
+          const index = origin.index ?? Number.MAX_SAFE_INTEGER
+          if (origin.arc) {
+            const { id: arcId, name, index: arcIndex } = origin.arc
+            let arc = outline.items.find((i) => i.type === 'arc' && i.id === arcId)
+            if (arc?.type !== 'arc') {
+              arc = { type: 'arc', id: arcId, name, finished: false, chapterIds: [] }
+              outline.items.splice(Math.min(arcIndex, outline.items.length), 0, arc)
+            }
+            arc.chapterIds.splice(Math.min(index, arc.chapterIds.length), 0, chapterId)
+          } else {
+            outline.items.splice(Math.min(index, outline.items.length), 0, {
+              type: 'chapter',
+              id: chapterId,
+            })
+          }
+          await this.writeVolumeFile(seriesId, volumeId, unitPaths.outline, outline)
+          const bytes = await fs.promises.readFile(dest)
+          await this.recordInManifest(this.volumeUnit(seriesId, volumeId), rel, {
+            hash: sha256(bytes),
+            size: bytes.byteLength,
+          })
+        })
+        this.onChange({ kind: 'outline', seriesId, volumeId })
+        break
+      }
+      case 'volume': {
+        const { seriesId, volumeId } = origin as Required<TrashItem['origin']>
+        await needParent(() => this.getSeries(seriesId), 'series')
+        await this.lock.run(`series:${seriesId}`, async () => {
+          await putBack(this.paths.volumeDir(seriesId, volumeId))
+          const series = await this.getSeries(seriesId)
+          const order = series.volumeOrder.filter((id) => id !== volumeId)
+          order.splice(Math.min(origin.index ?? order.length, order.length), 0, volumeId)
+          await writeJsonFile(this.paths.seriesFile(seriesId), { ...series, volumeOrder: order })
+        })
+        this.onChange({ kind: 'volume', seriesId, volumeId })
+        break
+      }
+      case 'series': {
+        const seriesId = origin.seriesId!
+        await this.lock.run(`series:${seriesId}`, () => putBack(this.paths.seriesDir(seriesId)))
+        this.onChange({ kind: 'series', seriesId })
+        break
+      }
+      case 'world': {
+        const worldId = origin.worldId!
+        await this.lock.run(`world:${worldId}`, () => putBack(this.paths.worldDir(worldId)))
+        for (const seriesId of origin.linkedSeries ?? []) {
+          const series = await this.getSeries(seriesId).catch(() => null)
+          if (series && series.worldId === null) await this.setSeriesWorld(seriesId, worldId)
+        }
+        this.onChange({ kind: 'world', worldId })
+        break
+      }
+    }
+    await fs.promises.rm(join(this.trashItemsDir, trashId), { recursive: true, force: true })
+    this.onChange({ kind: 'trash' })
+    return toTrashEntry(item)
+  }
+
+  /** Permanently erases one trashed item. */
+  async purgeTrash(trashId: string): Promise<void> {
+    await this.readTrashItem(trashId)
+    await fs.promises.rm(join(this.trashItemsDir, trashId), { recursive: true, force: true })
+    this.onChange({ kind: 'trash' })
+  }
+
+  /** Permanently erases everything in the trash, including replaced covers. */
+  async emptyTrash(): Promise<void> {
+    await fs.promises.rm(join(this.paths.localDir, 'trash'), { recursive: true, force: true })
+    this.onChange({ kind: 'trash' })
+  }
+
+  private get trashItemsDir(): string {
+    return join(this.paths.localDir, 'trash', 'items')
+  }
+
+  private newTrashItem(
+    kind: TrashItem['kind'],
+    name: string,
+    from: string | null,
+    origin: TrashItem['origin'],
+  ): TrashItem {
+    return {
+      formatVersion: FORMAT_VERSION,
+      id: newId('trash'),
+      kind,
+      name,
+      from,
+      deletedAt: this.timestamp(),
+      origin,
+    }
+  }
+
+  /** Writes the note first, then moves the content: a crash leaves an empty note, never a lost item. */
+  private async putInTrash(item: TrashItem, source: string): Promise<void> {
+    const dir = join(this.trashItemsDir, item.id)
+    await fs.promises.mkdir(dir, { recursive: true })
+    await writeJsonFile(join(dir, TRASH_NOTE), item)
+    try {
+      await fs.promises.rename(source, join(dir, TRASH_CONTENT))
+    } catch (err) {
+      await fs.promises.rm(dir, { recursive: true, force: true })
+      throw err
+    }
+  }
+
+  private async readTrashItem(trashId: string): Promise<TrashItem> {
+    return readJsonFile(join(this.trashItemsDir, trashId, TRASH_NOTE), trashItemSchema)
+  }
+
+  private volumeUnit(seriesId: string, volumeId: string): SyncUnit {
+    return { type: 'volume', dir: this.paths.volumeDir(seriesId, volumeId), id: volumeId }
   }
 
   /* ---------- covers ---------- */
