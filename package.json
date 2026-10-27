@@ -5,8 +5,11 @@
   "description": "Personal desktop app for writing novels and building their worlds.",
   "main": "./out/main/index.js",
   "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
+    "predev": "node node_modules/electron/install.js",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "prestart": "node node_modules/electron/install.js",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
