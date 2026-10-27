@@ -10,6 +10,8 @@ import {
   type IpcResult,
 } from '@shared/ipc'
 import type { z } from 'zod'
+import type { AppSettingsStore } from './appSettings'
+import { confirmFlushed } from './closeGuard'
 import { AppError } from './errors'
 import type { LibraryHost } from './libraryHost'
 
@@ -20,7 +22,7 @@ type Handlers = {
   ) => Promise<IpcResult<C>> | IpcResult<C>
 }
 
-export function registerIpc(host: LibraryHost): void {
+export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void {
   const handlers: Handlers = {
     'library:status': () => host.status(),
     'library:openDefault': () => host.open(host.defaultPath),
@@ -50,8 +52,24 @@ export function registerIpc(host: LibraryHost): void {
     'chapter:read': (input) =>
       host.current.readChapter(input.seriesId, input.volumeId, input.chapterId),
     'chapter:save': (input) =>
-      host.current.saveChapter(input.seriesId, input.volumeId, input.chapter),
+      host.current.saveChapter(input.seriesId, input.volumeId, input.chapterId, input.patch),
+    'volume:update': (input) =>
+      host.current.updateVolume(input.seriesId, input.volumeId, {
+        name: input.name,
+        goals: input.goals,
+      }),
+    'volume:stats': (input) => host.current.volumeStats(input.seriesId, input.volumeId),
     'world:create': (input) => host.current.createWorld(input),
+    'settings:get': () => settings.read(),
+    'settings:update': async (input) => {
+      const next = await settings.update(input)
+      broadcast('settings:changed', next)
+      return next
+    },
+    'window:flushed': (_input, event) => {
+      confirmFlushed(BrowserWindow.fromWebContents(event.sender))
+      return null
+    },
     'cover:set': (input) => host.current.setCover(input.target, input.data),
     'cover:remove': async (input) => {
       await host.current.removeCover(input.target)

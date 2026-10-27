@@ -1,6 +1,8 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { appConfig } from '../../app.config'
+import { AppSettingsStore } from './appSettings'
+import { guardClose } from './closeGuard'
 import { DeviceSettingsStore } from './deviceSettings'
 import { broadcast, registerIpc } from './ipc'
 import { LibraryHost } from './libraryHost'
@@ -31,6 +33,7 @@ function createWindow(): BrowserWindow {
     },
   })
   window.once('ready-to-show', () => window.show())
+  guardClose(window)
 
   // Renderer windows never navigate away or open arbitrary windows; links go to the browser.
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -62,7 +65,7 @@ void app.whenReady().then(async () => {
     broadcast('library:changed', change),
   )
   await host.restore()
-  registerIpc(host)
+  registerIpc(host, new AppSettingsStore(app.getPath('userData')))
   handleMediaRequests(host)
   createWindow()
 

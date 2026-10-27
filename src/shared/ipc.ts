@@ -7,11 +7,12 @@
 import { z } from 'zod'
 import { MAX_COVER_BYTES, type CoverInfo, type CoverTarget } from './media'
 import {
-  chapterFileSchema,
   chapterTypeSchema,
   id,
   nameSchema,
   outlineFileSchema,
+  richTextDocSchema,
+  volumeGoalsSchema,
   type ChapterFile,
   type OutlineFile,
   type SeriesFile,
@@ -59,6 +60,19 @@ export interface OutlineView {
   problems: LibraryProblem[]
 }
 
+export interface VolumeStats {
+  /** Words per chapter, as saved on disk. */
+  chapterWords: Record<string, number>
+  /** The volume's total when this app session first opened it (for session counts). */
+  sessionStartWords: number
+}
+
+/** App-wide settings (synced only by hand, later). */
+export interface AppSettings {
+  /** `system`, or the id of a theme file. */
+  theme: string
+}
+
 export type LibraryChange =
   | { kind: 'library' }
   | { kind: 'series'; seriesId: string }
@@ -103,7 +117,28 @@ export const ipcInputs = {
     arcId: id('arc').optional(),
   }),
   'chapter:read': z.object({ ...volumeRef, chapterId: id('chapter') }),
-  'chapter:save': z.object({ ...volumeRef, chapter: chapterFileSchema }),
+  'chapter:save': z.object({
+    ...volumeRef,
+    chapterId: id('chapter'),
+    /** Only the fields that changed. Anything left out keeps its value on disk. */
+    patch: z.object({
+      title: z.string().trim().max(200).optional(),
+      type: chapterTypeSchema.optional(),
+      pov: z.string().trim().max(200).nullable().optional(),
+      notes: z.string().optional(),
+      content: richTextDocSchema.optional(),
+    }),
+  }),
+  'volume:update': z.object({
+    ...volumeRef,
+    name: nameSchema.optional(),
+    goals: volumeGoalsSchema.optional(),
+  }),
+  'volume:stats': z.object(volumeRef),
+  'settings:get': z.void(),
+  'settings:update': z.object({ theme: z.string().min(1).max(100).optional() }),
+  /** Sent by a window once it has saved everything, in reply to `window:flush`. */
+  'window:flushed': z.void(),
   'world:create': z.object({ name: nameSchema }),
   'cover:set': z.object({
     target: coverTargetSchema,
@@ -132,6 +167,11 @@ export interface IpcResults {
   'chapter:read': ChapterFile
   'chapter:save': ChapterFile
   'world:create': WorldFile
+  'volume:update': VolumeFile
+  'volume:stats': VolumeStats
+  'settings:get': AppSettings
+  'settings:update': AppSettings
+  'window:flushed': null
   'cover:set': CoverInfo
   'cover:remove': null
 }
@@ -154,6 +194,9 @@ export type ErrorCode =
 
 export interface IpcEvents {
   'library:changed': LibraryChange
+  'settings:changed': AppSettings
+  /** The window is about to close: save everything, then invoke `window:flushed`. */
+  'window:flush': null
 }
 
 /** Shape of `window.api`, exposed by the preload script. */

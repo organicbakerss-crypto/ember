@@ -1,0 +1,31 @@
+import { useEffect, useState } from 'react'
+import type { AppSettings } from '@shared/ipc'
+import { api, useIpcEvent } from './api'
+import { applyTheme, resolveTheme, SYSTEM_THEME } from './themes'
+
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
+
+/** Applies the user's theme (or the system's light/dark choice) and keeps it up to date. */
+export function useAppSettings(): AppSettings {
+  const [settings, setSettings] = useState<AppSettings>({ theme: SYSTEM_THEME })
+  const [prefersDark, setPrefersDark] = useState(darkQuery.matches)
+
+  useEffect(() => {
+    void api.invoke('settings:get').then(setSettings)
+    const onChange = () => setPrefersDark(darkQuery.matches)
+    darkQuery.addEventListener('change', onChange)
+    return () => darkQuery.removeEventListener('change', onChange)
+  }, [])
+  useIpcEvent('settings:changed', setSettings)
+
+  useEffect(
+    () => applyTheme(resolveTheme(settings.theme, prefersDark)),
+    [settings.theme, prefersDark],
+  )
+  return settings
+}
+
+/** Applies the system light/dark theme straight away, before settings load. */
+export function applyInitialTheme(): void {
+  applyTheme(resolveTheme(SYSTEM_THEME, darkQuery.matches))
+}

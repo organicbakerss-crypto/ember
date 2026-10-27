@@ -1,0 +1,45 @@
+{
+  "id": "dark",
+  "name": "Dark",
+  "appearance": "dark",
+  "colors": {
+    "bg": "#1b1b1f",
+    "surface": "#24242a",
+    "surface-2": "#2e2e35",
+    "text": "#e8e6e3",
+    "muted": "#9c9a96",
+    "border": "#3a3a42",
+    "accent": "#e0835a",
+    "accent-text": "#1b1b1f",
+    "accent-soft": "#4a3128",
+    "danger": "#f2827a",
+    "warning-bg": "#3d3420",
+    "desk": "#151518",
+    "page": "#26262c",
+    "page-text": "#dedbd5",
+    "selection": "#5a3a2c",
+    "cover-text": "#efe9de",
+    "cover-0": "#6e3c31",
+    "cover-1": "#34574b",
+    "cover-2": "#344d6b",
+    "cover-3": "#5f4870",
+    "cover-4": "#7e5a2f",
+    "cover-5": "#285a63",
+    "cover-6": "#54402f",
+    "cover-7": "#474f59",
+    "cover-shadow": "0 1px 2px rgb(0 0 0 / 0.4), 0 8px 20px rgb(0 0 0 / 0.45)",
+    "page-shadow": "0 2px 16px rgb(0 0 0 / 0.5)"
+  },
+  "fonts": {
+    "ui": "system-ui, -apple-system, 'Segoe UI', sans-serif",
+    "page": "Georgia, 'Iowan Old Style', 'Palatino Linotype', serif"
+  },
+  "page": {
+    "width": "44rem",
+    "padding": "4.5rem 5rem",
+    "font-size": "1.125rem",
+    "line-height": "1.75",
+    "paragraph-spacing": "0.85em",
+    "text-indent": "0"
+  }
+}

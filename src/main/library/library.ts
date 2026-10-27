@@ -37,6 +37,7 @@ import type {
   LibrarySnapshot,
   OutlineView,
   SeriesSummary,
+  VolumeStats,
   VolumeSummary,
   WorldSummary,
 } from '@shared/ipc'
@@ -49,6 +50,10 @@ import { pathExists, readJsonFile, sha256, writeJsonFile } from '../fs/jsonFile'
 import { LibraryPaths, unitPaths } from './paths'
 
 type UnitType = ManifestFile['unitType']
+
+export type ChapterPatch = Partial<
+  Pick<ChapterFile, 'title' | 'type' | 'pov' | 'notes' | 'content'>
+>
 
 interface SyncUnit {
   type: UnitType
@@ -79,6 +84,8 @@ export class Library {
   private readonly lock = new KeyedLock()
   private readonly onChange: (change: LibraryChange) => void
   private readonly now: () => Date
+  /** Volume word totals when first opened in this run, for session word counts. */
+  private readonly sessionStart = new Map<string, number>()
 
   private constructor(
     root: string,
@@ -328,6 +335,25 @@ export class Library {
     return volume
   }
 
+  async updateVolume(
+    seriesId: string,
+    volumeId: string,
+    patch: { name?: string; goals?: VolumeFile['goals'] },
+  ): Promise<VolumeFile> {
+    const updated = await this.lock.run(`volume:${volumeId}`, async () => {
+      const volume = await this.getVolume(seriesId, volumeId)
+      const next: VolumeFile = {
+        ...volume,
+        ...definedOnly({ name: patch.name?.trim(), goals: patch.goals }),
+        updatedAt: this.timestamp(),
+      }
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.volume, next)
+      return next
+    })
+    this.onChange({ kind: 'volume', seriesId, volumeId })
+    return updated
+  }
+
   /* ---------- outline ---------- */
 
   async createArc(input: {
@@ -439,28 +465,48 @@ export class Library {
     return chapter
   }
 
-  /** Saves a chapter the user edited. The chapter must already exist; createdAt is kept. */
+  /**
+   * Saves changes to a chapter. Only the fields in `patch` change; everything
+   * else (including fields this version doesn't know) is kept from disk.
+   */
   async saveChapter(
     seriesId: string,
     volumeId: string,
-    chapter: ChapterFile,
+    chapterId: string,
+    patch: ChapterPatch,
   ): Promise<ChapterFile> {
-    if (chapter.volumeId !== volumeId) {
-      throw new AppError('invalid-input', 'Chapter belongs to a different volume.')
-    }
     const saved = await this.lock.run(`volume:${volumeId}`, async () => {
-      const existing = await this.readChapter(seriesId, volumeId, chapter.id)
+      const existing = await this.readChapter(seriesId, volumeId, chapterId)
       const next: ChapterFile = {
-        ...chapter,
+        ...existing,
+        ...definedOnly(patch),
         formatVersion: FORMAT_VERSION,
-        createdAt: existing.createdAt,
         updatedAt: this.timestamp(),
       }
-      await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapter.id), next)
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapterId), next)
       return next
     })
-    this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId: chapter.id })
+    this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId })
     return saved
+  }
+
+  /** Word counts for a volume. The first call per volume in this run sets the session start. */
+  async volumeStats(seriesId: string, volumeId: string): Promise<VolumeStats> {
+    await this.getVolume(seriesId, volumeId)
+    const chapterWords: Record<string, number> = {}
+    const dir = this.paths.chaptersDir(seriesId, volumeId)
+    for (const chapterId of await this.chapterIdsOnDisk(seriesId, volumeId)) {
+      try {
+        const chapter = await readJsonFile(join(dir, `${chapterId}.json`), chapterFileSchema)
+        chapterWords[chapterId] = docWordCount(chapter.content)
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+        chapterWords[chapterId] = 0
+      }
+    }
+    const total = Object.values(chapterWords).reduce((a, b) => a + b, 0)
+    if (!this.sessionStart.has(volumeId)) this.sessionStart.set(volumeId, total)
+    return { chapterWords, sessionStartWords: this.sessionStart.get(volumeId)! }
   }
 
   /* ---------- worlds ---------- */
@@ -702,6 +748,13 @@ export class Library {
 }
 
 /* ---------- helpers ---------- */
+
+/** Drops keys whose value is undefined, so a patch never blanks a field by accident. */
+function definedOnly<T extends object>(patch: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(patch).filter(([, value]) => value !== undefined),
+  ) as Partial<T>
+}
 
 const COVER_NAMES = new Set(COVER_EXTENSIONS.map((ext) => `cover.${ext}`))
 

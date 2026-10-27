@@ -3,11 +3,17 @@
 A personal desktop app for writing novels and building the worlds they live in.
 See [PLAN.md](PLAN.md) for the full build plan and ground rules.
 
-**Status:** Milestone 1 (Foundation) — project scaffold, library file format,
-main-process file service with safe writes, typed IPC — plus the bookshelf home
-screen (series and worlds as covers, series pages, cover images) and a basic
-writing view (binder + page). The plain-text chapter box is temporary; the real
-page editor arrives in Milestone 2.
+**Status:** Milestones 1 and 2 are done.
+
+- **Foundation:** library file format, main-process file service with safe
+  writes, typed IPC.
+- **Bookshelf:** series and worlds as covers, series pages, cover images.
+- **Writing core:** Write mode with an icon rail and a binder:
+  - arcs and chapters, drag-and-drop, scene jump points, POV filter
+  - the TipTap page editor: formatting, scene breaks, fonts, colours
+  - autosave, which also runs when a window closes
+  - session and project word counts with goals
+  - light and dark themes stored as data files
 
 ## Requirements
 

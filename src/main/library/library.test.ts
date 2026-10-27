@@ -158,29 +158,36 @@ describe('chapters and the outline', () => {
       type: 'doc' as const,
       content: [{ type: 'paragraph', content: [{ type: 'text', text: 'It was a dark night.' }] }],
     }
-    const saved = await lib.saveChapter(...ref, {
-      ...ch,
-      content,
-      createdAt: '2000-01-01T00:00:00.000Z',
-    })
+    const saved = await lib.saveChapter(...ref, ch.id, { content })
     expect(saved.createdAt).toBe(ch.createdAt)
     expect((await lib.readChapter(...ref, ch.id)).content).toEqual(content)
   })
 
   it('refuses to save a chapter that was never created', async () => {
     const { ref } = await makeVolume()
-    const ch = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'One' })
     await expect(
-      lib.saveChapter(...ref, { ...ch, id: 'chp_0000000000000000' }),
+      lib.saveChapter(...ref, 'chp_0000000000000000', { title: 'x' }),
     ).rejects.toMatchObject({ code: 'not-found' })
   })
 
   it('keeps fields from newer versions of the app when saving', async () => {
     const { ref } = await makeVolume()
     const ch = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'One' })
-    const saved = await lib.saveChapter(...ref, { ...ch, futureField: { keep: true } })
-    expect(saved).toMatchObject({ futureField: { keep: true } })
+    const path = join(lib.paths.chaptersDir(...ref), `${ch.id}.json`)
+    await fs.promises.writeFile(path, JSON.stringify({ ...ch, futureField: { keep: true } }))
+    const saved = await lib.saveChapter(...ref, ch.id, { title: 'Renamed' })
+    expect(saved).toMatchObject({ title: 'Renamed', futureField: { keep: true } })
     expect(await lib.readChapter(...ref, ch.id)).toMatchObject({ futureField: { keep: true } })
+  })
+
+  it('only changes the fields in a patch', async () => {
+    const { ref } = await makeVolume()
+    const ch = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'One' })
+    const content = { type: 'doc' as const, content: [{ type: 'paragraph' }] }
+    await lib.saveChapter(...ref, ch.id, { content })
+    // A later patch from somewhere else (e.g. the POV field) keeps the content.
+    const saved = await lib.saveChapter(...ref, ch.id, { pov: 'Mara', title: undefined })
+    expect(saved).toMatchObject({ title: 'One', pov: 'Mara', content })
   })
 
   it('reorders by touching only outline.json', async () => {
@@ -364,9 +371,35 @@ describe('word counts', () => {
     const a = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'A' })
     const b = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'B' })
     const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
-    await lib.saveChapter(...ref, { ...a, content: { type: 'doc', content: [para('one two')] } })
-    await lib.saveChapter(...ref, { ...b, content: { type: 'doc', content: [para('three')] } })
+    await lib.saveChapter(...ref, a.id, { content: { type: 'doc', content: [para('one two')] } })
+    await lib.saveChapter(...ref, b.id, { content: { type: 'doc', content: [para('three')] } })
     expect((await lib.snapshot()).series[0]!.volumes[0]!.wordCount).toBe(3)
+  })
+
+  it('reports per-chapter counts and keeps the session start for the whole run', async () => {
+    const { ref } = await makeVolume()
+    const a = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'A' })
+    const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
+    await lib.saveChapter(...ref, a.id, { content: { type: 'doc', content: [para('one two')] } })
+
+    const first = await lib.volumeStats(...ref)
+    expect(first).toEqual({ chapterWords: { [a.id]: 2 }, sessionStartWords: 2 })
+    await lib.saveChapter(...ref, a.id, {
+      content: { type: 'doc', content: [para('one two three four')] },
+    })
+    const second = await lib.volumeStats(...ref)
+    expect(second).toEqual({ chapterWords: { [a.id]: 4 }, sessionStartWords: 2 })
+  })
+})
+
+describe('volume settings', () => {
+  it('updates goals and name', async () => {
+    const { ref } = await makeVolume()
+    const goals = { projectWords: 90000, sessionWords: 1000 }
+    const updated = await lib.updateVolume(...ref, { goals })
+    expect(updated).toMatchObject({ name: 'Book One', goals })
+    expect((await lib.getVolume(...ref)).goals).toEqual(goals)
+    expect((await lib.updateVolume(...ref, { name: ' Book 1 ' })).name).toBe('Book 1')
   })
 })
 
