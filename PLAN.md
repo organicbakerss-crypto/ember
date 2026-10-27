@@ -113,6 +113,7 @@ Layout of a writing window (there is no library sidebar; navigation goes through
 - **Command palette (Ctrl/Cmd+K):** commands for the current view (new chapter, find, focus mode, rename, scene break, panels), jumping to any chapter, series or volume, and switching theme.
 - **Top bar:** back arrow (to the bookshelf) and a breadcrumb where every part is clickable: series (its series page), volume (its binder), arc (unfolds it in the binder), chapter (top of the chapter). Mode switch, command palette (Ctrl/Cmd+K).
 - **Icon rail (left):** switches the side panel between binder, find, history, and later the world list and AI chat. Settings at the bottom.
+- **Settings window:** the gear (or the Settings button on the bookshelf) turns the writing space into a settings window, with categories on the left and that category's settings on the right; Esc or Done returns to the page. Categories: Appearance, Page, Spelling, Writing analysis, Status bar, Library, Keyboard shortcuts, World, Import & export, Sync, Smart Storage, AI, Companion, Voice, Optional modules. Categories for features not built yet are shown greyed out, so the full shape of the app is visible from the start.
 - **Side panel:** collapsible. The binder shows arcs (collapsible, finished arcs folded by default) and chapters, with drag-and-drop.
 - **Page:** the writing surface (see Editor).
 - **World pane (right, optional):** a slim view of the entry under the cursor or the last one clicked.

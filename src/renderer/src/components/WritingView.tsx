@@ -21,12 +21,12 @@ import { MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { SearchPanel } from './SearchPanel'
-import { SettingsPanel } from './SettingsPanel'
+import { SettingsWindow } from './SettingsWindow'
 import { useOverlays } from './overlays'
 import { StatusBar } from './StatusBar'
 import { useLibraryActions } from './useLibraryActions'
 
-type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'settings'
+type Panel = 'binder' | 'search' | 'history' | 'diagnostics'
 
 /** Write mode: top bar, icon rail, side panel (binder), the page, and the status bar. */
 export function WritingView(props: {
@@ -58,6 +58,7 @@ export function WritingView(props: {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [revealArcId, setRevealArcId] = useState<string | null>(null)
   const [focusMode, setFocusMode] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   // Bumped to reload the open chapter from disk (after a restore or replace-all).
   const [reloadToken, setReloadToken] = useState(0)
   const [reveal, setReveal] = useState<(Reveal & { chapterId: string }) | null>(null)
@@ -314,7 +315,7 @@ export function WritingView(props: {
     },
     { id: 'binder', title: 'Show binder', run: () => openPanel('binder') },
     { id: 'history', title: 'Version history of this chapter', run: () => openPanel('history') },
-    { id: 'settings', title: 'Settings', run: () => openPanel('settings') },
+    { id: 'settings', title: 'Settings', run: () => setSettingsOpen(true) },
     { id: 'series', title: `Go to series page: ${series.name}`, run: props.onOpenSeries },
     ...(view ? chapterOrder(toContainers(view.outline)) : []).map((id) => ({
       id: `chapter:${id}`,
@@ -408,8 +409,8 @@ export function WritingView(props: {
         <span className="rail-spacer" />
         <RailButton
           label="Settings"
-          active={panel === 'settings'}
-          onClick={() => togglePanel('settings')}
+          active={settingsOpen}
+          onClick={() => setSettingsOpen((open) => !open)}
         >
           <circle cx="12" cy="12" r="3" />
           <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
@@ -481,42 +482,45 @@ export function WritingView(props: {
               onOpenChapter={select}
             />
           )}
-          {panel === 'settings' && <SettingsPanel />}
           {error && <p className="error small">{error}</p>}
         </aside>
       )}
 
       <main className="page-area">
-        {selectedId && view && selectedId in view.chapters ? (
-          <ChapterEditor
-            key={`${selectedId}:${reloadToken}`}
-            seriesId={series.id}
-            volumeId={volume.id}
-            chapterId={selectedId}
-            povOptions={povOptions}
-            handle={editor}
-            onMeta={onMeta}
-            onWords={onWords}
-            onScenes={setScenes}
-            onSaveState={onSaveState}
-            reveal={reveal?.chapterId === selectedId ? reveal : null}
-            bare={focusMode}
-            analysis={analysis}
-            onToggleRhythm={toggleRhythm}
-            onToggleEcho={toggleEcho}
-            onParagraphs={setChapterParagraphs}
-            onSelection={setSelectionParagraphs}
-          />
-        ) : (
-          view && (
-            <div className="page-message">
-              <p className="muted">This volume has no chapters yet.</p>
-              <button className="primary" onClick={() => void createChapter()}>
-                Start the first chapter
-              </button>
-            </div>
-          )
-        )}
+        {settingsOpen && <SettingsWindow onClose={() => setSettingsOpen(false)} />}
+        {/* The editor stays loaded behind Settings, keeping undo history and scroll position. */}
+        <div className="page-area-inner" hidden={settingsOpen}>
+          {selectedId && view && selectedId in view.chapters ? (
+            <ChapterEditor
+              key={`${selectedId}:${reloadToken}`}
+              seriesId={series.id}
+              volumeId={volume.id}
+              chapterId={selectedId}
+              povOptions={povOptions}
+              handle={editor}
+              onMeta={onMeta}
+              onWords={onWords}
+              onScenes={setScenes}
+              onSaveState={onSaveState}
+              reveal={reveal?.chapterId === selectedId ? reveal : null}
+              bare={focusMode}
+              analysis={analysis}
+              onToggleRhythm={toggleRhythm}
+              onToggleEcho={toggleEcho}
+              onParagraphs={setChapterParagraphs}
+              onSelection={setSelectionParagraphs}
+            />
+          ) : (
+            view && (
+              <div className="page-message">
+                <p className="muted">This volume has no chapters yet.</p>
+                <button className="primary" onClick={() => void createChapter()}>
+                  Start the first chapter
+                </button>
+              </div>
+            )
+          )}
+        </div>
       </main>
 
       <StatusBar

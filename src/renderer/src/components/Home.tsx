@@ -4,12 +4,14 @@ import { api, describeError, useIpcEvent } from '../api'
 import { Bookshelf } from './Bookshelf'
 import { useCommands } from './commands'
 import { SeriesPage } from './SeriesPage'
+import { SettingsWindow } from './SettingsWindow'
 import { TrashPage } from './TrashPage'
 import { WritingView } from './WritingView'
 
 type Route =
   | { view: 'shelf' }
   | { view: 'trash' }
+  | { view: 'settings' }
   | { view: 'series'; seriesId: string; newVolume?: boolean }
   | { view: 'volume'; seriesId: string; volumeId: string }
 
@@ -39,6 +41,7 @@ export function Home() {
       ? [
           { id: 'shelf', title: 'Go to bookshelf', run: () => setRoute({ view: 'shelf' }) },
           { id: 'trash', title: 'Open trash', run: () => setRoute({ view: 'trash' }) },
+          { id: 'app-settings', title: 'Open settings', run: () => setRoute({ view: 'settings' }) },
           ...snapshot.series.flatMap((s) => [
             {
               id: `series:${s.id}`,
@@ -68,10 +71,18 @@ export function Home() {
         setRoute({ view: 'series', seriesId: series.id, newVolume: options?.newVolume })
       }
       onOpenTrash={() => setRoute({ view: 'trash' })}
+      onOpenSettings={() => setRoute({ view: 'settings' })}
     />
   )
 
   if (route.view === 'trash') return <TrashPage onBack={toShelf} />
+  if (route.view === 'settings') {
+    return (
+      <main className="settings-page">
+        <SettingsWindow onClose={toShelf} />
+      </main>
+    )
+  }
   const series =
     'seriesId' in route ? snapshot.series.find((s) => s.id === route.seriesId) : undefined
   if (route.view === 'shelf' || !series) return shelf
