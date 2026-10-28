@@ -113,6 +113,8 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
       await host.current.world.rejectNames(input.worldId, input.names, input.rejected)
       return null
     },
+    'map:create': (input) => host.current.world.createMap(input.worldId, input),
+    'map:save': (input) => host.current.world.saveMap(input.worldId, input.mapId, input.patch),
     'capture:context': (input, event) => {
       setCaptureContext(event.sender, input.context)
       return null

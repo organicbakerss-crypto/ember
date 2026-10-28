@@ -22,6 +22,8 @@ export const ID_KINDS = {
   field: 'fld',
   template: 'tpl',
   inbox: 'inb',
+  map: 'map',
+  region: 'rgn',
 } as const
 
 export type IdKind = keyof typeof ID_KINDS

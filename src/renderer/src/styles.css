@@ -2335,3 +2335,315 @@ kbd {
   border-top: 1px solid var(--border);
   margin-top: 0.2rem;
 }
+
+/* lighter mode (and reduced motion): nothing moves */
+:root[data-lighter] *,
+:root[data-lighter] *::before,
+:root[data-lighter] *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* ---------- maps ---------- */
+
+.lens-view.lens-map {
+  max-width: none;
+  padding: 1rem 1.25rem 1.25rem;
+  height: 100%;
+  box-sizing: border-box;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.where-map {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.6rem;
+  min-height: 0;
+}
+.map-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.map-head .breadcrumb input {
+  font-size: 0.85rem;
+}
+.map-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  min-height: 0;
+}
+.map-canvas {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  outline: none;
+}
+.map-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.map-tools .segmented {
+  width: auto;
+}
+.map-tools label.inline,
+.map-head label.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.map-help {
+  flex-basis: 100%;
+  margin: 0;
+}
+.map-scroll {
+  overflow: auto;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.map-svg {
+  display: block;
+  height: auto;
+  user-select: none;
+}
+.map-svg.editing.tool-wand,
+.map-svg.editing.tool-trace,
+.map-svg.editing.tool-split {
+  cursor: crosshair;
+}
+.map-region {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  fill-opacity: 0.38;
+  transition: fill 0.12s;
+}
+.map-region.hover {
+  fill: var(--accent);
+  fill-opacity: 0.22;
+  stroke: var(--accent);
+}
+.map-svg.editing .map-region {
+  stroke: var(--accent);
+  stroke-dasharray: 4 3;
+  fill: var(--accent);
+  fill-opacity: 0.08;
+}
+.map-svg.editing .map-region.unlinked {
+  fill: #e0b324;
+  fill-opacity: 0.18;
+}
+.map-region.selected,
+.map-svg.editing .map-region.selected {
+  fill: var(--accent);
+  fill-opacity: 0.35;
+  stroke-dasharray: none;
+  stroke-width: 3px;
+}
+.map-draft {
+  fill: color-mix(in srgb, var(--accent) 20%, transparent);
+  stroke: var(--accent);
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.map-person circle {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+.map-person text,
+.map-more {
+  fill: var(--accent);
+  font-weight: 700;
+  pointer-events: none;
+}
+.map-enter circle {
+  fill: var(--accent);
+  cursor: pointer;
+}
+.map-enter text {
+  fill: var(--accent-text);
+  pointer-events: none;
+}
+.map-tooltip {
+  position: fixed;
+  z-index: 120;
+  pointer-events: none;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.2);
+}
+.map-zoom {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  z-index: 2;
+  display: grid;
+  gap: 0.2rem;
+}
+.map-zoom .icon {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.1rem;
+}
+.map-legend {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  z-index: 2;
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.2rem;
+}
+.swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 3px;
+  margin-right: 0.4rem;
+  vertical-align: -1px;
+}
+.map-link-panel {
+  position: absolute;
+  top: 3.5rem;
+  right: 0.75rem;
+  z-index: 5;
+  width: 20rem;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--surface);
+}
+.unplaced-tray {
+  width: 11rem;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  padding-left: 0.75rem;
+}
+.unplaced-tray ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+.unplaced-tray li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: 6px;
+  cursor: grab;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.sketch-wrap {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+}
+.sketch {
+  display: grid;
+  gap: 0.5rem;
+}
+.sketch-svg {
+  width: 100%;
+  height: auto;
+  max-height: calc(100vh - 19rem);
+  touch-action: none;
+  user-select: none;
+}
+.sketch-paper {
+  fill: var(--page);
+  stroke: var(--border);
+}
+.sketch-road {
+  stroke: var(--muted);
+  stroke-width: 3;
+  stroke-dasharray: 8 6;
+  stroke-linecap: round;
+}
+.sketch-node circle {
+  fill: var(--accent);
+  stroke: var(--page);
+  stroke-width: 3;
+}
+.sketch-node {
+  cursor: pointer;
+}
+.sketch-svg.editing .sketch-node {
+  cursor: grab;
+}
+.sketch-node.selected circle {
+  fill: var(--page);
+  stroke: var(--accent);
+  stroke-width: 5;
+}
+.sketch-node text {
+  fill: var(--page-text);
+  font-size: 15px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--page);
+  stroke-width: 4px;
+}
+.sketch-node .sketch-people {
+  font-size: 12px;
+  font-weight: 400;
+  fill: var(--muted);
+}
+.sketch-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.sketch-waiting .chip {
+  cursor: grab;
+  padding-right: 0.55rem;
+}
+.sketch-import {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.exits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+}
+.exit {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+}
+.exit:hover {
+  border-color: var(--accent);
+}

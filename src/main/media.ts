@@ -13,7 +13,10 @@ import type { LibraryHost } from './libraryHost'
 /** Must run before the app is ready. */
 export function registerMediaScheme(): void {
   protocol.registerSchemesAsPrivileged([
-    { scheme: MEDIA_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+    {
+      scheme: MEDIA_SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+    },
   ])
 }
 
@@ -25,8 +28,13 @@ export function handleMediaRequests(host: LibraryHost): void {
       try {
         const path = host.current.world.imagePath(image.worldId, image.file)
         const mime = mimeForExtension(extname(path).slice(1)) ?? 'application/octet-stream'
+        // Readable by the page's canvas (region detection needs the pixels).
         return new Response(await fs.promises.readFile(path), {
-          headers: { 'content-type': mime, 'cache-control': 'max-age=31536000, immutable' },
+          headers: {
+            'content-type': mime,
+            'cache-control': 'max-age=31536000, immutable',
+            'access-control-allow-origin': '*',
+          },
         })
       } catch {
         return new Response('Not found', { status: 404 })

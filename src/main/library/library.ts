@@ -119,7 +119,7 @@ const TRASH_CONTENT = 'content'
 const trashItemSchema = z.looseObject({
   formatVersion: z.number().int().positive(),
   id: z.string().regex(idPattern('trash')),
-  kind: z.enum(['series', 'volume', 'world', 'chapter', 'entry']),
+  kind: z.enum(['series', 'volume', 'world', 'chapter', 'entry', 'map']),
   name: z.string(),
   from: z.string().nullable(),
   deletedAt: z.string(),
@@ -129,6 +129,7 @@ const trashItemSchema = z.looseObject({
     worldId: z.string().regex(idPattern('world')).optional(),
     chapterId: z.string().regex(idPattern('chapter')).optional(),
     entryId: z.string().regex(idPattern('entry')).optional(),
+    mapId: z.string().regex(idPattern('map')).optional(),
     arc: z
       .object({ id: z.string().regex(idPattern('arc')), name: z.string(), index: z.number() })
       .nullable()
@@ -825,6 +826,29 @@ export class Library {
         this.onChange({ kind: 'entry', worldId, entryId })
         break
       }
+      case 'map': {
+        const { worldId, mapId } = target
+        const world = await this.getWorld(worldId)
+        item = await this.lock.run(`world:${worldId}`, async () => {
+          const rel = unitPaths.map(mapId)
+          const path = join(this.paths.worldDir(worldId), rel)
+          if (!(await pathExists(path)))
+            throw new AppError('not-found', 'That map no longer exists.')
+          let name = '(unreadable map)'
+          try {
+            name = (await this.world.readMap(worldId, mapId)).name
+          } catch (err) {
+            if (!(err instanceof AppError)) throw err
+          }
+          // The map's image stays in the world's images (others may use it).
+          const trashed = this.newTrashItem('map', name, world.name, { worldId, mapId })
+          await this.putInTrash(trashed, path)
+          await this.recordInManifest(this.worldUnit(worldId), rel, null)
+          return trashed
+        })
+        this.onChange({ kind: 'world', worldId })
+        break
+      }
     }
     this.onChange({ kind: 'trash' })
     return toTrashEntry(item)
@@ -1030,6 +1054,24 @@ export class Library {
           })
         })
         this.onChange({ kind: 'entry', worldId, entryId })
+        break
+      }
+      case 'map': {
+        const worldId = origin.worldId!
+        const mapId = origin.mapId!
+        await needParent(() => this.getWorld(worldId), 'world')
+        await this.lock.run(`world:${worldId}`, async () => {
+          const rel = unitPaths.map(mapId)
+          const dest = join(this.paths.worldDir(worldId), rel)
+          await fs.promises.mkdir(join(this.paths.worldDir(worldId), 'maps'), { recursive: true })
+          await putBack(dest)
+          const bytes = await fs.promises.readFile(dest)
+          await this.recordInManifest(this.worldUnit(worldId), rel, {
+            hash: sha256(bytes),
+            size: bytes.byteLength,
+          })
+        })
+        this.onChange({ kind: 'world', worldId })
         break
       }
     }

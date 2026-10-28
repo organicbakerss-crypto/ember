@@ -404,3 +404,93 @@ describe('links on pages', () => {
     )
   })
 })
+
+describe('maps', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9, 9])
+  const box = (x: number, w: number): [number, number][] => [
+    [x, 0],
+    [x + w, 0],
+    [x + w, 400],
+    [x, 400],
+  ]
+
+  it('stores the image once, saves regions as outlines, and works out what is nearby', async () => {
+    const worldId = await world()
+    const north = await lib.world.createEntry(worldId, { name: 'Northmark', template: 'kingdom' })
+    const south = await lib.world.createEntry(worldId, { name: 'Southreach', template: 'kingdom' })
+    const map = await lib.world.createMap(worldId, {
+      name: 'The Isles',
+      placeId: null,
+      image: { data: PNG, width: 1000, height: 400 },
+    })
+    const again = await lib.world.createMap(worldId, {
+      name: 'Copy',
+      placeId: null,
+      image: { data: PNG, width: 1000, height: 400 },
+    })
+    expect(again.image!.file).toBe(map.image!.file)
+    expect(await fs.promises.readdir(join(lib.paths.worldDir(worldId), 'images'))).toEqual([
+      map.image!.file,
+    ])
+    await lib.world.saveMap(worldId, map.id, {
+      regions: [
+        { id: newId('region'), rings: [box(0, 300)], placeId: north.id },
+        { id: newId('region'), rings: [box(305, 300)], placeId: south.id },
+        { id: newId('region'), rings: [box(800, 100)], placeId: null },
+      ],
+    })
+    const view = await lib.world.view(worldId)
+    expect(view.maps.map((m) => m.name)).toEqual(['The Isles', 'Copy'])
+    expect(view.nearby[north.id]).toEqual([south.id])
+    expect(await lib.world.entryText(worldId, north.id)).toContain(
+      `## Nearby\n- Southreach [${south.id}]`,
+    )
+    expect(await lib.world.digest(worldId)).toContain('borders: Southreach')
+  })
+
+  it('starts a travel sketch when there is no image; roads make places nearby', async () => {
+    const worldId = await world()
+    const a = await lib.world.createEntry(worldId, { name: 'A', template: 'city' })
+    const b = await lib.world.createEntry(worldId, { name: 'B', template: 'city' })
+    const sketch = await lib.world.createMap(worldId, {
+      name: 'Sketch',
+      placeId: null,
+      image: null,
+    })
+    expect(sketch.sketch).toEqual({ nodes: [], roads: [] })
+    await lib.world.saveMap(worldId, sketch.id, {
+      sketch: {
+        nodes: [
+          { placeId: a.id, x: 0.2, y: 0.2 },
+          { placeId: b.id, x: 0.8, y: 0.5 },
+        ],
+        roads: [{ from: a.id, to: b.id }],
+      },
+    })
+    expect((await lib.world.view(worldId)).nearby[b.id]).toEqual([a.id])
+  })
+
+  it('moves a map to the trash and back; a damaged map file is reported and kept', async () => {
+    const worldId = await world()
+    const map = await lib.world.createMap(worldId, {
+      name: 'The Isles',
+      placeId: null,
+      image: { data: PNG, width: 10, height: 10 },
+    })
+    const trashed = await lib.moveToTrash({ kind: 'map', worldId, mapId: map.id })
+    expect(trashed).toMatchObject({ kind: 'map', name: 'The Isles' })
+    expect((await lib.world.view(worldId)).maps).toEqual([])
+    // The image stays: it is stored once and may be used elsewhere.
+    expect(fs.existsSync(lib.world.imagePath(worldId, map.image!.file))).toBe(true)
+    await lib.restoreFromTrash(trashed.id)
+    expect((await lib.world.view(worldId)).maps.map((m) => m.id)).toEqual([map.id])
+
+    const bad = join(lib.paths.worldDir(worldId), 'maps', 'map_0000000000000000.json')
+    await fs.promises.writeFile(bad, '{ nope')
+    const view = await lib.world.view(worldId)
+    expect(view.problems.map((p) => p.path)).toEqual([
+      `worlds/${worldId}/maps/map_0000000000000000.json`,
+    ])
+    expect(await fs.promises.readFile(bad, 'utf8')).toBe('{ nope')
+  })
+})

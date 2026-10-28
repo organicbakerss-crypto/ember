@@ -17,6 +17,9 @@ export interface CoverInfo {
 /** Largest cover image accepted. */
 export const MAX_COVER_BYTES = 20 * 1024 * 1024
 
+/** Largest map image accepted (maps can be big). */
+export const MAX_MAP_BYTES = 60 * 1024 * 1024
+
 /** Custom URL scheme the renderer uses to load library images. */
 export const MEDIA_SCHEME = 'library-media'
 

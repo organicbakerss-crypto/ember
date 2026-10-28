@@ -26,53 +26,64 @@ const NOUN: Record<Lens, string> = {
   how: 'system',
 }
 
+type Mode = 'map' | 'visual' | 'list'
+
 export function LensView(props: {
   world: WorldData
   lens: Lens
   onOpenEntry: (entryId: string) => void
   onNew: (lens: Lens) => void
+  /** The Where lens's map (when maps are on). */
+  map?: { exists: boolean; render: () => ReactNode }
 }) {
   const { world, lens } = props
   const key = `world.lensMode.${lens}`
-  const [mode, setModeState] = useState<'visual' | 'list'>(() =>
-    loadLocal(key) === 'list' ? 'list' : 'visual',
-  )
-  const setMode = (m: 'visual' | 'list') => {
+  const map = lens === 'where' ? props.map : undefined
+  // Where opens on the map once there is one; otherwise on the last view chosen.
+  const [mode, setModeState] = useState<Mode>(() => {
+    if (map?.exists) return 'map'
+    const stored = loadLocal(key)
+    return stored === 'list' ? 'list' : stored === 'map' && map ? 'map' : 'visual'
+  })
+  const setMode = (m: Mode) => {
     setModeState(m)
     saveLocal(key, m)
   }
+  const shown: Mode = mode === 'map' && !map ? 'visual' : mode
   const entries = world.view.entries.filter((e) => lensOf(world, e) === lens)
+  const modes: { mode: Mode; label: string }[] = [
+    ...(map ? [{ mode: 'map' as const, label: 'Map' }] : []),
+    { mode: 'visual', label: VISUAL[lens] },
+    { mode: 'list', label: 'List' },
+  ]
 
   return (
-    <div className="lens-view">
+    <div className={`lens-view ${shown === 'map' ? 'lens-map' : ''}`}>
       <header className="lens-head">
         <h1>{LENS_LABELS[lens]}</h1>
         <div className="segmented" role="radiogroup" aria-label="View">
-          <button
-            role="radio"
-            aria-checked={mode === 'visual'}
-            className={mode === 'visual' ? 'active' : ''}
-            onClick={() => setMode('visual')}
-          >
-            {VISUAL[lens]}
-          </button>
-          <button
-            role="radio"
-            aria-checked={mode === 'list'}
-            className={mode === 'list' ? 'active' : ''}
-            onClick={() => setMode('list')}
-          >
-            List
-          </button>
+          {modes.map((m) => (
+            <button
+              key={m.mode}
+              role="radio"
+              aria-checked={shown === m.mode}
+              className={shown === m.mode ? 'active' : ''}
+              onClick={() => setMode(m.mode)}
+            >
+              {m.label}
+            </button>
+          ))}
         </div>
         <span className="status-spacer" />
         <button className="primary" onClick={() => props.onNew(lens)}>
           + New {NOUN[lens]}
         </button>
       </header>
-      {entries.length === 0 ? (
+      {shown === 'map' && map ? (
+        map.render()
+      ) : entries.length === 0 ? (
         <EmptyLens lens={lens} onNew={() => props.onNew(lens)} />
-      ) : mode === 'list' ? (
+      ) : shown === 'list' ? (
         <EntryTable world={world} entries={entries} onOpenEntry={props.onOpenEntry} />
       ) : lens === 'who' ? (
         <CastView world={world} entries={entries} onOpenEntry={props.onOpenEntry} />
@@ -327,9 +338,7 @@ function PlaceTree(props: {
   )
   return (
     <div className="places">
-      <p className="muted small">
-        Places inside places (by “Within”). The map comes in a later step.
-      </p>
+      <p className="muted small">Places inside places (by “Within”).</p>
       {render(roots, new Set())}
     </div>
   )

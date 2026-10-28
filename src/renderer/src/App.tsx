@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { LibraryStatus } from '@shared/ipc'
 import { api, useIpcEvent } from './api'
 import { flushAll } from './saving'
-import { SettingsProvider } from './useTheme'
+import { SettingsProvider, useSettings } from './useTheme'
 import { Home } from './components/Home'
 import { CommandProvider, useCommands } from './components/commands'
 import { OverlayProvider, useOverlays } from './components/overlays'
@@ -29,6 +29,7 @@ export function App() {
         <CommandProvider>
           <ThemeCommands />
           <MainNotices />
+          <LighterMode />
           {status.state === 'none' ? (
             <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
           ) : (
@@ -58,5 +59,16 @@ function ThemeCommands() {
 function MainNotices() {
   const { toast } = useOverlays()
   useIpcEvent('app:notice', (message) => toast(message))
+  return null
+}
+
+/** Lighter mode: no animations or transitions anywhere (also follows reduced motion in CSS). */
+function LighterMode() {
+  const { settings } = useSettings()
+  const lighter = settings.world.lighter
+  useEffect(() => {
+    if (lighter) document.documentElement.dataset['lighter'] = ''
+    else delete document.documentElement.dataset['lighter']
+  }, [lighter])
   return null
 }

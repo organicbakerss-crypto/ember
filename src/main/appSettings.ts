@@ -52,6 +52,8 @@ const appSettingsSchema = z.looseObject({
       hoverCards: z.boolean(),
       nameCatcher: z.boolean(),
       quietAfter: z.number().int().min(1).max(200),
+      map: z.boolean().default(true),
+      lighter: z.boolean().default(false),
     })
     .catch(DEFAULT_WORLD_SETTINGS)
     .default(DEFAULT_WORLD_SETTINGS),

@@ -360,6 +360,27 @@ function WorldSettings() {
         />
         Suggest new names from my chapters (in the world’s inbox, never as a popup)
       </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.map}
+          onChange={(e) => update(({ world }) => ({ world: { ...world, map: e.target.checked } }))}
+        />
+        Show the map in the Where lens
+      </label>
+      <p className="muted small">
+        When off, Where shows places inside places and a sortable list; maps you made are kept.
+      </p>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.lighter}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, lighter: e.target.checked } }))
+          }
+        />
+        Lighter mode for slower computers (smaller map images, no animations)
+      </label>
       <label>
         “Gone quiet” after
         <input

@@ -11,7 +11,8 @@ import { appConfig } from '../../../app.config'
  *   worlds/<world-id>/{world,manifest}.json
  *   worlds/<world-id>/{templates,inbox,rejected}.json   (only once used)
  *   worlds/<world-id>/entries/<entry-id>.json
- *   worlds/<world-id>/images/<sha256>.<ext>             (portraits, stored once)
+ *   worlds/<world-id>/images/<sha256>.<ext>             (portraits and maps, stored once)
+ *   worlds/<world-id>/maps/<map-id>.json                (region outlines or a travel sketch)
  *   <local data folder>/          device-only, never synced
  */
 export class LibraryPaths {
@@ -61,5 +62,6 @@ export const unitPaths = {
   chapter: (chapterId: string) => `chapters/${chapterId}.json`,
   world: 'world.json',
   entry: (entryId: string) => `entries/${entryId}.json`,
+  map: (mapId: string) => `maps/${mapId}.json`,
   manifest: 'manifest.json',
 } as const

@@ -20,6 +20,8 @@ import { EntryPicker } from './EntryPicker'
 import { FactEditor } from './FactEditor'
 import { backlinks, MAX_QUICK_FACTS, shownFacts, templateOf, valueLabel } from './model'
 import { Portrait } from './Portrait'
+import { mapOfPlace } from './map/mapModel'
+import { useMapImport } from './map/WhereMap'
 import { PortraitCropDialog } from './PortraitCropDialog'
 import { TextFormDialog } from './TextFormDialog'
 import type { UndoStep } from './useUndo'
@@ -40,6 +42,8 @@ export function EntryPage(props: {
   onOpenAppearance: (appearance: Appearance, name: string) => void
   onSaveState: (state: SaveState, error: string | null) => void
   onDeleted: () => void
+  /** Opens a place's own map. */
+  onOpenMap?: (mapId: string) => void
 }) {
   const { world, entryId } = props
   const worldId = world.view.world.id
@@ -100,6 +104,8 @@ function EntryView(
   const [textForm, setTextForm] = useState<string | null>(null)
   const [cropping, setCropping] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const mapInput = useRef<HTMLInputElement>(null)
+  const importMap = useMapImport(world, record)
 
   /* ----- saving: fields at once (with undo), the page text by autosave ----- */
 
@@ -293,6 +299,11 @@ function EntryView(
   /* ----- what links here, and the story ----- */
 
   const touches = backlinks(world, entry.id, null)
+  const isPlace = template.lens === 'where'
+  const nearby = (world.view.nearby[entry.id] ?? [])
+    .map((id) => world.resolve(id))
+    .filter((e): e is EntrySummary => !!e)
+  const ownMap = mapOfPlace(world, entry.id)
   const mentions = world.index?.mentions[entry.id]
   const chapters = world.index?.chapters ?? []
   const first = firstSeen(mentions)
@@ -587,6 +598,51 @@ function EntryView(
               })}
             </div>
           ))}
+        </section>
+      )}
+
+      {isPlace && (
+        <section className="entry-section" aria-label="Nearby">
+          <h3>Nearby</h3>
+          {nearby.length ? (
+            <p className="exits">
+              {nearby.map((e) => (
+                <button key={e.id} className="exit" onClick={() => props.onOpenEntry(e.id)}>
+                  {e.name} →
+                </button>
+              ))}
+            </p>
+          ) : (
+            <p className="muted small">
+              Nothing yet. Places next to each other on a map (or joined by road on the travel
+              sketch) show here.
+            </p>
+          )}
+          <div className="row small">
+            {ownMap ? (
+              <button className="link" onClick={() => props.onOpenMap?.(ownMap.id)}>
+                Open the map of {entry.name}
+              </button>
+            ) : (
+              <button className="link" onClick={() => mapInput.current?.click()}>
+                Add a map of {entry.name}…
+              </button>
+            )}
+            <input
+              ref={mapInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              hidden
+              aria-label={`Map of ${entry.name}`}
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (!file) return
+                const created = await importMap(file, entry.id)
+                if (created) props.onOpenMap?.(created.id)
+              }}
+            />
+          </div>
         </section>
       )}
 

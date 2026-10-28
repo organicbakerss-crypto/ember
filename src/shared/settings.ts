@@ -68,12 +68,18 @@ export interface WorldSettings {
   nameCatcher: boolean
   /** "Gone quiet": not mentioned in this many chapters. */
   quietAfter: number
+  /** The map in the Where lens (otherwise places and lists only). */
+  map: boolean
+  /** For slower machines: lower-resolution map images, no animations. */
+  lighter: boolean
 }
 
 export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   hoverCards: true,
   nameCatcher: true,
   quietAfter: 10,
+  map: true,
+  lighter: false,
 }
 
 export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const

@@ -18,13 +18,18 @@ import { TextFormDialog } from './TextFormDialog'
 import { useUndo } from './useUndo'
 import { useWorld } from './useWorld'
 import { useWorldActions } from './useWorldActions'
+import { WhereMap } from './map/WhereMap'
+import { worldMapOf } from './map/mapModel'
+import { useSettings } from '../useTheme'
 
-type Place = { kind: 'lens'; lens: Lens } | { kind: 'entry'; entryId: string } | { kind: 'inbox' }
+type Place =
+  | { kind: 'lens'; lens: Lens }
+  | { kind: 'entry'; entryId: string }
+  | { kind: 'inbox' }
+  /** A place's own map (the world map is the Where lens). */
+  | { kind: 'map'; mapId: string }
 
-const samePlace = (a: Place, b: Place) =>
-  a.kind === b.kind &&
-  (a.kind !== 'lens' || a.lens === (b as typeof a).lens) &&
-  (a.kind !== 'entry' || a.entryId === (b as typeof a).entryId)
+const samePlace = (a: Place, b: Place) => JSON.stringify(a) === JSON.stringify(b)
 
 /**
  * World mode, organised around four questions (Where, Who, When, How) and a
@@ -45,6 +50,7 @@ export function WorldView(props: {
   const { worldId } = props
   const { data: world, error } = useWorld(worldId)
   const record = useUndo()
+  const { settings } = useSettings()
   const actions = useWorldActions(world, record)
   const { openMenu, toast } = useOverlays()
   const lensKey = `world.lens.${worldId}`
@@ -177,7 +183,26 @@ export function WorldView(props: {
   const { view } = world
   const entry = place.kind === 'entry' ? world.byId.get(place.entryId) : undefined
   const currentLens: Lens | null =
-    place.kind === 'lens' ? place.lens : entry ? lensOf(world, entry) : null
+    place.kind === 'lens'
+      ? place.lens
+      : place.kind === 'map'
+        ? 'where'
+        : entry
+          ? lensOf(world, entry)
+          : null
+  const openMap = (mapId: string | null) =>
+    go(mapId ? { kind: 'map', mapId } : { kind: 'lens', lens: 'where' })
+  const whereMap = (mapId: string | null) => (
+    <WhereMap
+      key={mapId ?? 'world'}
+      world={world}
+      mapId={mapId}
+      actions={actions}
+      record={record}
+      onOpenEntry={openEntry}
+      onOpenMap={openMap}
+    />
+  )
   const pinned = view.world.pinned
     .map((id) => world.byId.get(id))
     .filter((e): e is EntrySummary => !!e)
@@ -348,6 +373,7 @@ export function WorldView(props: {
                 onOpenAppearance={props.onOpenAppearance}
                 onSaveState={onSaveState}
                 onDeleted={back}
+                onOpenMap={(mapId) => openMap(mapId)}
               />
             ) : (
               <div className="page-message">
@@ -359,12 +385,29 @@ export function WorldView(props: {
             )
           ) : place.kind === 'inbox' ? (
             <InboxView world={world} actions={actions} record={record} onOpenEntry={openEntry} />
+          ) : place.kind === 'map' ? (
+            world.view.maps.some((m) => m.id === place.mapId) ? (
+              <div className="lens-view lens-map">{whereMap(place.mapId)}</div>
+            ) : (
+              <div className="page-message">
+                <p className="muted">
+                  This map is no longer in the world (it may be in the trash).
+                </p>
+                <button onClick={back}>Go back</button>
+              </div>
+            )
           ) : (
             <LensView
+              key={place.lens}
               world={world}
               lens={place.lens}
               onOpenEntry={openEntry}
               onNew={(lens) => setQuickAdd({ lens })}
+              map={
+                settings.world.map
+                  ? { exists: !!worldMapOf(world), render: () => whereMap(null) }
+                  : undefined
+              }
             />
           )}
         </div>

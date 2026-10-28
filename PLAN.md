@@ -64,11 +64,13 @@ library/
     cover.<ext>                 optional cover image
     entries/<entry-id>.json     one file per person, place, event, system: template, facts
                                 (with history), page text, captured quotes, portrait
-    images/<sha256>.<ext>       portraits, stored once, named by content hash
+    images/<sha256>.<ext>       portraits and map images, stored once, named by content hash
+    maps/<map-id>.json          a map: its image (by hash), the place it shows, and its
+                                regions as vector outlines linked to places; or the travel sketch
     templates.json              customised or new templates (only once used)
     inbox.json                  captured lines waiting to be filed (only once used)
     rejected.json               turned-down suggestions, never shown again (only once used)
-    maps/, relationships/, …    added by milestones 4b–4d
+    relationships/, …           added by milestones 4c–4d
     manifest.json
   .ember-local/                 device-only: SQLite index, outbox, trash, doodles, window layout
 ```
@@ -370,6 +372,19 @@ Choices made while building 4a, so later steps start from what exists:
 - **Undo** covers world actions (adding, deleting, merging, changing facts, filing, rejecting): a notice with Undo, or Ctrl/Cmd+Z outside a text field.
 - **Text forms:** "View as text" on any entry and "View the world as text" (the digest) show exactly what an AI model will be given.
 - **Settings → World:** name marks, hover cards, the name catcher, and how many chapters make someone "gone quiet" (default 10).
+- **The Add dialog** (quick add, "+ New place" and so on) uses the app's own searchable template picker. From a lens's button it lists that lens (City, Person, Event or Magic chosen) plus "Something else…"; from the page it lists every template, guessing from the name and the words before it ("sailed into Gullhaven" → City), else Person. Right-click "Add … to the world" is offered only for name-like selections, not sentences.
+
+### As built in 4b
+
+- **The Where lens has Map, Places and List.** It opens on the map once one exists. With no map, Map shows the travel sketch: places as dots you drag into place, joined by roads (click one, then another). "Import a map image…" adds a real map; the sketch stays as the fallback.
+- **Detection runs in a background worker with OpenCV.js**, on a copy of the image at most 1600 px across; outlines are scaled back to the image. Auto-detect all finds every area enclosed by border lines (areas over half the image, lettering and specks are left out; holes are kept only if they're at least 2% of their region). The magic wand fills from a click with a 1–60 tolerance. Merge joins selected regions across the border line between them; Split cuts one along a drawn line; Trace outlines by hand. Detection only adds regions that aren't already covered, and every change has Undo.
+- **Regions** are vector outlines in image pixels, saved in the map file, separate from the image. Hover shows the place's name; click opens it (an unlinked region offers to link). Link panel: find a place or make one; a new place defaults to Kingdom on the world map, City inside a kingdom, District inside a city, and gets "Within" the map's place.
+- **Nested maps:** a place's page has "Add a map of …" / "Open the map of …"; on the parent map a ⤵ marker leads in, and breadcrumbs lead back out.
+- **Nearby:** regions within 1.5% of the map's size of each other touch (border lines have width); touching linked regions and sketch roads make places nearby. Place pages list them as exits; the text form ("## Nearby") and digest ("borders: …") include them.
+- **People on the map:** portraits stand on their current location; the Unplaced tray lists people with no location; dropping one on a region (or a sketch dot) sets "Where now".
+- **Territory colours** (toggle, remembered per device) tint regions by their place's "Ruled by", with a legend.
+- **Settings → World:** the map can be turned off (Places and List remain); lighter mode shows map images at most 1200 px across and turns off animations and transitions everywhere.
+- **Trash:** removing a map moves its file to the trash (its image stays, as it's stored once).
 
 World skins are described under Themes; the AI side of the world (readable by AI, "Update the worldbuilding", AI questions) under AI layer. Build order: milestones 4a–4e.
 

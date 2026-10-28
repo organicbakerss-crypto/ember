@@ -264,6 +264,58 @@ export const rejectedFileSchema = z.looseObject({
 })
 export type RejectedFile = z.infer<typeof rejectedFileSchema>
 
+/* ---------- maps ---------- */
+
+/** A point in image pixels. */
+export const pointSchema = z.tuple([z.number(), z.number()])
+export type Point = z.infer<typeof pointSchema>
+
+/** A region of a map: a vector outline (in image pixels), separate from the image itself. */
+export const regionSchema = z.looseObject({
+  id: id('region'),
+  /** The outline first; any further rings are holes (a lake inside a kingdom). */
+  rings: z.array(z.array(pointSchema).min(3)).min(1),
+  /** The place this region is. */
+  placeId: id('entry').nullable().default(null),
+})
+export type MapRegion = z.infer<typeof regionSchema>
+
+/** A travel sketch: places as dots (positions from 0 to 1) joined by roads. */
+export const sketchSchema = z.looseObject({
+  nodes: z.array(
+    z.looseObject({
+      placeId: id('entry'),
+      x: z.number().min(0).max(1),
+      y: z.number().min(0).max(1),
+    }),
+  ),
+  roads: z.array(z.looseObject({ from: id('entry'), to: id('entry') })),
+})
+export type Sketch = z.infer<typeof sketchSchema>
+
+export const mapFileSchema = z.looseObject({
+  formatVersion,
+  id: id('map'),
+  worldId: id('world'),
+  name: nameSchema,
+  /** The place this map shows (a kingdom's own map); null for the world map. */
+  placeId: id('entry').nullable(),
+  /** The map image, stored once in the world's images folder (named by content hash). */
+  image: z
+    .looseObject({
+      file: z.string().regex(/^[0-9a-f]{64}\.(png|jpg|gif|webp)$/),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    })
+    .nullable(),
+  regions: z.array(regionSchema).default([]),
+  /** Without an image: the travel sketch. */
+  sketch: sketchSchema.nullable().default(null),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+})
+export type MapFile = z.infer<typeof mapFileSchema>
+
 /* ---------- manifest (per sync unit: a volume or a world) ---------- */
 
 export const manifestFileEntrySchema = z.looseObject({

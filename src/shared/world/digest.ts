@@ -52,6 +52,8 @@ export function worldDigest(
   entries: readonly DigestEntry[],
   templates: readonly Template[],
   positions: ChapterPositions,
+  /** Places next to each place (from the maps). */
+  nearby: Record<string, string[]> = {},
 ): string {
   const names = new Map(entries.map((e) => [e.id, e.name]))
   const lines = [`World: ${worldName}`, `Entries: ${entries.length}`, '']
@@ -67,6 +69,8 @@ export function worldDigest(
       const v = f && currentValue(e.facts[id], null, positions)
       if (f && v) parts.push(`${f.label.toLowerCase()}: ${valueText(v, names)}`)
     }
+    const next = (nearby[e.id] ?? []).map((id) => names.get(id)).filter(Boolean)
+    if (next.length) parts.push(`borders: ${next.join(', ')}`)
     lines.push(parts.join(' | '))
   }
   return lines.join('\n')
@@ -88,6 +92,10 @@ export interface EntryTextInput {
   entries: readonly DigestEntry[]
   chapters: readonly StoryChapter[]
   mentions?: EntryMentions
+  /** Places next to this one (from the maps). */
+  nearby?: string[]
+  /** Names of maps of this place. */
+  maps?: string[]
 }
 
 /** One entry as text: facts with their history, the page, what links here, and appearances. */
@@ -149,6 +157,12 @@ export function entryText(input: EntryTextInput): string {
       )
     }
   }
+
+  const nearby = (input.nearby ?? []).filter((id) => names.has(id))
+  if (nearby.length) {
+    out.push('', '## Nearby', ...nearby.map((id) => `- ${names.get(id)} [${id}]`))
+  }
+  if (input.maps?.length) out.push('', `Has its own map: ${input.maps.join(', ')}`)
 
   const m = input.mentions
   if (m && (m.chapters.length || m.pov.length)) {

@@ -5,7 +5,7 @@
  * listen for change broadcasts so every open window stays live.
  */
 import { z } from 'zod'
-import { MAX_COVER_BYTES, type CoverInfo, type CoverTarget } from './media'
+import { MAX_COVER_BYTES, MAX_MAP_BYTES, type CoverInfo, type CoverTarget } from './media'
 import { PAGE_WIDTH, STATUS_ITEMS, type AppSettings } from './settings'
 
 export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
@@ -20,6 +20,8 @@ import {
   lensSchema,
   portraitSchema,
   quoteSchema,
+  regionSchema,
+  sketchSchema,
   templateFieldSchema,
   nameSchema,
   outlineFileSchema,
@@ -29,6 +31,7 @@ import {
   type ChapterSource,
   type FactValue,
   type InboxItem,
+  type MapFile,
   type Portrait,
   type RichTextDoc,
   type Template,
@@ -116,6 +119,7 @@ export type TrashTarget =
   | { kind: 'world'; worldId: string }
   | { kind: 'chapter'; seriesId: string; volumeId: string; chapterId: string }
   | { kind: 'entry'; worldId: string; entryId: string }
+  | { kind: 'map'; worldId: string; mapId: string }
 
 /** An item in the device's trash. */
 export interface TrashEntry {
@@ -179,6 +183,10 @@ export interface WorldView {
   problems: LibraryProblem[]
   /** Captured items waiting in the inbox. */
   inboxCount: number
+  /** Image maps (the world map and maps of places) and the travel sketch, oldest first. */
+  maps: MapFile[]
+  /** Places next to each place, computed from touching map regions and sketch roads. */
+  nearby: Record<string, string[]>
 }
 
 /** A chapter where an entry is mentioned (or told from its point of view). */
@@ -229,6 +237,7 @@ export const trashTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('world'), worldId: id('world') }),
   z.object({ kind: z.literal('chapter'), ...volumeRef, chapterId: id('chapter') }),
   z.object({ kind: z.literal('entry'), worldId: id('world'), entryId: id('entry') }),
+  z.object({ kind: z.literal('map'), worldId: id('world'), mapId: id('map') }),
 ]) satisfies z.ZodType<TrashTarget>
 
 export const ipcInputs = {
@@ -360,6 +369,30 @@ export const ipcInputs = {
     /** False takes names off the list again (undo). */
     rejected: z.boolean(),
   }),
+  'map:create': z.object({
+    worldId: id('world'),
+    name: nameSchema,
+    placeId: id('entry').nullable(),
+    image: z
+      .object({
+        data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_MAP_BYTES, {
+          message: 'That map image is too large (60 MB at most).',
+        }),
+        width: z.number().int().positive().max(20000),
+        height: z.number().int().positive().max(20000),
+      })
+      .nullable(),
+  }),
+  'map:save': z.object({
+    worldId: id('world'),
+    mapId: id('map'),
+    patch: z.object({
+      name: nameSchema.optional(),
+      regions: z.array(regionSchema).max(5000).optional(),
+      sketch: sketchSchema.nullable().optional(),
+      placeId: id('entry').nullable().optional(),
+    }),
+  }),
   'capture:context': z.object({
     context: z
       .object({
@@ -458,6 +491,8 @@ export const ipcInputs = {
         hoverCards: z.boolean(),
         nameCatcher: z.boolean(),
         quietAfter: z.number().int().min(1).max(200),
+        map: z.boolean(),
+        lighter: z.boolean(),
       })
       .optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
@@ -516,6 +551,8 @@ export interface IpcResults {
   'inbox:dismiss': InboxItem
   'names:reject': null
   'capture:context': null
+  'map:create': MapFile
+  'map:save': MapFile
   'trash:add': TrashEntry
   'trash:list': TrashEntry[]
   'trash:restore': TrashEntry

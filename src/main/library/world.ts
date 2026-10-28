@@ -12,6 +12,7 @@ import {
   FORMAT_VERSION,
   emptyDoc,
   inboxFileSchema,
+  mapFileSchema,
   rejectedFileSchema,
   templatesFileSchema,
   worldEntryFileSchema,
@@ -19,6 +20,7 @@ import {
   type FactValue,
   type InboxFile,
   type InboxItem,
+  type MapFile,
   type RichTextDoc,
   type Template,
   type TemplateField,
@@ -46,6 +48,7 @@ import { catchNames } from '@shared/world/nameCatcher'
 import { entryText, worldDigest } from '@shared/world/digest'
 import { chapterPositions, type StoryChapter, type WorldIndex } from '@shared/world/story'
 import { isBuiltIn, worldTemplates } from '@shared/world/templates'
+import { nearbyPlaces } from '@shared/world/maps'
 import { AppError } from '../errors'
 import { isTempFileName } from '../fs/atomicWrite'
 import type { KeyedLock } from '../fs/keyedLock'
@@ -104,6 +107,7 @@ const LINE_LENGTH = 240
 export class WorldStore {
   /** Story text per world, dropped whenever the manuscript changes. */
   private readonly storyCache = new Map<string, Promise<StoryText[]>>()
+  private nearbyCache: { key: string; nearby: Record<string, string[]> } | null = null
   /** Mentions per world, dropped whenever the manuscript or the entries change. */
   private readonly indexCache = new Map<string, Promise<WorldIndex>>()
 
@@ -131,6 +135,7 @@ export class WorldStore {
     const { entries, problems } = await this.readAll(worldId)
     const custom = await this.customTemplates(worldId)
     const inbox = await this.readInbox(worldId)
+    const { maps, problems: mapProblems } = await this.readMaps(worldId)
     // Names typed on a page link to their entries, like `@` links do.
     const matcher = nameMatcher(entryTerms(entries))
     const summaries = entries.map((entry) => {
@@ -144,8 +149,10 @@ export class WorldStore {
       templates: worldTemplates(custom),
       customTemplates: custom.map((t) => t.id),
       entries: summaries.sort(byName),
-      problems,
+      problems: [...problems, ...mapProblems],
       inboxCount: inbox.items.length,
+      maps,
+      nearby: this.nearbyFor(maps),
     }
   }
 
@@ -374,23 +381,137 @@ export class WorldStore {
     return join(this.dir(worldId), 'images', file)
   }
 
+  /** Stores an image once, named by its content hash (call while holding the world's lock). */
+  private async storeImage(worldId: string, data: Uint8Array, what: string): Promise<string> {
+    const type = detectImageType(data)
+    if (!type) throw new AppError('invalid-input', `${what} must be PNG, JPEG, WebP or GIF images.`)
+    const file = `${sha256(data)}.${type.ext}`
+    if (!(await pathExists(this.imagePath(worldId, file)))) {
+      await fs.promises.mkdir(join(this.dir(worldId), 'images'), { recursive: true })
+      await this.host.writeBytes(worldId, `images/${file}`, data)
+    }
+    return file
+  }
+
   /** Stores the image once (named by its hash) and makes it the entry's portrait. */
   async setPortrait(worldId: string, entryId: string, data: Uint8Array): Promise<WorldEntryFile> {
-    const type = detectImageType(data)
-    if (!type)
+    if (!detectImageType(data))
       throw new AppError('invalid-input', 'Portraits must be PNG, JPEG, WebP or GIF images.')
-    const file = `${sha256(data)}.${type.ext}`
     const saved = await this.host.lock.run(`world:${worldId}`, async () => {
-      if (!(await pathExists(this.imagePath(worldId, file)))) {
-        await fs.promises.mkdir(join(this.dir(worldId), 'images'), { recursive: true })
-        await this.host.writeBytes(worldId, `images/${file}`, data)
-      }
+      const file = await this.storeImage(worldId, data, 'Portraits')
       return this.writeEntry(worldId, entryId, {
         portrait: { file, crop: { x: 0.5, y: 0.5, size: 1 } },
       })
     })
     this.host.changed({ kind: 'entry', worldId, entryId })
     return saved
+  }
+
+  /* ---------- maps ---------- */
+
+  private mapPath(worldId: string, mapId: string): string {
+    return join(this.dir(worldId), unitPaths.map(mapId))
+  }
+
+  async readMap(worldId: string, mapId: string): Promise<MapFile> {
+    return readJsonFile(this.mapPath(worldId, mapId), mapFileSchema)
+  }
+
+  /** Every readable map, oldest first; unreadable files are reported and left alone. */
+  private async readMaps(
+    worldId: string,
+  ): Promise<{ maps: MapFile[]; problems: LibraryProblem[] }> {
+    let names: string[] = []
+    try {
+      names = await fs.promises.readdir(join(this.dir(worldId), 'maps'))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    }
+    const maps: MapFile[] = []
+    const problems: LibraryProblem[] = []
+    for (const name of names.filter((n) => n.endsWith('.json') && !isTempFileName(n)).sort()) {
+      const mapId = name.slice(0, -'.json'.length)
+      try {
+        maps.push(await this.readMap(worldId, mapId))
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+        problems.push({
+          path: `worlds/${worldId}/${unitPaths.map(mapId)}`,
+          message: 'Not a readable map file.',
+        })
+      }
+    }
+    maps.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    return { maps, problems }
+  }
+
+  /**
+   * A new map: an imported image (stored once, by content hash), or a travel
+   * sketch when there is no image. `placeId` is the place it shows (null for
+   * the world map).
+   */
+  async createMap(
+    worldId: string,
+    input: {
+      name: string
+      placeId: string | null
+      image: { data: Uint8Array; width: number; height: number } | null
+    },
+  ): Promise<MapFile> {
+    await this.host.getWorld(worldId)
+    const time = this.host.timestamp()
+    const map = await this.host.lock.run(`world:${worldId}`, async () => {
+      const image = input.image && {
+        file: await this.storeImage(worldId, input.image.data, 'Maps'),
+        width: input.image.width,
+        height: input.image.height,
+      }
+      const created: MapFile = {
+        formatVersion: FORMAT_VERSION,
+        id: newId('map'),
+        worldId,
+        name: input.name.trim(),
+        placeId: input.placeId,
+        image,
+        regions: [],
+        sketch: image ? null : { nodes: [], roads: [] },
+        createdAt: time,
+        updatedAt: time,
+      }
+      await fs.promises.mkdir(join(this.dir(worldId), 'maps'), { recursive: true })
+      await this.host.writeFile(worldId, unitPaths.map(created.id), created)
+      return created
+    })
+    this.host.changed({ kind: 'world', worldId })
+    return map
+  }
+
+  /** Saves a map's name, regions, sketch or place; fields left out keep their value. */
+  async saveMap(
+    worldId: string,
+    mapId: string,
+    patch: Partial<Pick<MapFile, 'name' | 'regions' | 'sketch' | 'placeId'>>,
+  ): Promise<MapFile> {
+    const saved = await this.host.lock.run(`world:${worldId}`, async () => {
+      const map = await this.readMap(worldId, mapId)
+      const next: MapFile = { ...map, formatVersion: FORMAT_VERSION }
+      if (patch.name !== undefined) next.name = patch.name.trim()
+      if (patch.regions !== undefined) next.regions = patch.regions
+      if (patch.sketch !== undefined) next.sketch = patch.sketch
+      if (patch.placeId !== undefined) next.placeId = patch.placeId
+      next.updatedAt = this.host.timestamp()
+      await this.host.writeFile(worldId, unitPaths.map(mapId), next)
+      return next
+    })
+    this.host.changed({ kind: 'world', worldId })
+    return saved
+  }
+
+  /** Places next to each place, from touching regions and sketch roads (cached per map version). */
+  private nearbyFor(maps: MapFile[]): Record<string, string[]> {
+    const key = maps.map((m) => `${m.id}@${m.updatedAt}`).join('|')
+    if (this.nearbyCache?.key !== key) this.nearbyCache = { key, nearby: nearbyPlaces(maps) }
+    return this.nearbyCache.nearby
   }
 
   /* ---------- capture and the inbox ---------- */
@@ -709,7 +830,13 @@ export class WorldStore {
   /** A compact text summary of every entry, for language models. */
   async digest(worldId: string): Promise<string> {
     const [view, index] = await Promise.all([this.view(worldId), this.index(worldId)])
-    return worldDigest(view.world.name, view.entries, view.templates, chapterPositions(index))
+    return worldDigest(
+      view.world.name,
+      view.entries,
+      view.templates,
+      chapterPositions(index),
+      view.nearby,
+    )
   }
 
   /** One entry as plain text and links. */
@@ -726,6 +853,8 @@ export class WorldStore {
       entries: view.entries,
       chapters: index.chapters,
       mentions: index.mentions[entryId],
+      nearby: view.nearby[entryId] ?? [],
+      maps: view.maps.filter((m) => m.placeId === entryId).map((m) => m.name),
     })
   }
 }
