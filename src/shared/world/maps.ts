@@ -13,6 +13,8 @@ const GRID = 400
  * detected regions stop short of the border line between them.
  */
 const TOUCH = 6
+/** Pins closer than this share of the map's long side are nearby. */
+const PIN_NEAR = 0.04
 
 /** Even-odd scanline fill of a region's rings into a label grid. */
 function fill(
@@ -92,6 +94,18 @@ export function nearbyPlaces(maps: readonly MapFile[]): Record<string, string[]>
         const pa = byId.get(a)
         const pb = byId.get(b)
         if (pa && pb) link(pa, pb)
+      }
+    }
+    if (map.image) {
+      // Pins close together (within 4% of the map) are nearby too.
+      const near = Math.max(map.image.width, map.image.height) * PIN_NEAR
+      const pins = map.pins ?? []
+      for (let i = 0; i < pins.length; i++) {
+        for (let j = i + 1; j < pins.length; j++) {
+          const a = pins[i]!
+          const b = pins[j]!
+          if (Math.hypot(a.x - b.x, a.y - b.y) <= near) link(a.placeId, b.placeId)
+        }
       }
     }
     for (const road of map.sketch?.roads ?? []) link(road.from, road.to)
@@ -187,4 +201,22 @@ export function regionTemplate(parentTemplate: string | null): string {
     default:
       return 'landmark'
   }
+}
+
+/** The smallest region containing a point (the most specific place there). */
+export function smallestRegionAt<R extends Pick<MapRegion, 'rings'>>(
+  regions: readonly R[],
+  point: Point,
+): R | undefined {
+  let best: R | undefined
+  let bestArea = Infinity
+  for (const r of regions) {
+    if (!pointInRegion(point, r)) continue
+    const area = Math.abs(ringArea(r.rings[0]!))
+    if (area < bestArea) {
+      best = r
+      bestArea = area
+    }
+  }
+  return best
 }

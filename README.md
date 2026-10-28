@@ -33,7 +33,8 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - palette search, quick add (Ctrl/Cmd+Alt+N), back/forward, recent and pinned, undo, merge, safe deletes
   - text forms of every entry and a world digest (for AI later)
 - **World, step 4b (the map):**
-  - import a map image; regions by auto-detect, magic wand, merge, split and trace (OpenCV.js, local)
+  - import a map image; regions by auto-detect (border lines, land and sea, colour areas), magic wand with preview and add/cut, merge, split and trace (OpenCV.js, local)
+  - pins for cities and landmarks, and a pin bar of places not on the map yet, grouped by region
   - regions linked to places; hover for names, click to open; nested maps of places
   - nearby places from touching regions (and sketch roads), on place pages and in the text forms
   - the unplaced tray (drag people onto the map), territory colours, a travel sketch when there's no map

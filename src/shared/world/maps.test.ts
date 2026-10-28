@@ -7,6 +7,7 @@ import {
   regionAdjacency,
   regionPath,
   regionTemplate,
+  smallestRegionAt,
 } from './maps'
 
 const square = (x: number, y: number, w: number, h = w): Point[] => [
@@ -45,6 +46,29 @@ describe('region adjacency', () => {
     const nearby = nearbyPlaces([map, sketch])
     expect(nearby['ent_a']).toEqual(['ent_b'])
     expect(nearby['ent_b']!.sort()).toEqual(['ent_a', 'ent_x'])
+  })
+})
+
+describe('pins', () => {
+  it('counts pins close together as nearby, and finds the smallest region at a point', () => {
+    const map = {
+      image: { file: 'x', width: 1000, height: 400 },
+      regions: [],
+      pins: [
+        { id: 'p1', placeId: 'ent_a', x: 100, y: 100 },
+        { id: 'p2', placeId: 'ent_b', x: 130, y: 100 },
+        { id: 'p3', placeId: 'ent_c', x: 600, y: 300 },
+      ],
+      sketch: null,
+    } as unknown as MapFile
+    const nearby = nearbyPlaces([map])
+    expect(nearby['ent_a']).toEqual(['ent_b'])
+    expect(nearby['ent_c']).toBeUndefined()
+    const big = { id: 'big', rings: [square(0, 0, 500)] }
+    const small = { id: 'small', rings: [square(50, 50, 100)] }
+    expect(smallestRegionAt([big, small], [80, 80])?.id).toBe('small')
+    expect(smallestRegionAt([big, small], [300, 300])?.id).toBe('big')
+    expect(smallestRegionAt([big, small], [700, 300])).toBeUndefined()
   })
 })
 

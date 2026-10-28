@@ -474,6 +474,7 @@ export class WorldStore {
         placeId: input.placeId,
         image,
         regions: [],
+        pins: [],
         sketch: image ? null : { nodes: [], roads: [] },
         createdAt: time,
         updatedAt: time,
@@ -490,13 +491,14 @@ export class WorldStore {
   async saveMap(
     worldId: string,
     mapId: string,
-    patch: Partial<Pick<MapFile, 'name' | 'regions' | 'sketch' | 'placeId'>>,
+    patch: Partial<Pick<MapFile, 'name' | 'regions' | 'pins' | 'sketch' | 'placeId'>>,
   ): Promise<MapFile> {
     const saved = await this.host.lock.run(`world:${worldId}`, async () => {
       const map = await this.readMap(worldId, mapId)
       const next: MapFile = { ...map, formatVersion: FORMAT_VERSION }
       if (patch.name !== undefined) next.name = patch.name.trim()
       if (patch.regions !== undefined) next.regions = patch.regions
+      if (patch.pins !== undefined) next.pins = patch.pins
       if (patch.sketch !== undefined) next.sketch = patch.sketch
       if (patch.placeId !== undefined) next.placeId = patch.placeId
       next.updatedAt = this.host.timestamp()
@@ -855,6 +857,9 @@ export class WorldStore {
       mentions: index.mentions[entryId],
       nearby: view.nearby[entryId] ?? [],
       maps: view.maps.filter((m) => m.placeId === entryId).map((m) => m.name),
+      pinnedOn: view.maps
+        .filter((m) => m.pins.some((p) => p.placeId === entryId))
+        .map((m) => m.name),
     })
   }
 }

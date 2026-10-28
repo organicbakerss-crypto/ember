@@ -24,6 +24,7 @@ export const ID_KINDS = {
   inbox: 'inb',
   map: 'map',
   region: 'rgn',
+  pin: 'pin',
 } as const
 
 export type IdKind = keyof typeof ID_KINDS

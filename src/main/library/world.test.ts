@@ -494,3 +494,37 @@ describe('maps', () => {
     expect(await fs.promises.readFile(bad, 'utf8')).toBe('{ nope')
   })
 })
+
+describe('pins', () => {
+  it('saves pins in the map file, makes close pins nearby, and lists them in the text form', async () => {
+    const worldId = await world()
+    const gull = await lib.world.createEntry(worldId, { name: 'Gullhaven', template: 'city' })
+    const salt = await lib.world.createEntry(worldId, { name: 'Saltmere', template: 'city' })
+    const map = await lib.world.createMap(worldId, {
+      name: 'Isles map',
+      placeId: null,
+      image: { data: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 5]), width: 1000, height: 500 },
+    })
+    expect(map.pins).toEqual([])
+    await lib.world.saveMap(worldId, map.id, {
+      pins: [
+        { id: newId('pin'), placeId: gull.id, x: 100, y: 100 },
+        { id: newId('pin'), placeId: salt.id, x: 120, y: 110 },
+      ],
+    })
+    const view = await lib.world.view(worldId)
+    expect(view.maps[0]!.pins).toHaveLength(2)
+    expect(view.nearby[gull.id]).toEqual([salt.id])
+    expect(await lib.world.entryText(worldId, gull.id)).toContain('Pinned on: Isles map')
+  })
+
+  it('reads map files saved before pins existed', async () => {
+    const worldId = await world()
+    const map = await lib.world.createMap(worldId, { name: 'Old', placeId: null, image: null })
+    const path = join(lib.paths.worldDir(worldId), 'maps', `${map.id}.json`)
+    const raw = JSON.parse(await fs.promises.readFile(path, 'utf8'))
+    delete raw.pins
+    await fs.promises.writeFile(path, JSON.stringify(raw))
+    expect((await lib.world.readMap(worldId, map.id)).pins).toEqual([])
+  })
+})

@@ -2432,20 +2432,29 @@ kbd {
   fill-opacity: 0.22;
   stroke: var(--accent);
 }
+.map-region-halo {
+  fill: none;
+  stroke: rgb(0 0 0 / 0.6);
+  stroke-width: 5px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
 .map-svg.editing .map-region {
-  stroke: var(--accent);
-  stroke-dasharray: 4 3;
+  stroke: #fff;
+  stroke-width: 2px;
+  stroke-dasharray: 6 4;
   fill: var(--accent);
-  fill-opacity: 0.08;
+  fill-opacity: 0.12;
 }
 .map-svg.editing .map-region.unlinked {
   fill: #e0b324;
-  fill-opacity: 0.18;
+  fill-opacity: 0.28;
 }
 .map-region.selected,
 .map-svg.editing .map-region.selected {
   fill: var(--accent);
-  fill-opacity: 0.35;
+  fill-opacity: 0.42;
+  stroke: #fff;
   stroke-dasharray: none;
   stroke-width: 3px;
 }
@@ -2535,11 +2544,17 @@ kbd {
   padding: 0.75rem;
   background: var(--surface);
 }
-.unplaced-tray {
-  width: 11rem;
+.map-side {
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: 1rem;
+  min-height: 0;
   overflow-y: auto;
   border-left: 1px solid var(--border);
   padding-left: 0.75rem;
+}
+.unplaced-tray {
+  width: 12rem;
 }
 .unplaced-tray ul {
   list-style: none;
@@ -2646,4 +2661,157 @@ kbd {
 }
 .exit:hover {
   border-color: var(--accent);
+}
+
+/* pins */
+.map-pin {
+  cursor: grab;
+}
+.map-pin path {
+  stroke: var(--page);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.map-pin-eye {
+  fill: var(--page);
+  pointer-events: none;
+}
+.map-pin.selected path {
+  stroke: var(--text);
+  stroke-width: 3px;
+}
+.map-pin.missing path {
+  opacity: 0.5;
+}
+.map-preview {
+  fill: var(--accent);
+  fill-opacity: 0.3;
+  stroke: var(--accent);
+  stroke-width: 2px;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.map-box {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.map-svg.editing.tool-pin,
+.map-svg.picking {
+  cursor: crosshair;
+}
+.split-button {
+  display: inline-flex;
+}
+.split-button button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.split-button button:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: none;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+}
+.selection-count {
+  min-width: 7rem;
+}
+
+/* the pin bar */
+.pin-bar {
+  width: 13rem;
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+}
+.pin-bar.collapsed {
+  width: auto;
+}
+.pin-bar-toggle {
+  writing-mode: vertical-rl;
+  padding: 0.6rem 0.25rem;
+  font-size: 0.8rem;
+}
+.pin-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pin-bar-head h3 {
+  margin: 0;
+}
+.pin-bar input[type='search'] {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+}
+.pin-group {
+  display: grid;
+  gap: 0.15rem;
+}
+.pin-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.1rem;
+  text-align: left;
+}
+.pin-group-head::before {
+  content: '▾';
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.pin-group-head[aria-expanded='false']::before {
+  content: '▸';
+}
+.pin-group-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pin-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.6rem;
+  display: grid;
+  gap: 0.2rem;
+}
+.pin-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: grab;
+  font-size: 0.85rem;
+}
+.pin-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pin-dot {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+}
+.pin-suggest {
+  display: block;
+  text-align: left;
+  padding: 0.1rem 0.4rem;
 }

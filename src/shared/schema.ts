@@ -280,6 +280,15 @@ export const regionSchema = z.looseObject({
 })
 export type MapRegion = z.infer<typeof regionSchema>
 
+/** A place marked at one point of a map (a city, a landmark), in image pixels. */
+export const pinSchema = z.looseObject({
+  id: id('pin'),
+  placeId: id('entry'),
+  x: z.number(),
+  y: z.number(),
+})
+export type MapPin = z.infer<typeof pinSchema>
+
 /** A travel sketch: places as dots (positions from 0 to 1) joined by roads. */
 export const sketchSchema = z.looseObject({
   nodes: z.array(
@@ -309,6 +318,7 @@ export const mapFileSchema = z.looseObject({
     })
     .nullable(),
   regions: z.array(regionSchema).default([]),
+  pins: z.array(pinSchema).default([]),
   /** Without an image: the travel sketch. */
   sketch: sketchSchema.nullable().default(null),
   createdAt: timestamp,

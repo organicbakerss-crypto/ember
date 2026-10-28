@@ -96,6 +96,8 @@ export interface EntryTextInput {
   nearby?: string[]
   /** Names of maps of this place. */
   maps?: string[]
+  /** Names of maps it is pinned on. */
+  pinnedOn?: string[]
 }
 
 /** One entry as text: facts with their history, the page, what links here, and appearances. */
@@ -163,6 +165,7 @@ export function entryText(input: EntryTextInput): string {
     out.push('', '## Nearby', ...nearby.map((id) => `- ${names.get(id)} [${id}]`))
   }
   if (input.maps?.length) out.push('', `Has its own map: ${input.maps.join(', ')}`)
+  if (input.pinnedOn?.length) out.push(`Pinned on: ${input.pinnedOn.join(', ')}`)
 
   const m = input.mentions
   if (m && (m.chapters.length || m.pov.length)) {

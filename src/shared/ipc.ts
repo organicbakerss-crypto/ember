@@ -20,6 +20,7 @@ import {
   lensSchema,
   portraitSchema,
   quoteSchema,
+  pinSchema,
   regionSchema,
   sketchSchema,
   templateFieldSchema,
@@ -389,6 +390,7 @@ export const ipcInputs = {
     patch: z.object({
       name: nameSchema.optional(),
       regions: z.array(regionSchema).max(5000).optional(),
+      pins: z.array(pinSchema).max(5000).optional(),
       sketch: sketchSchema.nullable().optional(),
       placeId: id('entry').nullable().optional(),
     }),

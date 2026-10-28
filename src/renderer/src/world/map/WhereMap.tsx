@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
-import type { MapFile, MapRegion, Sketch } from '@shared/schema'
+import type { EntrySummary } from '@shared/ipc'
+import type { MapFile, MapPin, MapRegion, Point, Sketch } from '@shared/schema'
 import { newId } from '@shared/ids'
-import { regionTemplate } from '@shared/world/maps'
+import { regionTemplate, smallestRegionAt } from '@shared/world/maps'
+import { currentValue } from '@shared/world/facts'
 import { api, describeError } from '../../api'
 import { EditableText } from '../../components/EditableText'
 import { useOverlays } from '../../components/overlays'
@@ -11,8 +13,9 @@ import { QuickAddDialog } from '../QuickAddDialog'
 import type { UndoStep } from '../useUndo'
 import type { WorldData } from '../useWorld'
 import type { WorldActions } from '../useWorldActions'
-import { MapCanvas } from './MapCanvas'
-import { parentMapOf, sketchOf, worldMapOf } from './mapModel'
+import { MapCanvas, type NewPlaceTarget } from './MapCanvas'
+import { PinBar } from './PinBar'
+import { parentMapOf, sketchOf, withinChain, worldMapOf } from './mapModel'
 import { TravelSketch } from './TravelSketch'
 import { UnplacedTray } from './UnplacedTray'
 
@@ -76,7 +79,7 @@ export function WhereMap(props: {
     setTerritoryState(on)
     saveLocal('world.territory', on ? 'on' : 'off')
   }
-  const [creating, setCreating] = useState<{ region: MapRegion; name?: string } | null>(null)
+  const [creating, setCreating] = useState<{ target: NewPlaceTarget; name?: string } | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const importMap = useMapImport(world, record)
 
@@ -91,14 +94,145 @@ export function WhereMap(props: {
     if (m && trail.includes(m)) break
   }
 
-  const saveRegions = async (target: MapFile, regions: MapRegion[], label: string) => {
-    const before = target.regions
+  /** The map as it is now (the view may be a moment behind a save). */
+  const latest = (target: MapFile) => world.view.maps.find((m) => m.id === target.id) ?? target
+
+  /**
+   * Saves regions and/or pins, and optionally an entry's facts in the same
+   * step; one Undo puts all of it back.
+   */
+  const saveMap = async (
+    target: MapFile,
+    patch: { regions?: MapRegion[]; pins?: MapPin[] },
+    label: string,
+    entry?: { id: string; facts: EntrySummary['facts'] },
+  ) => {
+    const before = latest(target)
+    const factsBefore = entry && world.resolve(entry.id)?.facts
     try {
-      await api.invoke('map:save', { worldId, mapId: target.id, patch: { regions } })
+      await api.invoke('map:save', { worldId, mapId: target.id, patch })
+      if (entry) {
+        await api.invoke('entry:save', {
+          worldId,
+          entryId: entry.id,
+          patch: { facts: entry.facts },
+        })
+      }
       record({
         label,
+        undo: async () => {
+          await api.invoke('map:save', {
+            worldId,
+            mapId: target.id,
+            patch: { regions: before.regions, pins: before.pins },
+          })
+          if (entry && factsBefore) {
+            await api.invoke('entry:save', {
+              worldId,
+              entryId: entry.id,
+              patch: { facts: factsBefore },
+            })
+          }
+        },
+      })
+    } catch (err) {
+      toast(describeError(err).message)
+    }
+  }
+  const saveRegions = (target: MapFile, regions: MapRegion[], label: string) =>
+    saveMap(target, { regions }, label)
+
+  /** A "Within" value added to a place's facts. */
+  const withWithin = (place: EntrySummary, regionPlaceId: string) => ({
+    ...place.facts,
+    within: [
+      ...(place.facts['within'] ?? []),
+      { id: newId('fact'), link: regionPlaceId, from: null },
+    ],
+  })
+
+  /**
+   * Pins a place at a point (or moves its pin). A pin inside a region counts
+   * as within it: a place with no "Within" gets it; one within somewhere
+   * else is asked about, never changed silently.
+   */
+  const placePin = async (target: MapFile, placeId: string, point: Point, pinId?: string) => {
+    const place = world.resolve(placeId)
+    if (!place) return
+    const current = latest(target)
+    const existing = current.pins.find((p) => p.id === pinId || p.placeId === place.id)
+    const pins = existing
+      ? current.pins.map((p) => (p.id === existing.id ? { ...p, x: point[0], y: point[1] } : p))
+      : [...current.pins, { id: newId('pin'), placeId: place.id, x: point[0], y: point[1] }]
+    const region = smallestRegionAt(
+      current.regions.filter((r) => r.placeId && r.placeId !== place.id),
+      point,
+    )
+    const regionPlace = region?.placeId ? world.resolve(region.placeId) : undefined
+    const within = currentValue(place.facts['within'], null, world.positions)?.link
+    const verb = existing ? 'Moved' : 'Pinned'
+    let entry: { id: string; facts: EntrySummary['facts'] } | undefined
+    if (regionPlace && !within) {
+      entry = { id: place.id, facts: withWithin(place, regionPlace.id) }
+    } else if (
+      regionPlace &&
+      within &&
+      within !== regionPlace.id &&
+      !withinChain(world, regionPlace.id).includes(within) &&
+      !withinChain(world, within).includes(regionPlace.id)
+    ) {
+      const was = world.resolve(within)?.name ?? 'somewhere else'
+      const answer = await choose(
+        `${place.name} is in ${was}. You pinned it in ${regionPlace.name}.`,
+        [
+          { value: 'move', label: `Move it to ${regionPlace.name}`, primary: true },
+          { value: 'keep', label: `Keep it in ${was}` },
+        ],
+        'The pin stays where you put it either way.',
+      )
+      if (answer === 'move') {
+        const facts = { ...place.facts }
+        facts['within'] = [
+          ...(facts['within'] ?? []),
+          { id: newId('fact'), link: regionPlace.id, from: null },
+        ]
+        entry = { id: place.id, facts }
+      }
+    }
+    await saveMap(
+      current,
+      { pins },
+      `${verb} ${place.name}${regionPlace ? ` in ${regionPlace.name}` : ''}`,
+      entry,
+    )
+  }
+
+  const removePin = async (target: MapFile, pinId: string) => {
+    const current = latest(target)
+    const pin = current.pins.find((p) => p.id === pinId)
+    if (!pin) return
+    await saveMap(
+      current,
+      { pins: current.pins.filter((p) => p.id !== pinId) },
+      `Took ${world.resolve(pin.placeId)?.name ?? 'a place'} off the map`,
+    )
+  }
+
+  const acceptSuggestion = async (placeId: string, regionPlaceId: string) => {
+    const place = world.resolve(placeId)
+    const region = world.resolve(regionPlaceId)
+    if (!place || !region) return
+    const before = place.facts
+    try {
+      await api.invoke('entry:save', {
+        worldId,
+        entryId: place.id,
+        patch: { facts: withWithin(place, region.id) },
+      })
+      record({
+        label: `${place.name} is within ${region.name}`,
         undo: () =>
-          api.invoke('map:save', { worldId, mapId: target.id, patch: { regions: before } }),
+          api.invoke('entry:save', { worldId, entryId: place.id, patch: { facts: before } }),
       })
     } catch (err) {
       toast(describeError(err).message)
@@ -256,7 +390,9 @@ export function WhereMap(props: {
             const created = await importMap(file, null)
             if (created) {
               setEditing(true)
-              toast('Map added. Find its regions: “Auto-detect all”, or the magic wand.')
+              toast(
+                'Map added. Find its regions with “Auto-detect” (▾ picks the method), or the magic wand.',
+              )
             }
           }}
         />
@@ -270,10 +406,12 @@ export function WhereMap(props: {
             editing={editing}
             territory={territory}
             lighter={settings.world.lighter}
-            onSaveRegions={(regions, label) => saveRegions(map, regions, label)}
+            onSave={(patch, label) => saveMap(map, patch, label)}
             onOpenEntry={props.onOpenEntry}
             onOpenMap={(id) => props.onOpenMap(id)}
-            onCreatePlace={(region, name) => setCreating({ region, name })}
+            onCreatePlace={(target, name) => setCreating({ target, name })}
+            onPlacePin={(placeId, point, pinId) => void placePin(map, placeId, point, pinId)}
+            onRemovePin={(pinId) => void removePin(map, pinId)}
             onDropPerson={(personId, placeId) => void dropPerson(personId, placeId)}
           />
         ) : (
@@ -295,7 +433,17 @@ export function WhereMap(props: {
             </div>
           </div>
         )}
-        {!editing && <UnplacedTray world={world} onOpenEntry={props.onOpenEntry} />}
+        <div className="map-side">
+          {map && (
+            <PinBar
+              world={world}
+              map={map}
+              onOpenEntry={props.onOpenEntry}
+              onAcceptSuggestion={(placeId, regionId) => void acceptSuggestion(placeId, regionId)}
+            />
+          )}
+          {!editing && <UnplacedTray world={world} onOpenEntry={props.onOpenEntry} />}
+        </div>
       </div>
 
       {creating && map && (
@@ -304,24 +452,57 @@ export function WhereMap(props: {
           existing={world.view.entries.flatMap((e) => [e.name, ...e.aliases])}
           lens="where"
           name={creating.name}
-          template={regionTemplate(parentPlace?.template ?? null)}
+          template={
+            'region' in creating.target
+              ? regionTemplate(parentPlace?.template ?? null)
+              : ['city', 'district'].includes(parentPlace?.template ?? '')
+                ? 'landmark'
+                : 'city'
+          }
           onCreate={async (name, template) => {
+            const { target } = creating
+            const current = latest(map)
+            // A new place is within the region it's in (a pin), or the map's place.
+            const container =
+              'point' in target
+                ? (smallestRegionAt(
+                    current.regions.filter((r) => r.placeId),
+                    target.point,
+                  )?.placeId ?? map.placeId)
+                : map.placeId
             const created = await props.actions.create(
               name,
               template,
-              map.placeId
-                ? { within: [{ id: newId('fact'), link: map.placeId, from: null }] }
+              container
+                ? { within: [{ id: newId('fact'), link: container, from: null }] }
                 : undefined,
             )
             if (!created) return false
-            const latest = world.view.maps.find((m) => m.id === map.id) ?? map
-            await saveRegions(
-              latest,
-              latest.regions.map((r) =>
-                r.id === creating.region.id ? { ...r, placeId: created.id } : r,
-              ),
-              `Linked a region to ${created.name}`,
-            )
+            if ('region' in target) {
+              await saveRegions(
+                current,
+                current.regions.map((r) =>
+                  r.id === target.region.id ? { ...r, placeId: created.id } : r,
+                ),
+                `Linked a region to ${created.name}`,
+              )
+            } else {
+              await saveMap(
+                current,
+                {
+                  pins: [
+                    ...current.pins,
+                    {
+                      id: newId('pin'),
+                      placeId: created.id,
+                      x: target.point[0],
+                      y: target.point[1],
+                    },
+                  ],
+                },
+                `Pinned ${created.name}`,
+              )
+            }
             return true
           }}
           onCancel={() => setCreating(null)}
