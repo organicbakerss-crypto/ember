@@ -1,0 +1,89 @@
+/**
+ * Facts that change over time. Each value says when it starts ("from chapter
+ * 8", "from the Flood"); everything that shows a fact shows the value for a
+ * chosen moment in the story. Until events have a place on the timeline,
+ * a value from an event counts as already true.
+ */
+import type { FactAnchor, FactValue, TemplateField } from '../schema'
+
+/** A moment in the story: a position in reading order, or `null` for "now" (the latest chapter). */
+export type Moment = number | null
+
+/** Positions of chapters in reading order (across the series that use the world). */
+export type ChapterPositions = ReadonlyMap<string, number>
+
+function applies(value: FactValue, at: Moment, positions: ChapterPositions): boolean {
+  if (at === null || !value.from || value.from.kind !== 'chapter') return true
+  const position = positions.get(value.from.chapterId)
+  return position === undefined || position <= at
+}
+
+/** Where a value sits in time; values without a known chapter sit at the start. */
+function start(value: FactValue, positions: ChapterPositions): number {
+  if (value.from?.kind !== 'chapter') return -1
+  return positions.get(value.from.chapterId) ?? -1
+}
+
+/** The single value in effect at a moment: the latest one that has started. */
+export function currentValue(
+  values: readonly FactValue[] | undefined,
+  at: Moment,
+  positions: ChapterPositions,
+): FactValue | undefined {
+  let best: FactValue | undefined
+  let bestStart = -Infinity
+  for (const value of values ?? []) {
+    if (!applies(value, at, positions)) continue
+    const s = start(value, positions)
+    if (s >= bestStart) {
+      best = value
+      bestStart = s
+    }
+  }
+  return best
+}
+
+/** The values of a field at a moment: all that have started (multiple fields), or the current one. */
+export function valuesAt(
+  field: Pick<TemplateField, 'multiple'>,
+  values: readonly FactValue[] | undefined,
+  at: Moment,
+  positions: ChapterPositions,
+): FactValue[] {
+  if (field.multiple) return (values ?? []).filter((v) => applies(v, at, positions))
+  const current = currentValue(values, at, positions)
+  return current ? [current] : []
+}
+
+/** Values in time order (stable for values from the start or from events). */
+export function inTimeOrder(
+  values: readonly FactValue[],
+  positions: ChapterPositions,
+): FactValue[] {
+  return values
+    .map((value, index) => ({ value, index, start: start(value, positions) }))
+    .sort((a, b) => a.start - b.start || a.index - b.index)
+    .map((v) => v.value)
+}
+
+export function isEmptyValue(value: FactValue): boolean {
+  return !value.link && !value.text?.trim()
+}
+
+export function sameAnchor(a: FactAnchor | null, b: FactAnchor | null): boolean {
+  if (!a || !b) return a === b
+  if (a.kind === 'chapter' && b.kind === 'chapter') return a.chapterId === b.chapterId
+  if (a.kind === 'event' && b.kind === 'event') return a.entryId === b.entryId
+  return false
+}
+
+/** Every entry an entry's facts link to, by field. */
+export function factLinks(
+  facts: Record<string, readonly FactValue[]>,
+): { field: string; to: string }[] {
+  const out: { field: string; to: string }[] = []
+  for (const [field, values] of Object.entries(facts)) {
+    for (const v of values) if (v.link) out.push({ field, to: v.link })
+  }
+  return out
+}

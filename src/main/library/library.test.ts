@@ -114,11 +114,10 @@ describe('series, volumes and worlds', () => {
     expect((await lib.snapshot()).series[0]!.volumes.map((v) => v.id)).toEqual([volume.id])
   })
 
-  it('creates a world with no preset categories', async () => {
+  it('creates an empty world, with nothing to set up first', async () => {
     const world = await lib.createWorld({ name: 'W' })
-    expect(world.categories).toEqual([])
+    expect(world.pinned).toEqual([])
     expect(fs.existsSync(join(lib.paths.worldDir(world.id), 'entries'))).toBe(true)
-    expect(fs.existsSync(join(lib.paths.worldDir(world.id), 'timeline.json'))).toBe(true)
   })
 
   it('broadcasts changes', async () => {

@@ -57,6 +57,23 @@ export interface AppSettings {
   statusBar: StatusItem[]
   /** Mark names from the world in chapters (hover for a card, Ctrl/Cmd+click to open). */
   linkNames: boolean
+  world: WorldSettings
+}
+
+/** World mode and the world beside the page. */
+export interface WorldSettings {
+  /** Show a card when hovering a linked name (otherwise only the side panel). */
+  hoverCards: boolean
+  /** Suggest new names from the manuscript in the inbox. */
+  nameCatcher: boolean
+  /** "Gone quiet": not mentioned in this many chapters. */
+  quietAfter: number
+}
+
+export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
+  hoverCards: true,
+  nameCatcher: true,
+  quietAfter: 10,
 }
 
 export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const
@@ -91,4 +108,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   analysis: DEFAULT_ANALYSIS,
   statusBar: DEFAULT_STATUS_BAR,
   linkNames: true,
+  world: DEFAULT_WORLD_SETTINGS,
 }

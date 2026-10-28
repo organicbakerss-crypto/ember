@@ -8,6 +8,7 @@ import { z } from 'zod'
 import {
   DEFAULT_ANALYSIS,
   DEFAULT_STATUS_BAR,
+  DEFAULT_WORLD_SETTINGS,
   PAGE_WIDTH,
   STATUS_ITEMS,
   type AppSettings,
@@ -46,6 +47,14 @@ const appSettingsSchema = z.looseObject({
   analysis: analysisSettingsSchema.catch(DEFAULT_ANALYSIS).default(DEFAULT_ANALYSIS),
   statusBar: z.array(z.enum(STATUS_ITEMS)).catch(DEFAULT_STATUS_BAR).default(DEFAULT_STATUS_BAR),
   linkNames: z.boolean().catch(true).default(true),
+  world: z
+    .object({
+      hoverCards: z.boolean(),
+      nameCatcher: z.boolean(),
+      quietAfter: z.number().int().min(1).max(200),
+    })
+    .catch(DEFAULT_WORLD_SETTINGS)
+    .default(DEFAULT_WORLD_SETTINGS),
 })
 
 export class AppSettingsStore {

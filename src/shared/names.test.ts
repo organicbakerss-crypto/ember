@@ -28,6 +28,18 @@ describe('nameMatcher', () => {
     expect(found("Mara's boat. Marabou. Rosewood. Mara’s oar.")).toEqual(['mara:Mara', 'mara:Mara'])
   })
 
+  it('never matches inside hyphenated words', () => {
+    expect(found('Mara-blue sails. A half-Mara child. Rose‐tinted. Mara - then Rose.')).toEqual([
+      'mara:Mara',
+      'rose:Rose',
+    ])
+  })
+
+  it('still matches names that contain a hyphen', () => {
+    const m = nameMatcher([{ entryId: 'sc', term: 'Saint-Clair' }])
+    expect(m.find('Saint-Clair and Saint-Clair-on-Sea').length).toBe(1)
+  })
+
   it('matches multi-word names across line wrapping and odd spacing', () => {
     expect(found('the  Shattered\nIsles')).toEqual(['isles:Shattered\nIsles'])
   })

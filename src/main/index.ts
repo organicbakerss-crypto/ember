@@ -4,6 +4,7 @@ import { appConfig } from '../../app.config'
 import { AppSettingsStore } from './appSettings'
 import { guardClose } from './closeGuard'
 import { DeviceSettingsStore } from './deviceSettings'
+import { captureMenuItems } from './capture'
 import { broadcast, registerIpc } from './ipc'
 import { LibraryHost } from './libraryHost'
 import { handleMediaRequests, registerMediaScheme } from './media'
@@ -17,7 +18,7 @@ app.setPath('userData', join(app.getPath('appData'), appConfig.name))
 if (!app.requestSingleInstanceLock()) app.quit()
 registerMediaScheme()
 
-function createWindow(settings: AppSettingsStore): BrowserWindow {
+function createWindow(settings: AppSettingsStore, host: LibraryHost): BrowserWindow {
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -36,7 +37,13 @@ function createWindow(settings: AppSettingsStore): BrowserWindow {
   })
   window.once('ready-to-show', () => window.show())
   guardClose(window)
-  attachTextMenu(window, settings, (next) => broadcast('settings:changed', next))
+  attachTextMenu(
+    window,
+    settings,
+    (next) => broadcast('settings:changed', next),
+    (params) =>
+      params.isEditable ? captureMenuItems(window.webContents, params.selectionText, host) : [],
+  )
 
   // Renderer windows never navigate away or open arbitrary windows; links go to the browser.
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -73,10 +80,10 @@ void app.whenReady().then(async () => {
   applySpelling(session.defaultSession, await appSettings.read())
   registerIpc(host, appSettings)
   handleMediaRequests(host)
-  createWindow(appSettings)
+  createWindow(appSettings, host)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(appSettings)
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(appSettings, host)
   })
 })
 

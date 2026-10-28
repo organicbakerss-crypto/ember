@@ -118,9 +118,9 @@ export function Home() {
         onOpenAppearance={(a, name) =>
           setRoute({
             view: 'volume',
-            seriesId: a.seriesId,
-            volumeId: a.volumeId,
-            open: { chapterId: a.chapterId, find: name, token: Date.now() },
+            seriesId: a.chapter.seriesId,
+            volumeId: a.chapter.volumeId,
+            open: { chapterId: a.chapter.id, find: name, token: Date.now() },
           })
         }
       />

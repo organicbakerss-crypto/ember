@@ -41,6 +41,8 @@ export function attachTextMenu(
   window: BrowserWindow,
   settings: AppSettingsStore,
   onSettingsChanged: (next: AppSettings) => void,
+  /** Extra items for selected text (one-click capture). */
+  extraItems: (params: ContextMenuParams) => Electron.MenuItemConstructorOptions[] = () => [],
 ): void {
   window.webContents.on('context-menu', (_event, params: ContextMenuParams) => {
     const items: Electron.MenuItemConstructorOptions[] = []
@@ -84,6 +86,8 @@ export function attachTextMenu(
         { type: 'separator' },
       )
     }
+    const extra = extraItems(params)
+    if (extra.length) items.push(...extra, { type: 'separator' })
     if (params.isEditable) {
       items.push(
         { role: 'cut', enabled: params.editFlags.canCut },

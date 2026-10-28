@@ -8,6 +8,7 @@
  */
 import { z } from 'zod'
 import { idPattern, type IdKind } from './ids'
+import { LENSES } from './world/lenses'
 
 export const FORMAT_VERSION = 1
 
@@ -126,63 +127,142 @@ export type ChapterFile = z.infer<typeof chapterFileSchema>
 
 /* ---------- world ---------- */
 
-export const categorySectionSchema = z.looseObject({
-  id: id('section'),
-  name: nameSchema,
-})
-
-export const worldCategorySchema = z.looseObject({
-  id: id('category'),
-  name: nameSchema,
-  sections: z.array(categorySectionSchema),
-})
-export type WorldCategory = z.infer<typeof worldCategorySchema>
-
 export const worldFileSchema = z.looseObject({
   formatVersion,
   id: id('world'),
   name: nameSchema,
-  categories: z.array(worldCategorySchema),
+  /** Entries pinned to the top of World mode. */
+  pinned: z.array(id('entry')).default([]),
   createdAt: timestamp,
   updatedAt: timestamp,
 })
 export type WorldFile = z.infer<typeof worldFileSchema>
 
-export const entrySectionSchema = z.looseObject({
-  id: id('section'),
-  title: z.string().trim().max(200),
-  content: richTextDocSchema,
+/** Field ids are keys in entry files: short and plain. */
+export const fieldIdSchema = z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,59}$/, 'Invalid field id')
+
+/** When a fact starts to be true: from a chapter, or from an event (an entry). */
+export const factAnchorSchema = z.discriminatedUnion('kind', [
+  z.looseObject({ kind: z.literal('chapter'), chapterId: id('chapter') }),
+  z.looseObject({ kind: z.literal('event'), entryId: id('entry') }),
+])
+export type FactAnchor = z.infer<typeof factAnchorSchema>
+
+/** One value of a fact: text, or a link to another entry. `from: null` means "from the start". */
+export const factValueSchema = z.looseObject({
+  id: id('fact'),
+  text: z.string().max(5000).optional(),
+  link: id('entry').optional(),
+  from: factAnchorSchema.nullable().default(null),
 })
+export type FactValue = z.infer<typeof factValueSchema>
+
+/** Where a captured quote came from. */
+export const chapterSourceSchema = z.looseObject({
+  seriesId: id('series'),
+  volumeId: id('volume'),
+  chapterId: id('chapter'),
+  chapterTitle: z.string().max(200),
+})
+export type ChapterSource = z.infer<typeof chapterSourceSchema>
+
+/** A sentence saved from the manuscript ("one-click capture"), filed under a field or the notes. */
+export const quoteSchema = z.looseObject({
+  id: id('quote'),
+  field: fieldIdSchema.nullable(),
+  text: z.string().min(1).max(5000),
+  source: chapterSourceSchema,
+  capturedAt: timestamp,
+})
+export type Quote = z.infer<typeof quoteSchema>
+
+/** Portrait images are stored once per world, named by content hash. Crop is in fractions of the image. */
+export const portraitSchema = z.looseObject({
+  file: z.string().regex(/^[0-9a-f]{64}\.(png|jpg|gif|webp)$/),
+  crop: z.looseObject({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    size: z.number().min(0.05).max(1),
+  }),
+})
+export type Portrait = z.infer<typeof portraitSchema>
 
 export const worldEntryFileSchema = z.looseObject({
   formatVersion,
   id: id('entry'),
   worldId: id('world'),
-  categoryId: id('category').nullable(),
+  /** Template id (built in, like `person`, or one saved in the world's templates file). */
+  template: z.string().min(1).max(60),
   name: nameSchema,
   aliases: z.array(z.string().trim().min(1)),
-  sections: z.array(entrySectionSchema),
-  /** Other entries this one is linked to, by id. */
-  related: z.array(id('entry')).default([]),
+  /** Field id → values over time (oldest first). Fields not in the template are kept. */
+  facts: z.record(fieldIdSchema, z.array(factValueSchema)).default({}),
+  /** The free-written page. */
+  body: richTextDocSchema,
+  quotes: z.array(quoteSchema).default([]),
+  portrait: portraitSchema.nullable().default(null),
+  /** Entries merged into this one; links and POV tags to them now mean this entry. */
+  mergedFrom: z.array(id('entry')).default([]),
   createdAt: timestamp,
   updatedAt: timestamp,
 })
 export type WorldEntryFile = z.infer<typeof worldEntryFileSchema>
 
-export const timelineFileSchema = z.looseObject({
+export { LENSES }
+export const lensSchema = z.enum(LENSES)
+
+export const templateFieldSchema = z.looseObject({
+  id: fieldIdSchema,
+  label: z.string().trim().min(1).max(60),
+  kind: z.enum(['text', 'link']),
+  /** Shown in the quick facts strip and hover cards. */
+  quick: z.boolean().default(false),
+  /** Holds several values at once (members, territory), not one value that changes. */
+  multiple: z.boolean().default(false),
+  /** How the linked entry lists this link ("Inside it", "Members"). */
+  reverse: z.string().trim().max(60).optional(),
+})
+export type TemplateField = z.infer<typeof templateFieldSchema>
+
+export const templateSchema = z.looseObject({
+  id: z.string().regex(/^[a-z][a-z0-9_-]{0,59}$/),
+  name: z.string().trim().min(1).max(60),
+  lens: lensSchema,
+  fields: z.array(templateFieldSchema).max(40),
+})
+export type Template = z.infer<typeof templateSchema>
+
+/** Templates customised for one world (same id as a built-in one replaces it). */
+export const templatesFileSchema = z.looseObject({
   formatVersion,
   worldId: id('world'),
-  events: z.array(
+  templates: z.array(templateSchema),
+})
+export type TemplatesFile = z.infer<typeof templatesFileSchema>
+
+/** Captured sentences not yet filed under an entry. */
+export const inboxFileSchema = z.looseObject({
+  formatVersion,
+  worldId: id('world'),
+  items: z.array(
     z.looseObject({
-      id: id('event'),
-      title: z.string().trim().max(200),
-      date: z.string().nullable(),
-      entryIds: z.array(id('entry')),
-      chapterIds: z.array(id('chapter')),
+      id: id('inbox'),
+      text: z.string().min(1).max(5000),
+      source: chapterSourceSchema,
+      capturedAt: timestamp,
     }),
   ),
 })
-export type TimelineFile = z.infer<typeof timelineFileSchema>
+export type InboxFile = z.infer<typeof inboxFileSchema>
+export type InboxItem = InboxFile['items'][number]
+
+/** Suggestions the writer turned down; they never come back. */
+export const rejectedFileSchema = z.looseObject({
+  formatVersion,
+  worldId: id('world'),
+  names: z.array(z.string().max(200)),
+})
+export type RejectedFile = z.infer<typeof rejectedFileSchema>
 
 /* ---------- manifest (per sync unit: a volume or a world) ---------- */
 

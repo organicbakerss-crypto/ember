@@ -2,7 +2,8 @@
  * Finds the names of world entries (and their aliases) in text. Names are
  * matched as whole words and case-sensitively ("Rose" the character, not
  * "rose" the flower); a possessive ("Mara's") still counts. Longer names win
- * over shorter ones that overlap ("Mara Voss" over "Mara").
+ * over shorter ones that overlap ("Mara Voss" over "Mara"). A name never
+ * matches inside a hyphenated word ("Mara-blue", "half-Mara").
  */
 export interface NameTerm {
   entryId: string
@@ -16,6 +17,8 @@ export interface NameMatch {
 }
 
 const WORD = '[\\p{L}\\p{N}_]'
+/** Hyphens that join words (ASCII hyphen-minus, Unicode hyphen and non-breaking hyphen). */
+const HYPHEN = '[-\\u2010\\u2011]'
 
 export interface NameMatcher {
   find(text: string): NameMatch[]
@@ -32,7 +35,7 @@ export function nameMatcher(terms: NameTerm[]): NameMatcher {
     .sort((a, b) => b.length - a.length)
     .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'))
   const pattern = new RegExp(
-    `(?<!${WORD})(?:${alternatives.join('|')})(?!${WORD}|['’]${WORD}{2})`,
+    `(?<!${WORD}|${WORD}${HYPHEN})(?:${alternatives.join('|')})(?!${WORD}|${HYPHEN}${WORD}|['’]${WORD}{2})`,
     'gu',
   )
   return {

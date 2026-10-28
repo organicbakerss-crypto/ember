@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import type { EntrySummary } from '@shared/ipc'
 import type { NameTerm } from '@shared/names'
+import type { Moment } from '@shared/world/facts'
 import { MOD } from '../components/commands'
+import { EntryCard } from '../world/EntryCard'
+import type { WorldData } from '../world/useWorld'
 import type { LinkHover } from './linkedNames'
 
 export interface NameIndex {
-  entries: Map<string, EntrySummary>
-  categories: Map<string, string>
+  world: WorldData
   terms: NameTerm[]
+  /** Facts in cards are shown as of this moment (the chapter being written). */
+  at?: Moment
 }
 
 const SHOW_DELAY_MS = 350
@@ -16,12 +19,14 @@ const HIDE_DELAY_MS = 250
 
 /**
  * Connects an editor's linked names to the world: keeps its names up to date
- * and shows a small card when a name is hovered.
+ * and shows the entry's card when a name is hovered.
  */
 export function NameCards(props: {
   editor: Editor
   index: NameIndex | null
   enabled: boolean
+  /** Cards on hover (otherwise names only open on Ctrl/Cmd+click). */
+  hoverCards?: boolean
   onOpen: (entryId: string) => void
 }) {
   const { editor, index, enabled, onOpen } = props
@@ -29,8 +34,10 @@ export function NameCards(props: {
   const showTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const openRef = useRef(onOpen)
+  const cardsRef = useRef(props.hoverCards ?? true)
   useEffect(() => {
     openRef.current = onOpen
+    cardsRef.current = props.hoverCards ?? true
   })
 
   useEffect(() => {
@@ -42,7 +49,7 @@ export function NameCards(props: {
       onHover: (h) => {
         clearTimeout(showTimer.current)
         clearTimeout(hideTimer.current)
-        if (h) showTimer.current = setTimeout(() => setHover(h), SHOW_DELAY_MS)
+        if (h && cardsRef.current) showTimer.current = setTimeout(() => setHover(h), SHOW_DELAY_MS)
         else hideTimer.current = setTimeout(() => setHover(null), HIDE_DELAY_MS)
       },
       onOpen: (id) => {
@@ -57,11 +64,14 @@ export function NameCards(props: {
     }
   }, [editor])
 
-  const entry = hover && index?.entries.get(hover.entryId)
-  if (!hover || !entry) return null
-  const category = entry.categoryId ? index?.categories.get(entry.categoryId) : null
-  const top = Math.min(hover.rect.bottom + 6, window.innerHeight - 180)
+  const entry = hover && index?.world.resolve(hover.entryId)
+  if (!hover || !entry || !index) return null
+  const top = Math.min(hover.rect.bottom + 6, window.innerHeight - 240)
   const left = Math.min(hover.rect.left, window.innerWidth - 320)
+  const open = (id: string) => {
+    setHover(null)
+    onOpen(id)
+  }
 
   return (
     <div
@@ -71,27 +81,10 @@ export function NameCards(props: {
       onMouseEnter={() => clearTimeout(hideTimer.current)}
       onMouseLeave={() => setHover(null)}
     >
-      <div className="name-card-head">
-        <strong>{entry.name}</strong>
-        {category && <span className="muted small">{category}</span>}
-      </div>
-      {entry.aliases.length > 0 && (
-        <div className="muted small">Also: {entry.aliases.join(', ')}</div>
-      )}
-      {entry.snippet ? (
-        <p className="small">{entry.snippet}</p>
-      ) : (
-        <p className="muted small">Nothing written yet.</p>
-      )}
+      <EntryCard world={index.world} entry={entry} at={index.at ?? null} onOpenEntry={open} />
       <div className="name-card-foot">
-        <button
-          className="link small"
-          onClick={() => {
-            setHover(null)
-            onOpen(entry.id)
-          }}
-        >
-          Open in World
+        <button className="link small" onClick={() => open(entry.id)}>
+          Open page
         </button>
         <span className="muted small">or {MOD}click the name</span>
       </div>

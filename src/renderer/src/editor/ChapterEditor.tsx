@@ -50,6 +50,8 @@ interface Props {
   /** Names from the world, for linked names and the POV field. */
   nameIndex: NameIndex | null
   linkNames: boolean
+  /** Show the entry's card when a linked name is hovered. */
+  hoverCards?: boolean
   onOpenEntry: (entryId: string) => void
   handle: Ref<EditorHandle>
   onMeta: (meta: ChapterMeta) => void
@@ -143,7 +145,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
   })
   // A linked POV shows the entry's current name, so renaming the character carries through.
   const povLabel =
-    (meta.povEntryId && props.nameIndex?.entries.get(meta.povEntryId)?.name) || meta.pov || ''
+    (meta.povEntryId && props.nameIndex?.world.resolve(meta.povEntryId)?.name) || meta.pov || ''
   // Content the editor can't represent is never edited or saved.
   const [contentError, setContentError] = useState<string | null>(null)
   const unreadable = useRef(false)
@@ -340,6 +342,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
         editor={editor}
         index={props.nameIndex}
         enabled={props.linkNames}
+        hoverCards={props.hoverCards}
         onOpen={props.onOpenEntry}
       />
       {activeEcho && analysis.echo && (
@@ -411,9 +414,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
                   const pov = e.target.value.trim() ? e.target.value : null
                   // Picking a name from the world links the POV to that entry.
                   const entry = pov
-                    ? [...(props.nameIndex?.entries.values() ?? [])].find(
-                        (x) => x.name === pov.trim(),
-                      )
+                    ? props.nameIndex?.world.view.entries.find((x) => x.name === pov.trim())
                     : undefined
                   update({ pov, povEntryId: entry?.id ?? null })
                 }}

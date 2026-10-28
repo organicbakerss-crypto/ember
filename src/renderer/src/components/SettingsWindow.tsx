@@ -337,9 +337,44 @@ function WorldSettings() {
         Mark names from the world in chapters and entries
       </label>
       <p className="muted small">
-        Hover a marked name for a short card about it; {MOD}click it to open the entry. The marks
-        are only shown on screen, never saved into the text.
+        {MOD}click a marked name to open its page. The marks are only shown on screen, never saved
+        into the text. When off, names aren’t marked and the side panel still lists them.
       </p>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.hoverCards}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, hoverCards: e.target.checked } }))
+          }
+        />
+        Show a card when hovering a marked name
+      </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.nameCatcher}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, nameCatcher: e.target.checked } }))
+          }
+        />
+        Suggest new names from my chapters (in the world’s inbox, never as a popup)
+      </label>
+      <label>
+        “Gone quiet” after
+        <input
+          type="number"
+          min={1}
+          max={200}
+          value={settings.world.quietAfter}
+          onChange={(e) => {
+            const n = Math.round(Number(e.target.value))
+            if (n >= 1 && n <= 200) update(({ world }) => ({ world: { ...world, quietAfter: n } }))
+          }}
+          style={{ width: '5rem' }}
+        />{' '}
+        chapters without a mention
+      </label>
       <label className="radio">
         <input
           type="checkbox"
@@ -353,9 +388,10 @@ function WorldSettings() {
         Leave character and place names out of Echo and repeated words
       </label>
       <p className="muted small">
-        Categories and their sections are set per world: right-click a category in World mode and
-        choose “Edit sections…”. To add a name from a chapter, select it and right-click → “Add to
-        the world…” ({MOD}Alt+N).
+        Templates (which details each kind of entry has) are set per world: World mode → ⋯ →
+        Templates. To add a name from a chapter, select it and right-click → “Add to the world…” (
+        {MOD}Alt+N). To save a line into the world, select it and right-click → “Capture to the
+        world”.
       </p>
     </section>
   )

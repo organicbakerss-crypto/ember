@@ -1,322 +1,685 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { entryTerms } from '@shared/names'
-import { useSettings } from '../useTheme'
 import type { Appearance, EntrySummary, IpcInput } from '@shared/ipc'
-import type { RichTextDoc, WorldEntryFile, WorldFile } from '@shared/schema'
-import { newId } from '@shared/ids'
+import type {
+  FactValue,
+  Portrait as PortraitData,
+  TemplateField,
+  WorldEntryFile,
+} from '@shared/schema'
+import { inTimeOrder } from '@shared/world/facts'
+import { chapterName, firstSeen, lastSeen } from '@shared/world/story'
+import { LENS_LABELS, type Lens } from '@shared/world/templates'
+import { LENSES } from '@shared/world/lenses'
 import { api, describeError, useIpcEvent } from '../api'
-import { useOverlays } from '../components/overlays'
+import { useOverlays, type MenuItem } from '../components/overlays'
 import { RichTextField, type RichTextHandle } from '../editor/RichTextField'
 import { useAutosave, type SaveState } from '../editor/useAutosave'
-import type { Extensions } from '@tiptap/core'
+import { MentionTrigger, WorldLink, type MentionTrigger as Trigger } from '../editor/worldLink'
+import { useSettings } from '../useTheme'
+import { EntryPicker } from './EntryPicker'
+import { FactEditor } from './FactEditor'
+import { backlinks, MAX_QUICK_FACTS, shownFacts, templateOf, valueLabel } from './model'
+import { Portrait } from './Portrait'
+import { PortraitCropDialog } from './PortraitCropDialog'
+import { TextFormDialog } from './TextFormDialog'
+import type { UndoStep } from './useUndo'
+import type { WorldData } from './useWorld'
+import type { WorldActions } from './useWorldActions'
 
 type EntryPatch = IpcInput<'entry:save'>['patch']
 
-interface Section {
-  id: string
-  title: string
-  content: RichTextDoc
-}
+const BODY_EXTENSIONS = [WorldLink, MentionTrigger]
 
-/** Loads an entry, then shows it for editing. */
+/** Loads an entry, then shows it as a page. */
 export function EntryPage(props: {
-  worldId: string
+  world: WorldData
   entryId: string
-  world: WorldFile
-  entries: EntrySummary[]
-  extensions?: Extensions
+  actions: WorldActions
+  record: (step: UndoStep) => void
   onOpenEntry: (entryId: string) => void
   onOpenAppearance: (appearance: Appearance, name: string) => void
   onSaveState: (state: SaveState, error: string | null) => void
+  onDeleted: () => void
 }) {
+  const { world, entryId } = props
+  const worldId = world.view.world.id
   const [entry, setEntry] = useState<WorldEntryFile | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    api
-      .invoke('entry:read', { worldId: props.worldId, entryId: props.entryId })
-      .then(setEntry, (err) => setError(describeError(err).message))
-  }, [props.worldId, props.entryId])
+  // Bumped when the page text changed elsewhere (a merge, an undo), to reload the editor.
+  const [bodyVersion, setBodyVersion] = useState(0)
+  const knownBody = useRef<string | null>(null)
+
+  const load = useCallback(() => {
+    api.invoke('entry:read', { worldId, entryId }).then(
+      (e) => {
+        const body = JSON.stringify(e.body)
+        if (knownBody.current !== null && body !== knownBody.current) setBodyVersion((v) => v + 1)
+        knownBody.current = body
+        setEntry(e)
+        setError(null)
+      },
+      (err) => setError(describeError(err).message),
+    )
+  }, [worldId, entryId])
+  useEffect(load, [load])
+  useIpcEvent('library:changed', (c) => {
+    if (c.kind === 'entry' && c.entryId === entryId) load()
+  })
+
   if (error) return <p className="error page-message">{error}</p>
-  if (!entry) return null
-  return <EntryEditor {...props} entry={entry} />
+  if (!entry || entry.id !== entryId) return null
+  return (
+    <EntryView
+      {...props}
+      key={`${entry.id}:${bodyVersion}`}
+      entry={entry}
+      setEntry={setEntry}
+      onBodySaved={(saved) => (knownBody.current = saved)}
+    />
+  )
 }
 
-function EntryEditor(props: Parameters<typeof EntryPage>[0] & { entry: WorldEntryFile }) {
-  const { worldId, entry } = props
+function EntryView(
+  props: Parameters<typeof EntryPage>[0] & {
+    entry: WorldEntryFile
+    setEntry: (entry: WorldEntryFile) => void
+    /** The page text as last saved (to tell our own saves from changes made elsewhere). */
+    onBodySaved: (body: string) => void
+  },
+) {
+  const { world, entry, setEntry, record, actions } = props
+  const worldId = world.view.world.id
   const { settings } = useSettings()
-  const { world: worldFile, entries, onOpenEntry } = props
-  // Names of other entries mentioned in this entry's text link to them.
-  const names = useMemo(
-    () => ({
-      index: {
-        entries: new Map(entries.map((e) => [e.id, e])),
-        categories: new Map(worldFile.categories.map((c) => [c.id, c.name])),
-        terms: entryTerms(entries.filter((e) => e.id !== entry.id)),
-      },
-      enabled: settings.linkNames,
-      onOpen: onOpenEntry,
-    }),
-    [entries, worldFile, entry.id, settings.linkNames, onOpenEntry],
-  )
-  const [name, setName] = useState(entry.name)
-  const [aliases, setAliases] = useState(entry.aliases)
-  const [categoryId, setCategoryId] = useState(entry.categoryId)
-  const [sections, setSections] = useState<Section[]>(entry.sections)
-  const [related, setRelated] = useState(entry.related)
-  const [aliasDraft, setAliasDraft] = useState('')
-  const handles = useRef(new Map<string, RichTextHandle>())
-  const sectionsRef = useRef(sections)
-  useEffect(() => {
-    sectionsRef.current = sections
-  })
-  const { choose } = useOverlays()
+  const { openMenu, toast } = useOverlays()
+  const summary = world.byId.get(entry.id)
+  const template = templateOf(world, entry)
+  const [editing, setEditing] = useState<string | null>(null) // field id
+  const [renaming, setRenaming] = useState(false)
+  const [aliasDraft, setAliasDraft] = useState<string | null>(null)
+  const [picker, setPicker] = useState<'merge' | null>(null)
+  const [textForm, setTextForm] = useState<string | null>(null)
+  const [cropping, setCropping] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
 
-  const saver = useAutosave<EntryPatch>(
-    (patch) => api.invoke('entry:save', { worldId, entryId: entry.id, patch }),
-    () => {
-      const out: Section[] = []
-      for (const s of sectionsRef.current) {
-        const handle = handles.current.get(s.id)
-        const content = handle ? handle.getContent() : s.content
-        if (!content) return null // unreadable text: never overwrite it
-        out.push({ id: s.id, title: s.title, content })
+  /* ----- saving: fields at once (with undo), the page text by autosave ----- */
+
+  const save = async (patch: EntryPatch, label?: string) => {
+    const before = Object.fromEntries(
+      Object.keys(patch).map((k) => [k, entry[k as keyof WorldEntryFile]]),
+    ) as EntryPatch
+    setEntry({ ...entry, ...(patch as Partial<WorldEntryFile>) })
+    try {
+      await api.invoke('entry:save', { worldId, entryId: entry.id, patch })
+      if (label) {
+        record({
+          label,
+          undo: () => api.invoke('entry:save', { worldId, entryId: entry.id, patch: before }),
+        })
       }
-      return { sections: out }
+    } catch (err) {
+      toast(`Not saved: ${describeError(err).message}`)
+      setEntry(entry)
+    }
+  }
+
+  const body = useRef<RichTextHandle | null>(null)
+  const saver = useAutosave<EntryPatch>(
+    async (patch) => {
+      const saved = await api.invoke('entry:save', { worldId, entryId: entry.id, patch })
+      props.onBodySaved(JSON.stringify(saved.body))
+    },
+    () => {
+      const content = body.current?.getContent()
+      return content ? { body: content } : null // unreadable text: never overwrite it
     },
   )
   const { onSaveState } = props
   useEffect(() => onSaveState(saver.state, saver.error), [saver.state, saver.error, onSaveState])
 
-  const changeSections = (next: Section[]) => {
-    // Keep the latest text of each section when reordering or renaming.
-    const withText = next.map((s) => ({
-      ...s,
-      content: handles.current.get(s.id)?.getContent() ?? s.content,
+  /* ----- names on the page link to entries; `@` links anything ----- */
+
+  const names = useMemo(
+    () => ({
+      index: { world, terms: world.terms.filter((t) => t.entryId !== entry.id) },
+      enabled: settings.linkNames,
+      hoverCards: settings.world.hoverCards,
+      onOpen: props.onOpenEntry,
+    }),
+    [world, entry.id, settings.linkNames, settings.world.hoverCards, props.onOpenEntry],
+  )
+  const [trigger, setTrigger] = useState<Trigger | null>(null)
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null)
+  const attachBody = useCallback((handle: RichTextHandle | null) => {
+    body.current = handle
+    handle?.editor.commands.onMentionTrigger((t) => setTrigger(t))
+  }, [])
+  const mention = trigger && trigger.from !== dismissedAt ? trigger : null
+
+  /* ----- facts ----- */
+
+  const saveFacts = (field: TemplateField, values: FactValue[]) => {
+    setEditing(null)
+    const next = { ...entry.facts }
+    if (values.length) next[field.id] = values
+    else delete next[field.id]
+    void save({ facts: next }, `Changed ${field.label.toLowerCase()} of ${entry.name}`)
+  }
+  const createLinked = async (name: string, templateId: string) => {
+    const created = await actions.create(name, templateId)
+    return created && { ...created, snippet: '', links: [] }
+  }
+
+  const quick = shownFacts(world, entry, null, true).slice(0, MAX_QUICK_FACTS)
+  const quickIds = new Set(quick.map((f) => f.field.id))
+  const details = shownFacts(world, entry, null).filter((f) => !quickIds.has(f.field.id))
+  const empty = template.fields.filter((f) => !entry.facts[f.id]?.length)
+  const editingField = template.fields.find((f) => f.id === editing)
+
+  const addDetail = (e: React.MouseEvent) =>
+    openMenu(
+      e,
+      empty.length
+        ? empty.map((f) => ({ label: f.label, onSelect: () => setEditing(f.id) }))
+        : [{ label: 'Every detail has a value', disabled: true }],
+    )
+
+  /* ----- header actions ----- */
+
+  const changeType = (templateId: string) => {
+    const next = world.templates.get(templateId)
+    void save({ template: templateId }, `Changed ${entry.name} to ${next?.name ?? templateId}`)
+  }
+  const typeItems = (): MenuItem[] =>
+    LENSES.map((lens: Lens) => ({
+      label: LENS_LABELS[lens],
+      submenu: world.view.templates
+        .filter((t) => t.lens === lens)
+        .map((t) => ({
+          label: t.name,
+          checked: t.id === entry.template,
+          onSelect: () => changeType(t.id),
+        })),
     }))
-    setSections(withText)
-    sectionsRef.current = withText
-    saver.changeContent()
-  }
+  const typeMenu = (e: React.MouseEvent) => openMenu(e, typeItems())
 
-  const addAlias = () => {
-    const alias = aliasDraft.trim().replace(/,$/, '')
-    setAliasDraft('')
-    if (!alias || aliases.includes(alias) || alias === name) return
-    const next = [...aliases, alias]
-    setAliases(next)
-    saver.changeFields({ aliases: next })
-  }
-  const removeAlias = (alias: string) => {
-    const next = aliases.filter((a) => a !== alias)
-    setAliases(next)
-    saver.changeFields({ aliases: next })
-  }
-  const setRelatedList = (next: string[]) => {
-    setRelated(next)
-    saver.changeFields({ related: next })
-  }
+  const pinned = world.view.world.pinned.includes(entry.id)
+  const moreMenu = (e: React.MouseEvent) =>
+    openMenu(e, [
+      {
+        label: pinned ? 'Unpin' : 'Pin to the side',
+        onSelect: () => summary && void actions.pin(summary, !pinned),
+      },
+      { label: 'Rename', hint: 'F2', onSelect: () => setRenaming(true) },
+      { label: 'Change type', submenu: typeItems() },
+      {
+        label: 'Duplicate',
+        onSelect: async () => {
+          if (!summary) return
+          const copy = await actions.duplicate(summary)
+          if (copy) props.onOpenEntry(copy.id)
+        },
+      },
+      { label: 'Merge a duplicate into this…', onSelect: () => setPicker('merge') },
+      {
+        label: 'View as text',
+        onSelect: () =>
+          void api
+            .invoke('entry:text', { worldId, entryId: entry.id })
+            .then(setTextForm, (err) => toast(describeError(err).message)),
+      },
+      {
+        label: 'Delete…',
+        danger: true,
+        onSelect: async () => {
+          if (summary && (await actions.remove(summary))) props.onDeleted()
+        },
+      },
+    ])
 
-  const removeSection = async (section: Section) => {
-    const content = handles.current.get(section.id)?.getContent() ?? section.content
-    if (content.content?.some((n) => JSON.stringify(n).includes('"text"'))) {
-      const answer = await choose(
-        `Remove the section “${section.title || 'Untitled'}”?`,
-        [{ value: 'remove', label: 'Remove section', danger: true }],
-        'Its text will be deleted from this entry.',
-      )
-      if (!answer) return
+  // F2 renames.
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'F2') {
+        e.preventDefault()
+        setRenaming(true)
+      }
     }
-    changeSections(sections.filter((s) => s.id !== section.id))
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  /* ----- portrait ----- */
+
+  const setPortraitFile = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      const previous = entry.portrait
+      const saved = await api.invoke('entry:portrait', {
+        worldId,
+        entryId: entry.id,
+        data: new Uint8Array(await file.arrayBuffer()),
+      })
+      setEntry(saved)
+      record({
+        label: `Changed the portrait of ${entry.name}`,
+        undo: () =>
+          api.invoke('entry:save', { worldId, entryId: entry.id, patch: { portrait: previous } }),
+      })
+      setCropping(true)
+    } catch (err) {
+      toast(describeError(err).message)
+    }
   }
-  const moveSection = (index: number, delta: number) => {
-    const next = [...sections]
-    const [item] = next.splice(index, 1)
-    next.splice(index + delta, 0, item!)
-    changeSections(next)
+  const portraitMenu = (e: React.MouseEvent) =>
+    openMenu(e, [
+      { label: 'Choose an image…', onSelect: () => fileInput.current?.click() },
+      { label: 'Adjust crop…', disabled: !entry.portrait, onSelect: () => setCropping(true) },
+      {
+        label: 'Remove portrait',
+        disabled: !entry.portrait,
+        onSelect: () => void save({ portrait: null }, `Removed the portrait of ${entry.name}`),
+      },
+    ])
+
+  /* ----- aliases ----- */
+
+  const commitAlias = () => {
+    const alias = (aliasDraft ?? '').trim().replace(/,$/, '')
+    setAliasDraft(null)
+    if (!alias || entry.aliases.includes(alias) || alias === entry.name) return
+    void save({ aliases: [...entry.aliases, alias] }, `Added “${alias}” as another name`)
   }
 
-  const byId = new Map(props.entries.map((e) => [e.id, e]))
-  const others = props.entries.filter((e) => e.id !== entry.id && !related.includes(e.id))
+  /* ----- what links here, and the story ----- */
+
+  const touches = backlinks(world, entry.id, null)
+  const mentions = world.index?.mentions[entry.id]
+  const chapters = world.index?.chapters ?? []
+  const first = firstSeen(mentions)
+  const last = lastSeen(mentions)
+  const quotesByField = new Map<string, typeof entry.quotes>()
+  for (const q of entry.quotes) {
+    const label = q.field
+      ? (template.fields.find((f) => f.id === q.field)?.label ?? q.field)
+      : 'Notes'
+    quotesByField.set(label, [...(quotesByField.get(label) ?? []), q])
+  }
+  const removeQuote = (id: string) =>
+    void save({ quotes: entry.quotes.filter((q) => q.id !== id) }, 'Removed a quote')
+
+  const renderValues = (field: TemplateField, values: FactValue[]) =>
+    values.map((v, i) => (
+      <span key={v.id}>
+        {i > 0 && ', '}
+        {v.link && world.resolve(v.link) ? (
+          <button
+            className="link"
+            onClick={(e) => {
+              e.stopPropagation()
+              props.onOpenEntry(v.link!)
+            }}
+          >
+            {valueLabel(world, v)}
+          </button>
+        ) : (
+          <span className={v.link ? 'missing' : ''}>{valueLabel(world, v)}</span>
+        )}
+      </span>
+    ))
+  const history = (field: TemplateField) => {
+    const all = entry.facts[field.id] ?? []
+    if (field.multiple || all.length < 2) return null
+    return inTimeOrder(all, world.positions)
+      .map((v, i) => {
+        const at = v.from?.kind === 'chapter' ? world.positions.get(v.from.chapterId) : undefined
+        const when = !v.from
+          ? i === 0
+            ? 'at first'
+            : 'later'
+          : v.from.kind === 'event'
+            ? `from ${world.resolve(v.from.entryId)?.name ?? 'an event'}`
+            : at !== undefined
+              ? `from ${chapters[at]!.label}`
+              : 'from a chapter'
+        return `${valueLabel(world, v)} (${when})`
+      })
+      .join(' → ')
+  }
 
   return (
-    <article className="entry-page page">
-      <div className="entry-meta small">
-        <select
-          aria-label="Category"
-          value={categoryId ?? ''}
-          onChange={(e) => {
-            const next = e.target.value || null
-            setCategoryId(next)
-            saver.changeFields({ categoryId: next })
+    <article className="entry-page page" aria-label={entry.name}>
+      <header
+        className="entry-head"
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          void setPortraitFile(e.dataTransfer.files[0])
+        }}
+      >
+        <button
+          className="portrait-button"
+          title="Portrait: drop an image here, or click"
+          onClick={portraitMenu}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            portraitMenu(e)
           }}
         >
-          <option value="">No category</option>
-          {props.world.categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <input
-        className="chapter-title entry-name"
-        aria-label="Entry name"
-        value={name}
-        placeholder="Name"
-        onChange={(e) => {
-          setName(e.target.value)
-          if (e.target.value.trim()) saver.changeFields({ name: e.target.value })
-        }}
-        onBlur={() => void saver.flush()}
-      />
-      <div className="entry-aliases">
-        <span className="muted small">Also called</span>
-        {aliases.map((a) => (
-          <span key={a} className="chip">
-            {a}
-            <button
-              className="icon"
-              aria-label={`Remove alias ${a}`}
-              onClick={() => removeAlias(a)}
-            >
-              ✕
-            </button>
-          </span>
-        ))}
+          <Portrait worldId={worldId} name={entry.name} portrait={entry.portrait} size="large" />
+        </button>
         <input
-          className="chip-input"
-          aria-label="Add an alias"
-          placeholder={aliases.length ? 'Add another' : 'Add a nickname or other name'}
-          value={aliasDraft}
-          onChange={(e) => setAliasDraft(e.target.value)}
-          onKeyDown={(e: KeyboardEvent) => {
-            if (e.key === 'Enter' || e.key === ',') {
-              e.preventDefault()
-              addAlias()
-            }
+          ref={fileInput}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          hidden
+          onChange={(e) => {
+            void setPortraitFile(e.target.files?.[0])
+            e.target.value = ''
           }}
-          onBlur={addAlias}
         />
-      </div>
-
-      {sections.map((section, i) => (
-        <section key={section.id} className="entry-section">
-          <header className="entry-section-header">
+        <div className="entry-title">
+          {renaming ? (
             <input
-              className="entry-section-title"
-              aria-label="Section title"
-              value={section.title}
-              placeholder="Section title"
-              onChange={(e) =>
-                changeSections(
-                  sections.map((s) => (s.id === section.id ? { ...s, title: e.target.value } : s)),
-                )
-              }
+              className="entry-name-input"
+              aria-label="Entry name"
+              autoFocus
+              defaultValue={entry.name}
+              onBlur={(e) => {
+                setRenaming(false)
+                const name = e.target.value.trim()
+                if (name && name !== entry.name)
+                  void save({ name }, `Renamed ${entry.name} to ${name}`)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+                if (e.key === 'Escape') setRenaming(false)
+              }}
             />
-            <span className="entry-section-actions">
-              <button
-                className="icon"
-                title="Move up"
-                disabled={i === 0}
-                onClick={() => moveSection(i, -1)}
-              >
-                ↑
-              </button>
-              <button
-                className="icon"
-                title="Move down"
-                disabled={i === sections.length - 1}
-                onClick={() => moveSection(i, 1)}
-              >
-                ↓
-              </button>
-              <button
-                className="icon"
-                title="Remove section"
-                onClick={() => void removeSection(section)}
-              >
-                ✕
-              </button>
-            </span>
-          </header>
-          <RichTextField
-            content={section.content}
-            placeholder={`Write about ${name || 'this'}…`}
-            ariaLabel={section.title || 'Section'}
-            extensions={props.extensions}
-            names={names}
-            handle={(h) => {
-              if (h) handles.current.set(section.id, h)
-              else handles.current.delete(section.id)
-            }}
-            onChange={saver.changeContent}
-          />
-        </section>
-      ))}
-      <button
-        className="link"
-        onClick={() =>
-          changeSections([
-            ...sections,
-            { id: newId('section'), title: '', content: { type: 'doc', content: [] } },
-          ])
-        }
-      >
-        + Add section
-      </button>
-
-      <section className="entry-links">
-        <h3>Linked entries</h3>
-        <div className="row wrap">
-          {related.map((id) => (
-            <span key={id} className="chip">
-              <button className="link" onClick={() => props.onOpenEntry(id)}>
-                {byId.get(id)?.name ?? '(missing entry)'}
-              </button>
-              <button
-                className="icon"
-                aria-label={`Unlink ${byId.get(id)?.name ?? 'entry'}`}
-                onClick={() => setRelatedList(related.filter((r) => r !== id))}
-              >
-                ✕
-              </button>
-            </span>
-          ))}
-          {others.length === 0 && related.length === 0 && (
-            <span className="muted small">No other entries in this world yet.</span>
-          )}
-          {others.length > 0 && (
-            <select
-              aria-label="Link another entry"
-              value=""
-              onChange={(e) => e.target.value && setRelatedList([...related, e.target.value])}
+          ) : (
+            <h1
+              className="entry-name"
+              onDoubleClick={() => setRenaming(true)}
+              title="Double-click to rename"
             >
-              <option value="">+ Link an entry…</option>
-              {others.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
+              {entry.name}
+            </h1>
           )}
+          <div className="entry-subtitle small">
+            <button className="chip-button" onClick={typeMenu} title="Change type">
+              {template.name}
+            </button>
+            {entry.aliases.length > 0 && <span className="muted">Also called</span>}
+            {entry.aliases.map((a) => (
+              <span key={a} className="chip">
+                {a}
+                <button
+                  className="icon"
+                  aria-label={`Remove the name ${a}`}
+                  onClick={() =>
+                    void save(
+                      { aliases: entry.aliases.filter((x) => x !== a) },
+                      `Removed “${a}” as another name`,
+                    )
+                  }
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {aliasDraft === null ? (
+              <button className="link small" onClick={() => setAliasDraft('')}>
+                + another name
+              </button>
+            ) : (
+              <input
+                className="chip-input"
+                aria-label="Add another name"
+                autoFocus
+                placeholder="A nickname or other name"
+                value={aliasDraft}
+                onChange={(e) => setAliasDraft(e.target.value)}
+                onKeyDown={(e: KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault()
+                    commitAlias()
+                  }
+                  if (e.key === 'Escape') setAliasDraft(null)
+                }}
+                onBlur={commitAlias}
+              />
+            )}
+          </div>
         </div>
+        <button className="icon entry-more" aria-label="More actions" onClick={moreMenu}>
+          ⋯
+        </button>
+      </header>
+
+      <section className="quick-strip" aria-label="Quick facts">
+        {quick.map(({ field, values }) => (
+          <button key={field.id} className="quick-fact" onClick={() => setEditing(field.id)}>
+            <span className="quick-fact-label">{field.label}</span>
+            <span className="quick-fact-value">{renderValues(field, values)}</span>
+          </button>
+        ))}
+        <button className="link small add-detail" onClick={addDetail}>
+          + add detail
+        </button>
       </section>
 
-      <Appearances
-        worldId={worldId}
-        entryId={entry.id}
-        name={name}
-        onOpen={(a) => props.onOpenAppearance(a, name)}
-      />
+      {details.length > 0 && (
+        <dl className="entry-details">
+          {details.map(({ field, values }) => (
+            <div key={field.id} className="entry-detail" onClick={() => setEditing(field.id)}>
+              <dt>{field.label}</dt>
+              <dd>
+                {field.multiple && field.kind === 'text' ? (
+                  <ol>
+                    {values.map((v) => (
+                      <li key={v.id}>{v.text}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  renderValues(field, values)
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {[...quick, ...details].map(({ field }) => {
+        const h = history(field)
+        return h ? (
+          <p key={field.id} className="muted small fact-history">
+            {field.label} over time: {h}
+          </p>
+        ) : null
+      })}
+
+      {editingField && (
+        <FactEditor
+          world={world}
+          entryId={entry.id}
+          field={editingField}
+          values={entry.facts[editingField.id] ?? []}
+          onSave={(values) => saveFacts(editingField, values)}
+          onCancel={() => setEditing(null)}
+          onCreateEntry={createLinked}
+        />
+      )}
+
+      <section className="entry-body">
+        <RichTextField
+          content={entry.body}
+          placeholder={`Write about ${entry.name}… (type @ to link anything)`}
+          ariaLabel={`${entry.name}: page`}
+          extensions={BODY_EXTENSIONS}
+          names={names}
+          handle={attachBody}
+          onChange={saver.changeContent}
+        />
+        {mention && (
+          <div
+            className="mention-popup"
+            style={{
+              left: Math.min(mention.rect.left, window.innerWidth - 300),
+              top: Math.min(mention.rect.bottom + 4, window.innerHeight - 260),
+            }}
+          >
+            <EntryPicker
+              world={world}
+              query={mention.query}
+              exclude={[entry.id]}
+              onPick={(picked: EntrySummary) => {
+                body.current?.editor.commands.insertWorldLink(mention, picked.id, picked.name)
+              }}
+              onCreate={async (name) => {
+                const created = await actions.create(name, 'person')
+                if (created)
+                  body.current?.editor.commands.insertWorldLink(mention, created.id, created.name)
+              }}
+              onCancel={() => setDismissedAt(mention.from)}
+            />
+          </div>
+        )}
+      </section>
+
+      {quotesByField.size > 0 && (
+        <section className="entry-section" aria-label="From the story">
+          <h3>From the story</h3>
+          {[...quotesByField].map(([label, quotes]) => (
+            <div key={label} className="quote-group">
+              <h4 className="small muted">{label}</h4>
+              {quotes.map((q) => {
+                const at = world.positions.get(q.source.chapterId)
+                const chapter = at === undefined ? undefined : chapters[at]
+                return (
+                  <blockquote key={q.id} className="quote">
+                    <p>“{q.text}”</p>
+                    <footer className="small">
+                      {chapter ? (
+                        <button
+                          className="link"
+                          onClick={() =>
+                            props.onOpenAppearance(
+                              { chapter, position: at!, count: 0, pov: false, lines: [] },
+                              q.text.slice(0, 60),
+                            )
+                          }
+                        >
+                          {chapterName(chapter)}
+                        </button>
+                      ) : (
+                        <span className="muted">{q.source.chapterTitle || 'A chapter'}</span>
+                      )}
+                      <button
+                        className="icon"
+                        aria-label="Remove quote"
+                        onClick={() => removeQuote(q.id)}
+                      >
+                        ✕
+                      </button>
+                    </footer>
+                  </blockquote>
+                )
+              })}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {touches.length > 0 && (
+        <section className="entry-section" aria-label="Linked here">
+          <h3>Linked here</h3>
+          <dl className="entry-details">
+            {touches.map((t) => (
+              <div key={t.label} className="entry-detail static">
+                <dt>{t.label}</dt>
+                <dd>
+                  {t.entries.map((e, i) => (
+                    <span key={e.id}>
+                      {i > 0 && ', '}
+                      <button className="link" onClick={() => props.onOpenEntry(e.id)}>
+                        {e.name}
+                      </button>
+                    </span>
+                  ))}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
+      <section className="entry-section" aria-label="In the story">
+        <h3>In the story</h3>
+        {first === null ? (
+          <p className="muted small">Not in any chapter yet (of the series using this world).</p>
+        ) : (
+          <p className="small">
+            First: {chapters[first]?.label} · Last: {chapters[last!]?.label}
+            {mentions?.pov.length
+              ? ` · Point of view in ${mentions.pov.map((p) => chapters[p]?.label).join(', ')}`
+              : ''}
+          </p>
+        )}
+        <Appearances
+          worldId={worldId}
+          entryId={entry.id}
+          onOpen={(a) => props.onOpenAppearance(a, entry.name)}
+        />
+      </section>
+
+      {picker === 'merge' && summary && (
+        <div className="modal-backdrop" onMouseDown={() => setPicker(null)}>
+          <div
+            className="card stack dialog"
+            role="dialog"
+            aria-label="Merge"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3>Merge a duplicate into “{entry.name}”</h3>
+            <EntryPicker
+              world={world}
+              exclude={[entry.id]}
+              placeholder="Which entry is the duplicate?"
+              onPick={(dupe) => {
+                setPicker(null)
+                void saver.flush().then(() => actions.merge(summary, dupe))
+              }}
+              onCancel={() => setPicker(null)}
+            />
+          </div>
+        </div>
+      )}
+      {textForm !== null && (
+        <TextFormDialog
+          title={`${entry.name} as text`}
+          text={textForm}
+          onClose={() => setTextForm(null)}
+        />
+      )}
+      {cropping && entry.portrait && (
+        <PortraitCropDialog
+          worldId={worldId}
+          name={entry.name}
+          portrait={entry.portrait}
+          onDone={(next: PortraitData | null) => {
+            setCropping(false)
+            if (next) void save({ portrait: next })
+          }}
+        />
+      )}
     </article>
   )
 }
 
-/** Chapters where this entry's name or an alias appears (read-only). */
+/** Chapters where this entry is mentioned, with the lines it appears in. */
 function Appearances(props: {
   worldId: string
   entryId: string
-  name: string
   onOpen: (appearance: Appearance) => void
 }) {
   const { worldId, entryId } = props
@@ -332,36 +695,38 @@ function Appearances(props: {
     load()
     return () => clearTimeout(timer.current)
   }, [load])
-  useIpcEvent('library:changed', (c) => c.kind === 'entry' && c.entryId === entryId && load())
-
+  useIpcEvent('library:changed', (c) => {
+    if (
+      (c.kind === 'entry' && c.entryId === entryId) ||
+      c.kind === 'chapter' ||
+      c.kind === 'outline'
+    )
+      load()
+  })
+  if (!list?.length) return null
   return (
-    <section className="entry-links">
-      <h3>Appears in</h3>
-      {list === null ? (
-        <p className="muted small">Checking chapters…</p>
-      ) : list.length === 0 ? (
-        <p className="muted small">
-          “{props.name}” isn’t in any chapter yet (of the series using this world).
-        </p>
-      ) : (
-        <ul className="appearances">
-          {list.map((a) => (
-            <li key={a.chapterId}>
-              <button className="appearance" onClick={() => props.onOpen(a)}>
-                <span>
-                  <span className="muted small">
-                    {a.seriesName} › {a.volumeName} ›{' '}
-                  </span>
-                  {a.chapterTitle || 'Untitled chapter'}
-                </span>
-                <span className="muted small">
-                  {a.count} {a.count === 1 ? 'mention' : 'mentions'}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <ul className="appearances">
+      {list.map((a) => (
+        <li key={a.chapter.id}>
+          <button className="appearance" onClick={() => props.onOpen(a)}>
+            <span className="appearance-head">
+              <span>
+                {chapterName(a.chapter)}
+                <span className="muted small"> · {a.chapter.volumeName}</span>
+              </span>
+              <span className="muted small">
+                {a.pov && 'point of view · '}
+                {a.count} {a.count === 1 ? 'mention' : 'mentions'}
+              </span>
+            </span>
+            {a.lines.map((line, i) => (
+              <span key={i} className="appearance-line small">
+                {line}
+              </span>
+            ))}
+          </button>
+        </li>
+      ))}
+    </ul>
   )
 }

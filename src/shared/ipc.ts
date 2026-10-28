@@ -9,15 +9,29 @@ import { MAX_COVER_BYTES, type CoverInfo, type CoverTarget } from './media'
 import { PAGE_WIDTH, STATUS_ITEMS, type AppSettings } from './settings'
 
 export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
+import type { NameSuggestion } from './world/nameCatcher'
+import type { StoryChapter, WorldIndex } from './world/story'
 import {
+  chapterSourceSchema,
   chapterTypeSchema,
+  factValueSchema,
+  fieldIdSchema,
   id,
+  lensSchema,
+  portraitSchema,
+  quoteSchema,
+  templateFieldSchema,
   nameSchema,
   outlineFileSchema,
   richTextDocSchema,
   volumeGoalsSchema,
   type ChapterFile,
+  type ChapterSource,
+  type FactValue,
+  type InboxItem,
+  type Portrait,
   type RichTextDoc,
+  type Template,
   type OutlineFile,
   type SeriesFile,
   type VolumeFile,
@@ -134,32 +148,68 @@ export type LibraryChange =
   | { kind: 'chapter'; seriesId: string; volumeId: string; chapterId: string }
   | { kind: 'world'; worldId: string }
   | { kind: 'entry'; worldId: string; entryId: string }
+  | { kind: 'inbox'; worldId: string }
 
-/** A world entry in lists, hover cards and name matching (no full text). */
+export type { NameSuggestion, StoryChapter, WorldIndex }
+
+/** A world entry in lists, cards and name matching (everything but the page itself). */
 export interface EntrySummary {
   id: string
   name: string
   aliases: string[]
-  categoryId: string | null
-  /** The start of the entry's first section with text. */
+  template: string
+  facts: Record<string, FactValue[]>
+  /** The start of the entry's page. */
   snippet: string
+  portrait: Portrait | null
+  mergedFrom: string[]
+  /** Entries linked from the page: with `@`, or by typing their name. */
+  links: string[]
   updatedAt: string
 }
 
 export interface WorldView {
   world: WorldFile
+  /** Templates in effect: built-ins, replaced or joined by this world's own. */
+  templates: Template[]
+  /** Ids of templates saved in this world (customised or new). */
+  customTemplates: string[]
   entries: EntrySummary[]
+  /** Entry files that could not be read (left untouched on disk). */
+  problems: LibraryProblem[]
+  /** Captured items waiting in the inbox. */
+  inboxCount: number
 }
 
-/** A chapter where an entry's name (or an alias) appears. */
+/** A chapter where an entry is mentioned (or told from its point of view). */
 export interface Appearance {
-  seriesId: string
-  seriesName: string
-  volumeId: string
-  volumeName: string
-  chapterId: string
-  chapterTitle: string
+  chapter: StoryChapter
+  /** Position in the world's reading order. */
+  position: number
   count: number
+  pov: boolean
+  /** The sentences it is mentioned in (the first few). */
+  lines: string[]
+}
+
+export interface WorldInbox {
+  captured: InboxItem[]
+  /** New names from the name catcher (empty when it is turned off). */
+  names: NameSuggestion[]
+}
+
+/** What an action changed, so it can be undone. */
+export interface EntryChangeResult {
+  trash: TrashEntry
+  /** Entries as they were before (restore these to undo). */
+  before: WorldEntryFile[]
+}
+
+/** What the right-click menu can capture into, sent by a writing window. */
+export interface CaptureContext {
+  worldId: string
+  source: ChapterSource
+  targets: { entryId: string; name: string; fields: { id: string; label: string }[] }[]
 }
 
 /** What a cover belongs to. Covers live inside that item's folder. */
@@ -180,8 +230,6 @@ export const trashTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('chapter'), ...volumeRef, chapterId: id('chapter') }),
   z.object({ kind: z.literal('entry'), worldId: id('world'), entryId: id('entry') }),
 ]) satisfies z.ZodType<TrashTarget>
-
-const sectionTitle = z.string().trim().max(200)
 
 export const ipcInputs = {
   'library:status': z.void(),
@@ -231,26 +279,28 @@ export const ipcInputs = {
   }),
   'spelling:languages': z.void(),
   'world:get': z.object({ worldId: id('world') }),
-  'category:create': z.object({
+  'world:index': z.object({ worldId: id('world') }),
+  'world:digest': z.object({ worldId: id('world') }),
+  'world:pin': z.object({ worldId: id('world'), entryId: id('entry'), pinned: z.boolean() }),
+  'template:save': z.object({
     worldId: id('world'),
-    name: nameSchema,
-    /** Section titles every new entry in this category starts with. */
-    sections: z.array(sectionTitle).max(50),
+    template: z.object({
+      /** Leave out for a new template. */
+      id: z
+        .string()
+        .regex(/^[a-z][a-z0-9_-]{0,59}$/)
+        .optional(),
+      name: z.string().trim().min(1).max(60),
+      lens: lensSchema,
+      fields: z.array(templateFieldSchema.extend({ id: fieldIdSchema.optional() })).max(40),
+    }),
   }),
-  'category:update': z.object({
-    worldId: id('world'),
-    categoryId: id('category'),
-    name: nameSchema.optional(),
-    sections: z
-      .array(z.object({ id: id('section').optional(), name: nameSchema }))
-      .max(50)
-      .optional(),
-  }),
-  'category:delete': z.object({ worldId: id('world'), categoryId: id('category') }),
+  'template:delete': z.object({ worldId: id('world'), templateId: z.string().min(1).max(60) }),
   'entry:create': z.object({
     worldId: id('world'),
     name: nameSchema,
-    categoryId: id('category').nullable(),
+    template: z.string().min(1).max(60),
+    facts: z.record(fieldIdSchema, z.array(factValueSchema).max(200)).optional(),
   }),
   'entry:read': z.object({ worldId: id('world'), entryId: id('entry') }),
   'entry:save': z.object({
@@ -259,15 +309,74 @@ export const ipcInputs = {
     patch: z.object({
       name: nameSchema.optional(),
       aliases: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
-      categoryId: id('category').nullable().optional(),
-      sections: z
-        .array(z.object({ id: id('section'), title: sectionTitle, content: richTextDocSchema }))
-        .max(100)
-        .optional(),
-      related: z.array(id('entry')).max(500).optional(),
+      template: z.string().min(1).max(60).optional(),
+      facts: z.record(fieldIdSchema, z.array(factValueSchema).max(200)).optional(),
+      body: richTextDocSchema.optional(),
+      quotes: z.array(quoteSchema).max(2000).optional(),
+      portrait: portraitSchema.nullable().optional(),
+      mergedFrom: z.array(id('entry')).max(500).optional(),
     }),
   }),
   'entry:appearances': z.object({ worldId: id('world'), entryId: id('entry') }),
+  'entry:text': z.object({ worldId: id('world'), entryId: id('entry') }),
+  'entry:duplicate': z.object({ worldId: id('world'), entryId: id('entry') }),
+  'entry:merge': z.object({ worldId: id('world'), keepId: id('entry'), mergeId: id('entry') }),
+  'entry:delete': z.object({
+    worldId: id('world'),
+    entryId: id('entry'),
+    /** Also remove links to it from other entries (otherwise they show as missing). */
+    unlink: z.boolean(),
+  }),
+  'entry:portrait': z.object({
+    worldId: id('world'),
+    entryId: id('entry'),
+    data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_COVER_BYTES, {
+      message: 'That image is too large (20 MB at most).',
+    }),
+  }),
+  'entry:capture': z.object({
+    worldId: id('world'),
+    entryId: id('entry'),
+    field: fieldIdSchema.nullable(),
+    text: z.string().trim().min(1).max(5000),
+    source: chapterSourceSchema,
+  }),
+  'inbox:get': z.object({ worldId: id('world'), names: z.boolean() }),
+  'inbox:capture': z.object({
+    worldId: id('world'),
+    text: z.string().trim().min(1).max(5000),
+    source: chapterSourceSchema,
+  }),
+  'inbox:file': z.object({
+    worldId: id('world'),
+    itemId: id('inbox'),
+    entryId: id('entry'),
+    field: fieldIdSchema.nullable(),
+  }),
+  'inbox:dismiss': z.object({ worldId: id('world'), itemId: id('inbox') }),
+  'names:reject': z.object({
+    worldId: id('world'),
+    names: z.array(z.string().trim().min(1).max(200)).max(500),
+    /** False takes names off the list again (undo). */
+    rejected: z.boolean(),
+  }),
+  'capture:context': z.object({
+    context: z
+      .object({
+        worldId: id('world'),
+        source: chapterSourceSchema,
+        targets: z
+          .array(
+            z.object({
+              entryId: id('entry'),
+              name: z.string().max(200),
+              fields: z.array(z.object({ id: fieldIdSchema, label: z.string().max(60) })).max(40),
+            }),
+          )
+          .max(30),
+      })
+      .nullable(),
+  }),
   'trash:add': z.object({ target: trashTargetSchema }),
   'trash:list': z.void(),
   'trash:restore': z.object({ trashId: id('trash') }),
@@ -344,6 +453,13 @@ export const ipcInputs = {
       .optional(),
     statusBar: z.array(z.enum(STATUS_ITEMS)).max(STATUS_ITEMS.length).optional(),
     linkNames: z.boolean().optional(),
+    world: z
+      .object({
+        hoverCards: z.boolean(),
+        nameCatcher: z.boolean(),
+        quietAfter: z.number().int().min(1).max(200),
+      })
+      .optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
@@ -379,13 +495,27 @@ export interface IpcResults {
   'search:replaceAll': { chapters: number; replacements: number }
   'spelling:languages': string[]
   'world:get': WorldView
-  'category:create': WorldFile
-  'category:update': WorldFile
-  'category:delete': WorldFile
+  'world:index': WorldIndex
+  'world:digest': string
+  'world:pin': WorldFile
+  'template:save': Template
+  'template:delete': null
   'entry:create': WorldEntryFile
   'entry:read': WorldEntryFile
   'entry:save': WorldEntryFile
   'entry:appearances': Appearance[]
+  'entry:text': string
+  'entry:duplicate': WorldEntryFile
+  'entry:merge': EntryChangeResult & { kept: WorldEntryFile }
+  'entry:delete': EntryChangeResult
+  'entry:portrait': WorldEntryFile
+  'entry:capture': WorldEntryFile
+  'inbox:get': WorldInbox
+  'inbox:capture': InboxItem
+  'inbox:file': WorldEntryFile
+  'inbox:dismiss': InboxItem
+  'names:reject': null
+  'capture:context': null
   'trash:add': TrashEntry
   'trash:list': TrashEntry[]
   'trash:restore': TrashEntry
@@ -430,6 +560,8 @@ export interface IpcEvents {
   'library:changed': LibraryChange
   /** "Add to world" was chosen on selected text (from the right-click menu). */
   'text:quickAdd': string
+  /** Something was captured from the right-click menu (a short confirmation to show). */
+  'text:captured': string
   'settings:changed': AppSettings
   /** The window is about to close: save everything, then invoke `window:flushed`. */
   'window:flush': null

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  CaptureContext,
   OutlineView,
   SeriesSummary,
   VolumeStats,
   VolumeSummary,
-  WorldView as WorldData,
 } from '@shared/ipc'
 import type { OutlineArc, OutlineFile } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
@@ -26,8 +26,13 @@ import { loadLocal, saveLocal } from '../storage'
 import { MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { QuickAddDialog } from '../world/QuickAddDialog'
-import { entryTerms } from '@shared/names'
+import { nameMatcher } from '@shared/names'
 import type { NameIndex } from '../editor/NameCards'
+import { useWorld } from '../world/useWorld'
+import { useUndo } from '../world/useUndo'
+import { useWorldActions } from '../world/useWorldActions'
+import { templateOf } from '../world/model'
+import { WorldPanel, type ChapterMention } from '../world/WorldPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { SearchPanel } from './SearchPanel'
 import { SettingsWindow } from './SettingsWindow'
@@ -35,7 +40,7 @@ import { useOverlays } from './overlays'
 import { StatusBar } from './StatusBar'
 import { useLibraryActions } from './useLibraryActions'
 
-type Panel = 'binder' | 'search' | 'history' | 'diagnostics'
+type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'world'
 
 /** A chapter to open, optionally showing the first use of a name. */
 export interface ChapterTarget {
@@ -99,27 +104,12 @@ export function WritingView(props: {
   useEffect(refresh, [refresh])
   // The series' world: its entries become linked names, POV choices and names left out of analysis.
   const worldId = series.worldId
-  const [worldData, setWorldData] = useState<WorldData | null>(null)
-  const loadWorld = useCallback(() => {
-    if (worldId) api.invoke('world:get', { worldId }).then(setWorldData, () => {})
-  }, [worldId])
-  useEffect(loadWorld, [loadWorld])
-  useIpcEvent('library:changed', (c) => {
-    if ((c.kind === 'entry' || c.kind === 'world') && c.worldId === worldId) loadWorld()
-  })
-  const world = worldId && worldData?.world.id === worldId ? worldData : null
-  const nameIndex = useMemo<NameIndex | null>(
-    () =>
-      world && {
-        entries: new Map(world.entries.map((e) => [e.id, e])),
-        categories: new Map(world.world.categories.map((c) => [c.id, c.name])),
-        terms: entryTerms(world.entries),
-      },
-    [world],
-  )
+  const { data: world } = useWorld(worldId)
+  const recordUndo = useUndo()
+  const worldActions = useWorldActions(world, recordUndo)
   const names = useMemo(
     () =>
-      (world?.entries ?? []).flatMap((e) =>
+      (world?.view.entries ?? []).flatMap((e) =>
         [e.name, ...e.aliases].flatMap((n) => n.toLowerCase().match(/[\p{L}\p{N}'’-]+/gu) ?? []),
       ),
     [world],
@@ -129,6 +119,7 @@ export function WritingView(props: {
   const [quickAdd, setQuickAdd] = useState<string | null>(null)
   const startQuickAdd = (text?: string) => setQuickAdd(text ?? editor.current?.selectedText() ?? '')
   useIpcEvent('text:quickAdd', (text) => startQuickAdd(text))
+  useIpcEvent('text:captured', (message) => actions.toast(message))
   const openWorldRef = useRef(props.onOpenWorld)
   useEffect(() => {
     openWorldRef.current = props.onOpenWorld
@@ -347,7 +338,9 @@ export function WritingView(props: {
 
   // POV choices: names from the world first, then tags already used in this volume.
   const povOptions = useMemo(() => {
-    const fromWorld = (world?.entries ?? []).map((e) => e.name)
+    const fromWorld = (world?.view.entries ?? [])
+      .filter((e) => world && templateOf(world, e).lens === 'who')
+      .map((e) => e.name)
     const used = view
       ? Object.keys(view.chapters).map((id) => liveMeta[id]?.pov ?? view.chapters[id]?.pov)
       : []
@@ -355,6 +348,56 @@ export function WritingView(props: {
   }, [view, liveMeta, world])
 
   const current = selectedId ? (liveMeta[selectedId] ?? view?.chapters[selectedId]) : undefined
+
+  // The world as of this chapter: hover cards and the side panel show facts at this point.
+  const at = (selectedId ? world?.positions.get(selectedId) : undefined) ?? null
+  const nameIndex = useMemo<NameIndex | null>(
+    () => world && { world, terms: world.terms, at },
+    [world, at],
+  )
+  const chapterMentions = useMemo<ChapterMention[]>(() => {
+    if (!world) return []
+    const matcher = nameMatcher(world.terms)
+    const counts = new Map<string, number>()
+    for (const p of chapterParagraphs) {
+      for (const m of matcher.find(p)) counts.set(m.entryId, (counts.get(m.entryId) ?? 0) + 1)
+    }
+    return [...counts]
+      .map(([id, count]) => ({ entry: world.byId.get(id)!, count }))
+      .filter((m) => m.entry)
+      .sort((a, b) => b.count - a.count || a.entry.name.localeCompare(b.entry.name))
+  }, [world, chapterParagraphs])
+
+  // Tell main what the right-click menu can capture into: who's in this chapter, then recent ones.
+  const povEntryId = current?.povEntryId ?? null
+  const chapterTitle = current?.title ?? ''
+  const captureContext = useMemo<CaptureContext | null>(() => {
+    if (!world || !selectedId) return null
+    const pov = povEntryId ? world.resolve(povEntryId) : undefined
+    const entries = [...(pov ? [pov] : []), ...chapterMentions.map((m) => m.entry)].filter(
+      (e, i, list) => list.findIndex((x) => x.id === e.id) === i,
+    )
+    return {
+      worldId: world.view.world.id,
+      source: {
+        seriesId: series.id,
+        volumeId: volume.id,
+        chapterId: selectedId,
+        chapterTitle,
+      },
+      targets: entries.slice(0, 30).map((e) => ({
+        entryId: e.id,
+        name: e.name,
+        fields: templateOf(world, e)
+          .fields.filter((f) => f.kind === 'text')
+          .map((f) => ({ id: f.id, label: f.label })),
+      })),
+    }
+  }, [world, selectedId, povEntryId, chapterTitle, chapterMentions, series.id, volume.id])
+  useEffect(() => {
+    void api.invoke('capture:context', { context: captureContext }).catch(() => {})
+  }, [captureContext])
+  useEffect(() => () => void api.invoke('capture:context', { context: null }).catch(() => {}), [])
   const arc = view?.outline.items.find(
     (i) => i.type === 'arc' && selectedId && i.chapterIds.includes(selectedId),
   )
@@ -383,6 +426,21 @@ export function WritingView(props: {
       run: toggleEcho,
     },
     { id: 'diagnostics', title: 'Diagnostics', run: () => openPanel('diagnostics') },
+    ...(world
+      ? [
+          {
+            id: 'world-panel',
+            title: 'Show the world beside the page',
+            run: () => openPanel('world'),
+          },
+          ...world.view.entries.map((e) => ({
+            id: `entry:${e.id}`,
+            group: 'Go to entry',
+            title: e.aliases.length ? `${e.name} (${e.aliases.join(', ')})` : e.name,
+            run: () => props.onOpenWorld?.(e.id),
+          })),
+        ]
+      : []),
     {
       id: 'quick-add',
       title: 'Add selection to the world',
@@ -506,6 +564,16 @@ export function WritingView(props: {
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 7.5V12l3 2" />
         </RailButton>
+        {world && (
+          <RailButton
+            label="World beside the page"
+            active={panel === 'world'}
+            onClick={() => togglePanel('world')}
+          >
+            <circle cx="12" cy="12" r="8.5" />
+            <path d="M3.5 12h17M12 3.5c2.5 2.6 3.6 5.4 3.6 8.5s-1.1 5.9-3.6 8.5c-2.5-2.6-3.6-5.4-3.6-8.5s1.1-5.9 3.6-8.5z" />
+          </RailButton>
+        )}
         <span className="rail-spacer" />
         <RailButton
           label="Settings"
@@ -537,7 +605,7 @@ export function WritingView(props: {
               onTrashChapter={trashChapter}
               onDeleteArc={(arc) => void deleteArc(arc)}
               revealArcId={revealArcId}
-              entryName={(id) => nameIndex?.entries.get(id)?.name}
+              entryName={(id) => world?.resolve(id)?.name}
             />
           )}
           {panel === 'search' && (
@@ -583,6 +651,18 @@ export function WritingView(props: {
               onOpenChapter={select}
             />
           )}
+          {panel === 'world' && world && (
+            <WorldPanel
+              world={world}
+              mentions={chapterMentions}
+              povEntryId={current?.povEntryId ?? null}
+              chapterId={selectedId}
+              at={at}
+              actions={worldActions}
+              record={recordUndo}
+              onOpenEntry={(entryId) => props.onOpenWorld?.(entryId)}
+            />
+          )}
           {error && <p className="error small">{error}</p>}
         </aside>
       )}
@@ -611,6 +691,7 @@ export function WritingView(props: {
               onParagraphs={setChapterParagraphs}
               nameIndex={nameIndex}
               linkNames={settings.linkNames}
+              hoverCards={settings.world.hoverCards}
               onOpenEntry={(entryId) => props.onOpenWorld?.(entryId)}
               onSelection={setSelectionParagraphs}
             />
@@ -642,20 +723,34 @@ export function WritingView(props: {
       />
       {quickAdd !== null && (
         <QuickAddDialog
-          series={series}
-          world={world}
+          templates={world?.view.templates ?? []}
+          existing={world?.view.entries.flatMap((e) => [e.name, ...e.aliases]) ?? []}
           name={quickAdd}
-          onDone={(created) => {
-            setQuickAdd(null)
-            if (!created) return
-            actions.toast(
-              `Added “${created.name}”${created.category ? ` to ${created.category}` : ' to the world'}.`,
-              {
-                label: 'Open',
-                run: () => openWorldRef.current?.(created.entryId),
-              },
-            )
+          noWorld={
+            worldId
+              ? undefined
+              : {
+                  seriesName: series.name,
+                  onCreateWorld: async () => {
+                    try {
+                      const created = await api.invoke('world:create', {
+                        name: `${series.name} world`,
+                      })
+                      await api.invoke('series:setWorld', {
+                        seriesId: series.id,
+                        worldId: created.id,
+                      })
+                    } catch (err) {
+                      actions.toast(describeError(err).message)
+                    }
+                  },
+                }
+          }
+          onCreate={async (name, template) => {
+            const created = await worldActions.create(name, template)
+            return !!created
           }}
+          onCancel={() => setQuickAdd(null)}
         />
       )}
     </div>

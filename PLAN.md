@@ -46,7 +46,7 @@ The library holds two kinds of top-level item: **Series** (with their Volumes) a
 - **Volume:** a separate project inside a series, and its own sync and Smart Storage unit.
 - **Arc:** a collapsible group of chapters inside a volume. Arcs are labels in the volume's outline, not folders on disk.
 - **Chapter:** one file, the core writing unit. Has a type (chapter or interlude) and an optional POV tag. Scene breaks inside a chapter show as jump points in the binder; splitting into separate scenes is optional.
-- **World:** characters, places, lore, maps and the timeline, in user-defined categories. A world is its own sync unit.
+- **World:** people, places, history and systems as entries (one file each), organised by four lenses (Where, Who, When, How) with no categories to set up. Maps and time come in milestones 4b and 4d. A world is its own sync unit.
 
 ```
 library/
@@ -60,11 +60,15 @@ library/
       chapters/<chapter-id>.json   TipTap JSON + metadata (type, POV, notes)
       manifest.json             file list, versions, hashes (for sync)
   worlds/<world-id>/
-    world.json                  name, category definitions
+    world.json                  name, pinned entries
     cover.<ext>                 optional cover image
-    entries/<entry-id>.json     one file per character, place, etc.
-    maps/<map-id>.json + image  map image + pins linked to entry ids
-    timeline.json
+    entries/<entry-id>.json     one file per person, place, event, system: template, facts
+                                (with history), page text, captured quotes, portrait
+    images/<sha256>.<ext>       portraits, stored once, named by content hash
+    templates.json              customised or new templates (only once used)
+    inbox.json                  captured lines waiting to be filed (only once used)
+    rejected.json               turned-down suggestions, never shown again (only once used)
+    maps/, relationships/, …    added by milestones 4b–4d
     manifest.json
   .ember-local/                 device-only: SQLite index, outbox, trash, doodles, window layout
 ```
@@ -351,6 +355,21 @@ Also:
 - **Templates and the rejected-suggestions list** live in the world folder and sync with it.
 - **Derived data** (mentions, appearances, Cast groups, adjacency, the digest, search indexes) is rebuilt locally and never synced, except that each volume's search index and chapter summaries are kept available when the volume goes cold.
 - **Smart Storage** still treats a world as one unit; a cold world archives everything, including map images and versions.
+
+### As built in 4a
+
+Choices made while building 4a, so later steps start from what exists:
+
+- **Old test data** is not migrated. An entry file in the old format (categories and sections) is listed in World mode as unreadable and left untouched on disk; delete the old world from the bookshelf (it goes to the trash) and empty the trash to clear it.
+- **World mode opens on Where.** Until the map exists (4b), Where shows places inside places (by their "Within" fact) and a sortable list. Who opens on the Cast view; When lists eras with their events; How is a rulebook (numbered rules, costs, limits). Every lens has a List toggle.
+- **Facts over time:** each value starts "from the start", "from Ch N" or "from an event". Until events have a place on the timeline (4d), a value from an event counts as already true. Hover cards and the side panel show facts as of the chapter being written; World mode shows them as of now.
+- **Linking:** names typed on a page link like in chapters; `@` inserts an explicit link that survives renames. Both count as links in "Linked here" on the other entry.
+- **One-click capture:** right-click selected text in a chapter → "Capture to the world" → an entry from this chapter (POV first) → a field or Notes, or "Capture to the inbox". The quote keeps a link back to its chapter.
+- **The name catcher** suggests single capitalised words (names of two or more words come later). Turning one down remembers it in `rejected.json`.
+- **Merging** keeps one entry: the other's name becomes an alias, its facts, quotes and page are added, links to it move over, and it goes to the trash. Chapters are never rewritten; a POV tagged with the merged entry still resolves to the kept one.
+- **Undo** covers world actions (adding, deleting, merging, changing facts, filing, rejecting): a notice with Undo, or Ctrl/Cmd+Z outside a text field.
+- **Text forms:** "View as text" on any entry and "View the world as text" (the digest) show exactly what an AI model will be given.
+- **Settings → World:** name marks, hover cards, the name catcher, and how many chapters make someone "gone quiet" (default 10).
 
 World skins are described under Themes; the AI side of the world (readable by AI, "Update the worldbuilding", AI questions) under AI layer. Build order: milestones 4a–4e.
 

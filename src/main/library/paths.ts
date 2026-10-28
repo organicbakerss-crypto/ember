@@ -8,8 +8,10 @@ import { appConfig } from '../../../app.config'
  *   series/<series-id>/series.json
  *   series/<series-id>/volumes/<volume-id>/{volume,outline,manifest}.json
  *   series/<series-id>/volumes/<volume-id>/chapters/<chapter-id>.json
- *   worlds/<world-id>/{world,timeline,manifest}.json
+ *   worlds/<world-id>/{world,manifest}.json
+ *   worlds/<world-id>/{templates,inbox,rejected}.json   (only once used)
  *   worlds/<world-id>/entries/<entry-id>.json
+ *   worlds/<world-id>/images/<sha256>.<ext>             (portraits, stored once)
  *   <local data folder>/          device-only, never synced
  */
 export class LibraryPaths {
@@ -58,7 +60,6 @@ export const unitPaths = {
   outline: 'outline.json',
   chapter: (chapterId: string) => `chapters/${chapterId}.json`,
   world: 'world.json',
-  timeline: 'timeline.json',
   entry: (entryId: string) => `entries/${entryId}.json`,
   manifest: 'manifest.json',
 } as const

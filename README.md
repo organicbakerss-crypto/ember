@@ -23,12 +23,15 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - the command palette (Ctrl/Cmd+K)
   - a Diagnostics panel and a customisable status bar
   - Rhythm and Echo highlights (all computed locally)
-- **World core:**
-  - World mode with your own categories (section templates) and entries (sections, aliases, linked entries)
-  - appearances in chapters
-  - linked names with hover cards and Ctrl/Cmd+click
-  - quick add from selected text
-  - POV linked to characters
+- **World, step 4a (pages):**
+  - World mode in four lenses (Where, Who, When, How) plus an inbox; no categories to set up
+  - entry pages in reading mode: templates, quick facts, facts that change over time, a free-written page, portraits
+  - linking by typing names and with `@`; "Linked here" on the other side
+  - the Cast view (in the story, waiting in the wings, gone quiet, left the story) and list views
+  - the world beside the page (in this chapter; waiting and gone quiet), hover cards as of the current chapter
+  - one-click capture from a chapter, and the name catcher (new names, to the inbox)
+  - palette search, quick add (Ctrl/Cmd+Alt+N), back/forward, recent and pinned, undo, merge, safe deletes
+  - text forms of every entry and a world digest (for AI later)
 
 ## Requirements
 

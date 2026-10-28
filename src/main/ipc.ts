@@ -13,6 +13,7 @@ import type { z } from 'zod'
 import type { AppSettingsStore } from './appSettings'
 import { confirmFlushed } from './closeGuard'
 import { applySpelling } from './spelling'
+import { setCaptureContext } from './capture'
 import { AppError } from './errors'
 import type { LibraryHost } from './libraryHost'
 
@@ -73,20 +74,49 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
         input,
       ),
     'spelling:languages': () => session.defaultSession.availableSpellCheckerLanguages,
-    'world:get': (input) => host.current.getWorldView(input.worldId),
-    'category:create': (input) =>
-      host.current.createCategory(input.worldId, { name: input.name, sections: input.sections }),
-    'category:update': (input) =>
-      host.current.updateCategory(input.worldId, input.categoryId, {
-        name: input.name,
-        sections: input.sections,
-      }),
-    'category:delete': (input) => host.current.deleteCategory(input.worldId, input.categoryId),
-    'entry:create': (input) =>
-      host.current.createEntry(input.worldId, { name: input.name, categoryId: input.categoryId }),
-    'entry:read': (input) => host.current.readEntry(input.worldId, input.entryId),
-    'entry:save': (input) => host.current.saveEntry(input.worldId, input.entryId, input.patch),
-    'entry:appearances': (input) => host.current.entryAppearances(input.worldId, input.entryId),
+    'world:get': (input) => host.current.world.view(input.worldId),
+    'world:index': (input) => host.current.world.index(input.worldId),
+    'world:digest': (input) => host.current.world.digest(input.worldId),
+    'world:pin': (input) => host.current.world.pin(input.worldId, input.entryId, input.pinned),
+    'template:save': (input) => host.current.world.saveTemplate(input.worldId, input.template),
+    'template:delete': async (input) => {
+      await host.current.world.deleteTemplate(input.worldId, input.templateId)
+      return null
+    },
+    'entry:create': (input) => host.current.world.createEntry(input.worldId, input),
+    'entry:read': (input) => host.current.world.readEntry(input.worldId, input.entryId),
+    'entry:save': (input) =>
+      host.current.world.saveEntry(input.worldId, input.entryId, input.patch),
+    'entry:appearances': (input) => host.current.world.appearances(input.worldId, input.entryId),
+    'entry:text': (input) => host.current.world.entryText(input.worldId, input.entryId),
+    'entry:duplicate': (input) => host.current.world.duplicate(input.worldId, input.entryId),
+    'entry:merge': (input) => host.current.world.merge(input.worldId, input.keepId, input.mergeId),
+    'entry:delete': (input) =>
+      host.current.world.deleteEntry(input.worldId, input.entryId, input.unlink),
+    'entry:portrait': (input) =>
+      host.current.world.setPortrait(input.worldId, input.entryId, input.data),
+    'entry:capture': (input) =>
+      host.current.world.capture(
+        input.worldId,
+        input.entryId,
+        input.field,
+        input.text,
+        input.source,
+      ),
+    'inbox:get': (input) => host.current.world.inbox(input.worldId, input.names),
+    'inbox:capture': (input) =>
+      host.current.world.inboxCapture(input.worldId, input.text, input.source),
+    'inbox:file': (input) =>
+      host.current.world.inboxFile(input.worldId, input.itemId, input.entryId, input.field),
+    'inbox:dismiss': (input) => host.current.world.inboxDismiss(input.worldId, input.itemId),
+    'names:reject': async (input) => {
+      await host.current.world.rejectNames(input.worldId, input.names, input.rejected)
+      return null
+    },
+    'capture:context': (input, event) => {
+      setCaptureContext(event.sender, input.context)
+      return null
+    },
     'trash:add': (input) => host.current.moveToTrash(input.target),
     'trash:list': () => host.current.listTrash(),
     'trash:restore': (input) => host.current.restoreFromTrash(input.trashId),

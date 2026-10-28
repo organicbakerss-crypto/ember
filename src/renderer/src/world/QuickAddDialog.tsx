@@ -1,77 +1,57 @@
 import { useState, type FormEvent } from 'react'
-import type { SeriesSummary, WorldView } from '@shared/ipc'
-import { api, describeError } from '../api'
+import type { Template } from '@shared/schema'
+import { LENSES } from '@shared/world/lenses'
+import { DEFAULT_TEMPLATE, LENS_LABELS, type Lens } from '@shared/world/templates'
 
 /**
- * Quick add: turn a name selected in a chapter into a stub entry in the
- * series' world. If the series has no world yet, offers to make one.
+ * Quick add: a name and a template, from anywhere (the writing page, World
+ * mode). The caller does the creating (with undo).
  */
 export function QuickAddDialog(props: {
-  series: SeriesSummary
-  world: WorldView | null
-  name: string
-  onDone: (created?: { entryId: string; name: string; category: string | null }) => void
+  templates: Template[]
+  /** Names already in the world, to warn about duplicates. */
+  existing: string[]
+  name?: string
+  lens?: Lens
+  /** Shown when there's no world yet: makes one first. */
+  noWorld?: { seriesName: string; onCreateWorld: () => Promise<void> }
+  onCreate: (name: string, template: string) => Promise<boolean>
+  onCancel: () => void
 }) {
-  const { series } = props
-  const [world, setWorld] = useState(props.world)
-  const [name, setName] = useState(props.name)
-  const [categoryId, setCategoryId] = useState<string>(() => {
-    const categories = props.world?.world.categories ?? []
-    return (
-      (categories.find((c) => /character|people|cast/i.test(c.name)) ?? categories[0])?.id ?? ''
-    )
-  })
-  const [error, setError] = useState<string | null>(null)
-
-  const makeWorld = async () => {
-    try {
-      const created = await api.invoke('world:create', { name: `${series.name} world` })
-      await api.invoke('series:setWorld', { seriesId: series.id, worldId: created.id })
-      setWorld({ world: created, entries: [] })
-    } catch (err) {
-      setError(describeError(err).message)
-    }
-  }
+  const [name, setName] = useState(props.name ?? '')
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATE[props.lens ?? 'who'])
+  const [busy, setBusy] = useState(false)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!world) return
-    try {
-      const entry = await api.invoke('entry:create', {
-        worldId: world.world.id,
-        name,
-        categoryId: categoryId || null,
-      })
-      props.onDone({
-        entryId: entry.id,
-        name: entry.name,
-        category: world.world.categories.find((c) => c.id === categoryId)?.name ?? null,
-      })
-    } catch (err) {
-      setError(describeError(err).message)
-    }
+    if (!name.trim() || busy) return
+    setBusy(true)
+    const ok = await props.onCreate(name.trim(), template)
+    setBusy(false)
+    if (ok) props.onCancel()
   }
-
-  const existing = world?.entries.find(
-    (e) => e.name === name.trim() || e.aliases.includes(name.trim()),
-  )
+  const exists = props.existing.some((n) => n.toLowerCase() === name.trim().toLowerCase())
 
   return (
-    <div className="modal-backdrop" onMouseDown={() => props.onDone()}>
+    <div className="modal-backdrop" onMouseDown={props.onCancel}>
       <form
         className="card stack dialog"
         role="dialog"
-        aria-label="Add to world"
+        aria-label="Add to the world"
         onMouseDown={(e) => e.stopPropagation()}
         onSubmit={(e) => void submit(e)}
-        onKeyDown={(e) => e.key === 'Escape' && props.onDone()}
+        onKeyDown={(e) => e.key === 'Escape' && props.onCancel()}
       >
         <h3>Add to the world</h3>
-        {!world ? (
+        {props.noWorld ? (
           <>
-            <p className="muted">“{series.name}” isn’t linked to a world yet.</p>
-            <button type="button" className="primary" onClick={() => void makeWorld()}>
-              Create “{series.name} world”
+            <p className="muted">“{props.noWorld.seriesName}” isn’t linked to a world yet.</p>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void props.noWorld!.onCreateWorld()}
+            >
+              Create “{props.noWorld.seriesName} world”
             </button>
           </>
         ) : (
@@ -81,29 +61,31 @@ export function QuickAddDialog(props: {
               <input autoFocus required value={name} onChange={(e) => setName(e.target.value)} />
             </label>
             <label>
-              Category in {world.world.name}
-              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="">No category</option>
-                {world.world.categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
+              What is it?
+              <select value={template} onChange={(e) => setTemplate(e.target.value)}>
+                {LENSES.map((lens) => (
+                  <optgroup key={lens} label={LENS_LABELS[lens]}>
+                    {props.templates
+                      .filter((t) => t.lens === lens)
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                  </optgroup>
                 ))}
               </select>
             </label>
-            {existing && (
-              <p className="warning small">“{existing.name}” is already in this world.</p>
-            )}
+            {exists && <p className="warning small">“{name.trim()}” is already in this world.</p>}
           </>
         )}
-        {error && <p className="error">{error}</p>}
         <div className="dialog-choices">
-          {world && (
-            <button className="primary" type="submit">
+          {!props.noWorld && (
+            <button className="primary" type="submit" disabled={busy}>
               Add
             </button>
           )}
-          <button type="button" onClick={() => props.onDone()}>
+          <button type="button" onClick={props.onCancel}>
             Cancel
           </button>
         </div>

@@ -76,3 +76,24 @@ export function mimeForExtension(ext: string): string | null {
 function startsWith(bytes: Uint8Array, prefix: number[]): boolean {
   return prefix.every((value, i) => bytes[i] === value)
 }
+
+/** World images (portraits) are stored once per world, named by content hash. */
+export const WORLD_IMAGE = /^[0-9a-f]{64}\.(png|jpg|gif|webp)$/
+
+/** e.g. `library-media://world-image/<world-id>/<hash>.png` (never changes, so cached forever). */
+export function worldImageUrl(worldId: string, file: string): string {
+  return `${MEDIA_SCHEME}://world-image/${worldId}/${file}`
+}
+
+export function parseWorldImageUrl(url: string): { worldId: string; file: string } | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== `${MEDIA_SCHEME}:` || parsed.host !== 'world-image') return null
+  const [worldId, file, ...rest] = parsed.pathname.split('/').filter(Boolean)
+  if (rest.length || !worldId || !file || !WORLD_IMAGE.test(file)) return null
+  return { worldId, file }
+}

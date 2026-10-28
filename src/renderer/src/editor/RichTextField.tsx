@@ -11,7 +11,7 @@ export interface RichTextHandle {
 }
 
 /**
- * A small rich-text area (a world entry section). Same formatting and
+ * A rich-text area without a page (a world entry's page). Same formatting and
  * keyboard shortcuts as the page; no toolbar. Unknown content is shown
  * read-only and never saved.
  */
@@ -23,7 +23,12 @@ export function RichTextField(props: {
   extensions?: Extensions
   ariaLabel: string
   /** Linked names inside this text (world entries). */
-  names?: { index: NameIndex; enabled: boolean; onOpen: (entryId: string) => void }
+  names?: {
+    index: NameIndex
+    enabled: boolean
+    hoverCards?: boolean
+    onOpen: (entryId: string) => void
+  }
 }) {
   const editor = useEditor({
     extensions: [...chapterExtensions(props.placeholder), ...(props.extensions ?? [])],
@@ -52,6 +57,7 @@ export function RichTextField(props: {
           editor={editor}
           index={props.names.index}
           enabled={props.names.enabled}
+          hoverCards={props.names.hoverCards}
           onOpen={props.names.onOpen}
         />
       )}
