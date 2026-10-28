@@ -16,6 +16,7 @@ export function Bookshelf(props: {
   onOpenSeries: (series: SeriesSummary, options?: { newVolume?: boolean }) => void
   onOpenTrash: () => void
   onOpenSettings: () => void
+  onOpenWorld: (worldId: string) => void
 }) {
   const { snapshot } = props
   const [creatingSeries, setCreatingSeries] = useState(false)
@@ -141,9 +142,14 @@ export function Bookshelf(props: {
             <div key={world.id} className="shelf-item" onContextMenu={menu(worldMenu(world))}>
               <div
                 className="shelf-card"
+                role="button"
                 tabIndex={0}
-                aria-label={world.name}
-                onKeyDown={(e) => e.key === 'F2' && setRenaming(world.id)}
+                aria-label={`Open ${world.name}`}
+                onClick={() => props.onOpenWorld(world.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') props.onOpenWorld(world.id)
+                  if (e.key === 'F2') setRenaming(world.id)
+                }}
               >
                 <CoverDropZone
                   target={{ kind: 'world', worldId: world.id }}

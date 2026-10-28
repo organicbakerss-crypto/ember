@@ -7,6 +7,7 @@ import { RECALC_DELAY_MS, type ActiveEcho, type AnalysisOptions } from './analys
 import { PAPER_SIZES } from '@shared/settings'
 import { useSettings } from '../useTheme'
 import { chapterExtensions } from './extensions'
+import { NameCards, type NameIndex } from './NameCards'
 import { docWords, findScenes, type Scene } from './scenes'
 import { Toolbar } from './Toolbar'
 import { useChapterSaver, type SaveState } from './useChapterSaver'
@@ -15,6 +16,8 @@ export interface ChapterMeta {
   title: string
   type: ChapterType
   pov: string | null
+  /** The world entry the POV is, if it is one (the name shown follows the entry). */
+  povEntryId?: string | null
 }
 
 export interface EditorHandle {
@@ -27,6 +30,8 @@ export interface EditorHandle {
   /** Replaces the selection if it is the searched text. Returns whether it did. */
   replaceSelection: (replacement: string, query: string, matchCase: boolean) => boolean
   insertSceneBreak: () => void
+  /** The selected text (for quick add). */
+  selectedText: () => string
 }
 
 /** A search match to select once the chapter is open. */
@@ -42,6 +47,10 @@ interface Props {
   volumeId: string
   chapterId: string
   povOptions: string[]
+  /** Names from the world, for linked names and the POV field. */
+  nameIndex: NameIndex | null
+  linkNames: boolean
+  onOpenEntry: (entryId: string) => void
   handle: Ref<EditorHandle>
   onMeta: (meta: ChapterMeta) => void
   onWords: (words: number) => void
@@ -130,7 +139,11 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
     title: chapter.title,
     type: chapter.type,
     pov: chapter.pov,
+    povEntryId: chapter.povEntryId ?? null,
   })
+  // A linked POV shows the entry's current name, so renaming the character carries through.
+  const povLabel =
+    (meta.povEntryId && props.nameIndex?.entries.get(meta.povEntryId)?.name) || meta.pov || ''
   // Content the editor can't represent is never edited or saved.
   const [contentError, setContentError] = useState<string | null>(null)
   const unreadable = useRef(false)
@@ -285,6 +298,10 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
       editor.view.dispatch(editor.state.tr.insertText(replacement, from, to))
       return true
     },
+    selectedText() {
+      const { from, to } = editor.state.selection
+      return editor.state.doc.textBetween(from, to, ' ').trim()
+    },
     insertSceneBreak() {
       editor.chain().focus().insertSceneBreak().run()
     },
@@ -319,6 +336,12 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
           onToggleEcho={props.onToggleEcho}
         />
       )}
+      <NameCards
+        editor={editor}
+        index={props.nameIndex}
+        enabled={props.linkNames}
+        onOpen={props.onOpenEntry}
+      />
       {activeEcho && analysis.echo && (
         <div className="echo-bar small" role="status">
           <span>
@@ -383,8 +406,17 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
                 aria-label="Point of view"
                 placeholder="POV"
                 list="pov-options"
-                value={meta.pov ?? ''}
-                onChange={(e) => update({ pov: e.target.value.trim() ? e.target.value : null })}
+                value={povLabel}
+                onChange={(e) => {
+                  const pov = e.target.value.trim() ? e.target.value : null
+                  // Picking a name from the world links the POV to that entry.
+                  const entry = pov
+                    ? [...(props.nameIndex?.entries.values() ?? [])].find(
+                        (x) => x.name === pov.trim(),
+                      )
+                    : undefined
+                  update({ pov, povEntryId: entry?.id ?? null })
+                }}
               />
               <datalist id="pov-options">
                 {props.povOptions.map((p) => (

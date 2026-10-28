@@ -12,6 +12,7 @@ import { STATUS_LABELS } from '../analysisFormat'
 import { loadLocal, saveLocal } from '../storage'
 import { useSettings } from '../useTheme'
 import { SYSTEM_THEME, themes } from '../themes'
+import { MOD } from './commands'
 import { useOverlays } from './overlays'
 
 interface Category {
@@ -31,7 +32,7 @@ const CATEGORIES: Category[] = [
   { id: 'status', label: 'Status bar', render: () => <StatusBarSettings /> },
   { id: 'library', label: 'Library', render: () => <LibrarySettings /> },
   { id: 'shortcuts', label: 'Keyboard shortcuts', later: 'Change the keyboard shortcuts.' },
-  { id: 'world', label: 'World', later: 'Categories and defaults for worlds (Milestone 4).' },
+  { id: 'world', label: 'World', render: () => <WorldSettings /> },
   {
     id: 'import',
     label: 'Import & export',
@@ -319,6 +320,43 @@ function StatusBarSettings() {
           {STATUS_LABELS[item]}
         </label>
       ))}
+    </section>
+  )
+}
+
+function WorldSettings() {
+  const { settings, update } = useSettings()
+  return (
+    <section className="settings-section">
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.linkNames}
+          onChange={(e) => update({ linkNames: e.target.checked })}
+        />
+        Mark names from the world in chapters and entries
+      </label>
+      <p className="muted small">
+        Hover a marked name for a short card about it; {MOD}click it to open the entry. The marks
+        are only shown on screen, never saved into the text.
+      </p>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={!settings.analysis.includeNames}
+          onChange={(e) =>
+            update(({ analysis }) => ({
+              analysis: { ...analysis, includeNames: !e.target.checked },
+            }))
+          }
+        />
+        Leave character and place names out of Echo and repeated words
+      </label>
+      <p className="muted small">
+        Categories and their sections are set per world: right-click a category in World mode and
+        choose “Edit sections…”. To add a name from a chapter, select it and right-click → “Add to
+        the world…” ({MOD}Alt+N).
+      </p>
     </section>
   )
 }

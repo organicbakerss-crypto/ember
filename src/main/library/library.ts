@@ -31,6 +31,7 @@ import {
   type OutlineFile,
   type SeriesFile,
   type VolumeFile,
+  type WorldEntryFile,
   type WorldFile,
 } from '@shared/schema'
 import { idPattern, newId } from '@shared/ids'
@@ -39,6 +40,8 @@ import type {
   LibraryProblem,
   LibrarySnapshot,
   OutlineView,
+  Appearance,
+  EntrySummary,
   SearchResult,
   SeriesSummary,
   SnapshotInfo,
@@ -47,11 +50,13 @@ import type {
   VolumeStats,
   VolumeSummary,
   WorldSummary,
+  WorldView,
 } from '@shared/ipc'
 import { SNAPSHOT_ID } from '@shared/ipc'
 import { COVER_EXTENSIONS, detectImageType, type CoverInfo, type CoverTarget } from '@shared/media'
 import { docToText, docWordCount } from '@shared/text'
 import { docParagraphs } from '@shared/analysis/doc'
+import { entryTerms, nameMatcher } from '@shared/names'
 import {
   findInText,
   replaceInDoc,
@@ -69,7 +74,7 @@ import { LibraryPaths, unitPaths } from './paths'
 type UnitType = ManifestFile['unitType']
 
 export type ChapterPatch = Partial<
-  Pick<ChapterFile, 'title' | 'type' | 'pov' | 'notes' | 'content'>
+  Pick<ChapterFile, 'title' | 'type' | 'pov' | 'povEntryId' | 'notes' | 'content'>
 >
 
 const MAX_SEARCH_HITS = 500
@@ -112,13 +117,35 @@ function snapshotTime(snapshotId: string): Date {
   return new Date(`${date}T${h}:${m}:${sec}.${ms}Z`)
 }
 
+export type EntryPatch = Partial<
+  Pick<WorldEntryFile, 'name' | 'aliases' | 'categoryId' | 'sections' | 'related'>
+>
+
+const SNIPPET_LENGTH = 160
+
+function toEntrySummary(entry: WorldEntryFile): EntrySummary {
+  const text = entry.sections.map((s) => docParagraphs(s.content).join(' ').trim()).find(Boolean)
+  return {
+    id: entry.id,
+    name: entry.name,
+    aliases: entry.aliases,
+    categoryId: entry.categoryId,
+    snippet: text
+      ? text.length > SNIPPET_LENGTH
+        ? `${text.slice(0, SNIPPET_LENGTH)}…`
+        : text
+      : '',
+    updatedAt: entry.updatedAt,
+  }
+}
+
 const TRASH_NOTE = 'item.json'
 const TRASH_CONTENT = 'content'
 
 const trashItemSchema = z.looseObject({
   formatVersion: z.number().int().positive(),
   id: z.string().regex(idPattern('trash')),
-  kind: z.enum(['series', 'volume', 'world', 'chapter']),
+  kind: z.enum(['series', 'volume', 'world', 'chapter', 'entry']),
   name: z.string(),
   from: z.string().nullable(),
   deletedAt: z.string(),
@@ -127,6 +154,8 @@ const trashItemSchema = z.looseObject({
     volumeId: z.string().regex(idPattern('volume')).optional(),
     worldId: z.string().regex(idPattern('world')).optional(),
     chapterId: z.string().regex(idPattern('chapter')).optional(),
+    entryId: z.string().regex(idPattern('entry')).optional(),
+    categoryId: z.string().regex(idPattern('category')).nullable().optional(),
     arc: z
       .object({ id: z.string().regex(idPattern('arc')), name: z.string(), index: z.number() })
       .nullable()
@@ -326,8 +355,20 @@ export class Library {
       )
       // Unreadable chapters still appear (by id) so they are never silently lost.
       chapters[chapterId] = file
-        ? { id: file.id, title: file.title, type: file.type, pov: file.pov }
-        : { id: chapterId, title: '(unreadable chapter)', type: 'chapter', pov: null }
+        ? {
+            id: file.id,
+            title: file.title,
+            type: file.type,
+            pov: file.pov,
+            povEntryId: file.povEntryId ?? null,
+          }
+        : {
+            id: chapterId,
+            title: '(unreadable chapter)',
+            type: 'chapter',
+            pov: null,
+            povEntryId: null,
+          }
     }
 
     const seen = new Set<string>()
@@ -644,6 +685,212 @@ export class Library {
     return world
   }
 
+  /* ---------- world: categories and entries ---------- */
+
+  /** A world with a summary of every entry. Unreadable entries are left out (and reported by snapshot). */
+  async getWorldView(worldId: string): Promise<WorldView> {
+    const world = await this.getWorld(worldId)
+    const entries: EntrySummary[] = []
+    for (const entryId of await this.entryIdsOnDisk(worldId)) {
+      try {
+        const entry = await this.readEntry(worldId, entryId)
+        entries.push(toEntrySummary(entry))
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+      }
+    }
+    entries.sort(byName)
+    return { world, entries }
+  }
+
+  async readEntry(worldId: string, entryId: string): Promise<WorldEntryFile> {
+    const path = join(this.paths.worldDir(worldId), unitPaths.entry(entryId))
+    return readJsonFile(path, worldEntryFileSchema)
+  }
+
+  private async entryIdsOnDisk(worldId: string): Promise<string[]> {
+    let names: string[]
+    try {
+      names = await fs.promises.readdir(join(this.paths.worldDir(worldId), 'entries'))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw err
+    }
+    return names
+      .filter((n) => n.endsWith('.json') && !isTempFileName(n))
+      .map((n) => n.slice(0, -'.json'.length))
+  }
+
+  /** Changes world.json under the world's lock. */
+  private async updateWorldFile(
+    worldId: string,
+    change: (world: WorldFile) => WorldFile,
+  ): Promise<WorldFile> {
+    const updated = await this.lock.run(`world:${worldId}`, async () => {
+      const world = await this.getWorld(worldId)
+      const next = { ...change(world), updatedAt: this.timestamp() }
+      await this.writeWorldFile(worldId, unitPaths.world, next)
+      return next
+    })
+    this.onChange({ kind: 'world', worldId })
+    return updated
+  }
+
+  /** A new category. `sections` are the sections each new entry in it starts with. */
+  createCategory(worldId: string, input: { name: string; sections: string[] }): Promise<WorldFile> {
+    return this.updateWorldFile(worldId, (world) => ({
+      ...world,
+      categories: [
+        ...world.categories,
+        {
+          id: newId('category'),
+          name: input.name.trim(),
+          sections: input.sections
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .map((name) => ({ id: newId('section'), name })),
+        },
+      ],
+    }))
+  }
+
+  /** Renames a category or changes its section template (existing entries keep their sections). */
+  updateCategory(
+    worldId: string,
+    categoryId: string,
+    patch: { name?: string; sections?: { id?: string; name: string }[] },
+  ): Promise<WorldFile> {
+    return this.updateWorldFile(worldId, (world) => {
+      if (!world.categories.some((c) => c.id === categoryId)) {
+        throw new AppError('not-found', 'That category no longer exists.')
+      }
+      return {
+        ...world,
+        categories: world.categories.map((c) =>
+          c.id !== categoryId
+            ? c
+            : {
+                ...c,
+                ...(patch.name ? { name: patch.name.trim() } : {}),
+                ...(patch.sections
+                  ? {
+                      sections: patch.sections.map((s) => ({
+                        id: s.id ?? newId('section'),
+                        name: s.name.trim(),
+                      })),
+                    }
+                  : {}),
+              },
+        ),
+      }
+    })
+  }
+
+  /** Deletes a category. Its entries are kept, without a category. */
+  async deleteCategory(worldId: string, categoryId: string): Promise<WorldFile> {
+    const { entries } = await this.getWorldView(worldId)
+    for (const entry of entries.filter((e) => e.categoryId === categoryId)) {
+      await this.saveEntry(worldId, entry.id, { categoryId: null })
+    }
+    return this.updateWorldFile(worldId, (world) => ({
+      ...world,
+      categories: world.categories.filter((c) => c.id !== categoryId),
+    }))
+  }
+
+  /** A new entry, starting with its category's sections (empty). */
+  async createEntry(
+    worldId: string,
+    input: { name: string; categoryId: string | null },
+  ): Promise<WorldEntryFile> {
+    const world = await this.getWorld(worldId)
+    const category = world.categories.find((c) => c.id === input.categoryId)
+    if (input.categoryId && !category)
+      throw new AppError('not-found', 'That category no longer exists.')
+    const time = this.timestamp()
+    const entry: WorldEntryFile = {
+      formatVersion: FORMAT_VERSION,
+      id: newId('entry'),
+      worldId,
+      categoryId: category?.id ?? null,
+      name: input.name.trim(),
+      aliases: [],
+      sections: (category?.sections.length ? category.sections : [{ name: 'Notes' }]).map((s) => ({
+        id: newId('section'),
+        title: s.name,
+        content: emptyDoc(),
+      })),
+      related: [],
+      createdAt: time,
+      updatedAt: time,
+    }
+    await this.lock.run(`world:${worldId}`, async () => {
+      await fs.promises.mkdir(join(this.paths.worldDir(worldId), 'entries'), { recursive: true })
+      await this.writeWorldFile(worldId, unitPaths.entry(entry.id), entry)
+    })
+    this.onChange({ kind: 'entry', worldId, entryId: entry.id })
+    return entry
+  }
+
+  /** Saves changes to an entry; fields left out keep their value on disk. */
+  async saveEntry(worldId: string, entryId: string, patch: EntryPatch): Promise<WorldEntryFile> {
+    if (patch.categoryId) {
+      const world = await this.getWorld(worldId)
+      if (!world.categories.some((c) => c.id === patch.categoryId)) {
+        throw new AppError('not-found', 'That category no longer exists.')
+      }
+    }
+    const saved = await this.lock.run(`world:${worldId}`, async () => {
+      const existing = await this.readEntry(worldId, entryId)
+      const next: WorldEntryFile = {
+        ...existing,
+        ...definedOnly({
+          ...patch,
+          name: patch.name?.trim(),
+          aliases: patch.aliases && [
+            ...new Set(patch.aliases.map((a) => a.trim()).filter(Boolean)),
+          ],
+          related: patch.related && [...new Set(patch.related.filter((id) => id !== entryId))],
+        }),
+        formatVersion: FORMAT_VERSION,
+        updatedAt: this.timestamp(),
+      }
+      await this.writeWorldFile(worldId, unitPaths.entry(entryId), next)
+      return next
+    })
+    this.onChange({ kind: 'entry', worldId, entryId })
+    return saved
+  }
+
+  /**
+   * Chapters (in every series using this world) where the entry's name or an
+   * alias appears. The world only reads the manuscript, never changes it.
+   */
+  async entryAppearances(worldId: string, entryId: string): Promise<Appearance[]> {
+    const entry = await this.readEntry(worldId, entryId)
+    const matcher = nameMatcher(entryTerms([entry]))
+    const out: Appearance[] = []
+    for (const series of (await this.snapshot()).series) {
+      if (series.worldId !== worldId) continue
+      for (const volume of series.volumes) {
+        for (const chapter of await this.volumeTexts(series.id, volume.id)) {
+          const count = chapter.paragraphs.reduce((n, p) => n + matcher.find(p).length, 0)
+          if (!count) continue
+          out.push({
+            seriesId: series.id,
+            seriesName: series.name,
+            volumeId: volume.id,
+            volumeName: volume.name,
+            chapterId: chapter.id,
+            chapterTitle: chapter.title,
+            count,
+          })
+        }
+      }
+    }
+    return out
+  }
+
   /* ---------- renaming (display names only; ids and folders never change) ---------- */
 
   async renameSeries(seriesId: string, name: string): Promise<SeriesFile> {
@@ -734,6 +981,35 @@ export class Library {
           this.putInTrash(item, this.paths.worldDir(worldId)),
         )
         this.onChange({ kind: 'world', worldId })
+        break
+      }
+      case 'entry': {
+        const { worldId, entryId } = target
+        const world = await this.getWorld(worldId)
+        item = await this.lock.run(`world:${worldId}`, async () => {
+          const rel = unitPaths.entry(entryId)
+          const path = join(this.paths.worldDir(worldId), rel)
+          if (!(await pathExists(path)))
+            throw new AppError('not-found', 'That entry no longer exists.')
+          let name = '(unreadable entry)'
+          let categoryId: string | null = null
+          try {
+            const entry = await this.readEntry(worldId, entryId)
+            name = entry.name
+            categoryId = entry.categoryId
+          } catch (err) {
+            if (!(err instanceof AppError)) throw err
+          }
+          const trashed = this.newTrashItem('entry', name, world.name, {
+            worldId,
+            entryId,
+            categoryId,
+          })
+          await this.putInTrash(trashed, path)
+          await this.recordInManifest(this.worldUnit(worldId), rel, null)
+          return trashed
+        })
+        this.onChange({ kind: 'entry', worldId, entryId })
         break
       }
     }
@@ -923,6 +1199,32 @@ export class Library {
         this.onChange({ kind: 'world', worldId })
         break
       }
+      case 'entry': {
+        const worldId = origin.worldId!
+        const entryId = origin.entryId!
+        await needParent(() => this.getWorld(worldId), 'world')
+        await this.lock.run(`world:${worldId}`, async () => {
+          const rel = unitPaths.entry(entryId)
+          const dest = join(this.paths.worldDir(worldId), rel)
+          await fs.promises.mkdir(join(this.paths.worldDir(worldId), 'entries'), {
+            recursive: true,
+          })
+          await putBack(dest)
+          const bytes = await fs.promises.readFile(dest)
+          await this.recordInManifest(this.worldUnit(worldId), rel, {
+            hash: sha256(bytes),
+            size: bytes.byteLength,
+          })
+        })
+        // Its category may have been deleted meanwhile: then it comes back uncategorised.
+        const world = await this.getWorld(worldId)
+        const entry = await this.readEntry(worldId, entryId).catch(() => null)
+        if (entry?.categoryId && !world.categories.some((c) => c.id === entry.categoryId)) {
+          await this.saveEntry(worldId, entryId, { categoryId: null })
+        }
+        this.onChange({ kind: 'entry', worldId, entryId })
+        break
+      }
     }
     await fs.promises.rm(join(this.trashItemsDir, trashId), { recursive: true, force: true })
     this.onChange({ kind: 'trash' })
@@ -978,6 +1280,10 @@ export class Library {
 
   private async readTrashItem(trashId: string): Promise<TrashItem> {
     return readJsonFile(join(this.trashItemsDir, trashId, TRASH_NOTE), trashItemSchema)
+  }
+
+  private worldUnit(worldId: string): SyncUnit {
+    return { type: 'world', dir: this.paths.worldDir(worldId), id: worldId }
   }
 
   private volumeUnit(seriesId: string, volumeId: string): SyncUnit {

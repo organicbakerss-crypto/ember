@@ -65,6 +65,8 @@ interface BinderProps {
   onDeleteArc: (arc: OutlineArc) => void
   /** Unfold this arc (e.g. clicked in the breadcrumb). */
   revealArcId: string | null
+  /** Current name of a world entry (a POV linked to a character follows renames). */
+  entryName: (entryId: string) => string | undefined
 }
 
 /** Arcs and chapters, reordered by drag-and-drop. Only outline.json changes. */
@@ -90,15 +92,15 @@ export function Binder(props: BinderProps) {
   }
 
   const meta = (id: string): ChapterMeta => {
-    const live = props.liveMeta[id]
     const stored = view.chapters[id]
-    return (
-      live ?? {
-        title: stored?.title ?? '',
-        type: stored?.type ?? 'chapter',
-        pov: stored?.pov ?? null,
-      }
-    )
+    const m = props.liveMeta[id] ?? {
+      title: stored?.title ?? '',
+      type: stored?.type ?? 'chapter',
+      pov: stored?.pov ?? null,
+      povEntryId: stored?.povEntryId ?? null,
+    }
+    const linked = m.povEntryId ? props.entryName(m.povEntryId) : undefined
+    return linked ? { ...m, pov: linked } : m
   }
   const povs = useMemo(() => {
     const all = Object.keys(view.chapters).map((id) => meta(id).pov)

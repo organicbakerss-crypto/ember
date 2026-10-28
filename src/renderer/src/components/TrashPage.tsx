@@ -8,6 +8,7 @@ const KIND_LABELS: Record<TrashEntry['kind'], string> = {
   volume: 'Volume',
   world: 'World',
   chapter: 'Chapter',
+  entry: 'World entry',
 }
 
 /** Deleted items on this device. Nothing is erased until the trash is emptied. */

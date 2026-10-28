@@ -6,14 +6,28 @@ import { useCommands } from './commands'
 import { SeriesPage } from './SeriesPage'
 import { SettingsWindow } from './SettingsWindow'
 import { TrashPage } from './TrashPage'
-import { WritingView } from './WritingView'
+import { WorldView } from '../world/WorldView'
+import { WritingView, type ChapterTarget } from './WritingView'
 
 type Route =
   | { view: 'shelf' }
   | { view: 'trash' }
   | { view: 'settings' }
   | { view: 'series'; seriesId: string; newVolume?: boolean }
-  | { view: 'volume'; seriesId: string; volumeId: string }
+  | {
+      view: 'volume'
+      seriesId: string
+      volumeId: string
+      /** Open this chapter (and show the first use of `find`), e.g. from an entry's appearances. */
+      open?: ChapterTarget
+    }
+  | {
+      view: 'world'
+      worldId: string
+      entryId?: string
+      /** The volume it was opened from, for the Write/World switch. */
+      from?: { seriesId: string; volumeId: string }
+    }
 
 /** Navigation between the bookshelf, a series page, the writing view and the trash. */
 export function Home() {
@@ -56,6 +70,12 @@ export function Home() {
               run: () => setRoute({ view: 'volume', seriesId: s.id, volumeId: v.id }),
             })),
           ]),
+          ...snapshot.worlds.map((w) => ({
+            id: `world:${w.id}`,
+            group: 'Open world',
+            title: w.name,
+            run: () => setRoute({ view: 'world', worldId: w.id }),
+          })),
         ]
       : [],
   )
@@ -71,11 +91,41 @@ export function Home() {
         setRoute({ view: 'series', seriesId: series.id, newVolume: options?.newVolume })
       }
       onOpenTrash={() => setRoute({ view: 'trash' })}
+      onOpenWorld={(worldId) => setRoute({ view: 'world', worldId })}
       onOpenSettings={() => setRoute({ view: 'settings' })}
     />
   )
 
   if (route.view === 'trash') return <TrashPage onBack={toShelf} />
+  if (route.view === 'world') {
+    if (!snapshot.worlds.some((w) => w.id === route.worldId)) return shelf
+    const from = route.from
+    const fromSeries = from && snapshot.series.find((s) => s.id === from.seriesId)
+    const fromVolume = fromSeries?.volumes.find((v) => v.id === from?.volumeId)
+    return (
+      <WorldView
+        key={route.worldId}
+        worldId={route.worldId}
+        entryId={route.entryId}
+        series={snapshot.series}
+        writeLabel={fromVolume?.name}
+        onWrite={
+          from && fromVolume
+            ? () => setRoute({ view: 'volume', seriesId: from.seriesId, volumeId: from.volumeId })
+            : undefined
+        }
+        onBack={toShelf}
+        onOpenAppearance={(a, name) =>
+          setRoute({
+            view: 'volume',
+            seriesId: a.seriesId,
+            volumeId: a.volumeId,
+            open: { chapterId: a.chapterId, find: name, token: Date.now() },
+          })
+        }
+      />
+    )
+  }
   if (route.view === 'settings') {
     return (
       <main className="settings-page">
@@ -104,5 +154,24 @@ export function Home() {
 
   const volume = series.volumes.find((v) => v.id === route.volumeId)
   if (!volume) return shelf
-  return <WritingView series={series} volume={volume} onBack={toShelf} onOpenSeries={toSeries} />
+  return (
+    <WritingView
+      series={series}
+      volume={volume}
+      open={route.open}
+      onBack={toShelf}
+      onOpenSeries={toSeries}
+      onOpenWorld={
+        series.worldId
+          ? (entryId) =>
+              setRoute({
+                view: 'world',
+                worldId: series.worldId!,
+                entryId,
+                from: { seriesId: series.id, volumeId: volume.id },
+              })
+          : undefined
+      }
+    />
+  )
 }

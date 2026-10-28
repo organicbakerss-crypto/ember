@@ -106,7 +106,7 @@ Delete always moves to the local trash, with an Undo notice. Double-clicking a t
 
 - **Split screen:** open the other mode beside the current one with a shortcut or button; drag the divider to resize.
 - **Tear-off windows:** drag a pane's tab out to pop it into its own window, opened at the same route (for example `/world/<entry-id>`). Drag it back to re-dock.
-- **Internal links:** clicking a linked name in the writer opens or focuses the World pane on that entry, wherever it is (split, torn off, or not yet open).
+- **Internal links:** Ctrl/Cmd+clicking a linked name in the writer (or "Open in World" on its hover card) opens that entry: in World mode for now, and in the World pane wherever it is (split, torn off, or not yet open) once split screen exists.
 
 Layout of a writing window (there is no library sidebar; navigation goes through the bookshelf):
 
@@ -130,8 +130,8 @@ The writing surface is a **page**, not open empty space: a fixed-width sheet cen
 - **Page style:** margins, line spacing and page colour follow the theme (dark page in dark themes). The text column's width is an editor setting, 660px by default (about 60–75 characters per line, comfortable for long sessions), adjustable in Settings; the paper's height follows from its width and shape.
 - **Rich text:** bold, italic, underline, headings, scene breaks, fonts, colours, images. Stored as TipTap JSON.
 - **Autosave:** on every pause in typing; writing never waits for sync.
-- **Linked names:** names of world entries are recognised; hover shows a card, click opens the entry. "Quick add" creates a stub world entry from selected text.
-- **POV and interludes:** each chapter has a type and POV tag; the binder can filter by POV. Two chapters can open side by side.
+- **Linked names:** names and aliases of world entries are recognised (whole words, case-sensitive, possessives included) and marked with a dotted underline, in chapters and in other entries. Hover shows a card (category, aliases, opening text); Ctrl/Cmd+click opens the entry. A plain click only places the cursor, so names stay easy to edit. The marks are view-only and can be switched off in Settings → World. "Quick add" turns selected text into a stub entry: right-click → "Add to the world…", Ctrl/Cmd+Alt+N, or the command palette; it offers to create a world if the series has none.
+- **POV and interludes:** each chapter has a type and POV tag; the binder can filter by POV. The POV field suggests names from the world; picking one links the chapter to that entry by ID, so renaming the character updates the POV everywhere. Two chapters can open side by side.
 - **Spellcheck:** Google Docs style. Unknown words are flagged; right-click for suggestions or to add the word to the personal dictionary. The dictionary is part of the app settings (so it syncs with them) and can be edited in Settings, along with the language and an on/off switch. On Linux and Windows the dictionary for a language is downloaded once on first use; macOS uses the system's.
 - **Find and replace** across the whole volume (Ctrl/Cmd+F): match case and whole-word options, results grouped by chapter, click to jump to a match, replace one or replace all. Before a replace-all, every chapter it changes is snapshotted, so it can be undone from history. A match must sit inside one run of text with the same formatting.
 - **Goals:** session goal and project goal, shown in the status bar. No streaks.
@@ -154,10 +154,11 @@ Everything here is computed locally (no AI), and every number shows its unit. Th
 
 Worlds are flexible: the user creates categories as the story needs them, instead of the app shipping a fixed set of empty tabs.
 
-- **Custom categories:** characters, places, magic systems, factions, items, languages, religions, or anything else. Each category defines its own sections.
-- **Entries with subsections:** an entry can have extra subsections, for example a character's past life and current life under one entry.
-- **Links by ID:** entries link to other entries and to chapters.
-- **Appearances:** each entry lists the chapters it appears in (the World view reads the manuscript but never edits it).
+- **Custom categories:** characters, places, magic systems, factions, items, languages, religions, or anything else. Each category defines its own sections: a template that new entries start with. An empty world offers one-click starters (Characters, Places, Lore, Factions, Items) or a custom category; nothing is created until picked. Deleting a category keeps its entries, uncategorised.
+- **Entries with subsections:** an entry has a name, aliases and sections; each entry can add, rename, reorder or remove its own sections, for example a character's past life and current life under one entry. Entries autosave like chapters and go to the trash when deleted.
+- **Links by ID:** entries link to other entries (a "Linked entries" list, by ID) and, through their appearances, to chapters.
+- **Appearances:** each entry lists the chapters (in every series using the world) where its name or an alias appears, with a count; clicking one opens the chapter at the first mention. The World view reads the manuscript but never edits it.
+- **World mode:** opened from a world card on the bookshelf, the Write/World switch in the writing view, or the command palette. Categories and entries on the left (filterable, right-click menus, F2 to rename), the entry on the right.
 - **Maps:** an uploaded image with pins, each pin linked to a world entry. Maps are world data and sync with the world.
 - **Timeline:** dated or ordered events, linkable to entries and chapters.
 - **Ownership rule:** World mode edits world files; Write mode edits chapter files. Each file has one writer, so the two modes never fight over a file.

@@ -115,6 +115,8 @@ export const chapterFileSchema = z.looseObject({
   type: chapterTypeSchema,
   /** Optional POV tag. Becomes a world entry link in the World milestone. */
   pov: z.string().trim().max(200).nullable(),
+  /** The world entry the POV refers to, when it is one (so renaming the character keeps the link). */
+  povEntryId: id('entry').nullable().optional(),
   notes: z.string(),
   content: richTextDocSchema,
   createdAt: timestamp,
@@ -160,6 +162,8 @@ export const worldEntryFileSchema = z.looseObject({
   name: nameSchema,
   aliases: z.array(z.string().trim().min(1)),
   sections: z.array(entrySectionSchema),
+  /** Other entries this one is linked to, by id. */
+  related: z.array(id('entry')).default([]),
   createdAt: timestamp,
   updatedAt: timestamp,
 })

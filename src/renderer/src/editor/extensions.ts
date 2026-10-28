@@ -3,11 +3,12 @@ import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style'
 import { Placeholder } from '@tiptap/extensions'
 import type { Extensions } from '@tiptap/core'
 import { AnalysisDecorations } from './analysisDecorations'
+import { LinkedNames } from './linkedNames'
 import { Pagination } from './pagination'
 import { SceneBreak } from './sceneBreak'
 
 /** The editor's schema. Changing it changes what chapter files can contain. */
-export function chapterExtensions(): Extensions {
+export function chapterExtensions(placeholder = 'Start writing…'): Extensions {
   return [
     StarterKit.configure({
       heading: { levels: [2, 3] },
@@ -23,7 +24,8 @@ export function chapterExtensions(): Extensions {
     SceneBreak,
     AnalysisDecorations,
     Pagination,
-    Placeholder.configure({ placeholder: 'Start writing…' }),
+    LinkedNames,
+    Placeholder.configure({ placeholder }),
   ]
 }
 

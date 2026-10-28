@@ -1549,3 +1549,213 @@ kbd {
 .settings-section .segmented {
   min-width: 18rem;
 }
+
+/* ---------- world mode ---------- */
+
+.world-view {
+  display: grid;
+  grid-template-columns: 17rem 1fr;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    'top top'
+    'panel page'
+    'status status';
+  height: 100%;
+}
+.world-view .side-panel {
+  grid-area: panel;
+}
+.world-view .world-main {
+  grid-area: page;
+}
+.world-view .page-scroll {
+  height: 100%;
+}
+.world-sidebar {
+  display: grid;
+  gap: 0.6rem;
+}
+.mode-switch {
+  min-width: 9rem;
+}
+.mode-switch button {
+  padding: 0.15rem 0.6rem;
+}
+.world-overview h1 {
+  font-family: var(--page-font);
+  margin: 0 0 0.25rem;
+}
+.world-overview,
+.entry-page {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  min-height: auto;
+}
+.world-summary {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.3rem;
+}
+.row.wrap {
+  flex-wrap: wrap;
+}
+.entry-meta select {
+  width: auto;
+  padding: 0.15rem 0.35rem;
+  background: transparent;
+  color: var(--page-text);
+}
+.entry-name {
+  margin-bottom: 0;
+}
+.entry-aliases {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.1rem 0.2rem 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 0.82rem;
+}
+.chip .link {
+  padding: 0;
+  font-size: inherit;
+}
+.chip .icon {
+  font-size: 0.7rem;
+}
+.chip-input {
+  width: auto;
+  min-width: 12rem;
+  border: none;
+  background: transparent;
+  color: var(--page-text);
+  padding: 0.15rem 0.3rem;
+  font-size: 0.85rem;
+}
+.entry-section {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+.entry-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.entry-section-title {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--page-text);
+  font: 600 1.1rem var(--page-font);
+  padding: 0;
+}
+.entry-section-title:focus,
+.entry-text:focus {
+  outline: none;
+}
+.entry-section-actions {
+  display: flex;
+  opacity: 0;
+}
+.entry-section:hover .entry-section-actions,
+.entry-section:focus-within .entry-section-actions {
+  opacity: 1;
+}
+.entry-text {
+  font-family: var(--page-font);
+  font-size: var(--page-font-size);
+  line-height: var(--page-line-height);
+  min-height: 2.5em;
+  color: var(--page-text);
+}
+.entry-text p {
+  margin: 0 0 var(--page-paragraph-spacing);
+}
+.entry-text p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.entry-links {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  display: grid;
+  gap: 0.4rem;
+}
+.entry-links h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.entry-links select {
+  width: auto;
+}
+.appearances {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.appearance {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 0.3rem 0.4rem;
+  border-radius: 4px;
+  color: var(--page-text);
+}
+.appearance:hover {
+  background: var(--accent-soft);
+}
+
+/* ---------- linked names ---------- */
+
+.entity-link {
+  text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1.5px;
+}
+.name-card {
+  position: fixed;
+  z-index: 120;
+  width: 18rem;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.25);
+  font-family: var(--ui-font);
+}
+.name-card p {
+  margin: 0;
+}
+.name-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.name-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.entry-page > .link {
+  justify-self: start;
+}

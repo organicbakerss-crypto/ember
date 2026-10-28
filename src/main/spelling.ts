@@ -4,7 +4,7 @@
  * menu for text fields with suggestions and "Add to dictionary".
  */
 import { app, Menu, type BrowserWindow, type ContextMenuParams, type Session } from 'electron'
-import type { AppSettings } from '@shared/ipc'
+import { IPC_EVENT_PREFIX, type AppSettings } from '@shared/ipc'
 import type { AppSettingsStore } from './appSettings'
 
 const MAX_SUGGESTIONS = 5
@@ -64,6 +64,22 @@ export function attachTextMenu(
             window.webContents.session.addWordToSpellCheckerDictionary(word)
             onSettingsChanged(next)
           },
+        },
+        { type: 'separator' },
+      )
+    }
+    const selected = params.selectionText.trim()
+    if (
+      params.isEditable &&
+      selected.length >= 2 &&
+      selected.length <= 80 &&
+      !selected.includes('\n')
+    ) {
+      // Quick add: make a world entry from the selected name (handled by the writing view).
+      items.push(
+        {
+          label: `Add “${selected}” to the world…`,
+          click: () => window.webContents.send(`${IPC_EVENT_PREFIX}text:quickAdd`, selected),
         },
         { type: 'separator' },
       )

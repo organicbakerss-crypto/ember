@@ -148,7 +148,13 @@ describe('chapters and the outline', () => {
       { type: 'chapter', id: prologue.id },
       { type: 'arc', id: arcId, name: 'Arc 1', finished: false, chapterIds: [ch1.id] },
     ])
-    expect(chapters[ch1.id]).toEqual({ id: ch1.id, title: 'One', type: 'chapter', pov: null })
+    expect(chapters[ch1.id]).toEqual({
+      id: ch1.id,
+      title: 'One',
+      type: 'chapter',
+      pov: null,
+      povEntryId: null,
+    })
   })
 
   it('saves chapter content and keeps createdAt', async () => {

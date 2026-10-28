@@ -3,7 +3,7 @@
 A personal desktop app for writing novels and building the worlds they live in.
 See [PLAN.md](PLAN.md) for the full build plan and ground rules.
 
-**Status:** Milestones 1–3 are done.
+**Status:** Milestones 1–4 are done.
 
 - **Foundation:** library file format, main-process file service with safe
   writes, typed IPC.
@@ -23,6 +23,12 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - the command palette (Ctrl/Cmd+K)
   - a Diagnostics panel and a customisable status bar
   - Rhythm and Echo highlights (all computed locally)
+- **World core:**
+  - World mode with your own categories (section templates) and entries (sections, aliases, linked entries)
+  - appearances in chapters
+  - linked names with hover cards and Ctrl/Cmd+click
+  - quick add from selected text
+  - POV linked to characters
 
 ## Requirements
 

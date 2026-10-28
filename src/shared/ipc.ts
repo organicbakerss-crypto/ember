@@ -21,6 +21,7 @@ import {
   type OutlineFile,
   type SeriesFile,
   type VolumeFile,
+  type WorldEntryFile,
   type WorldFile,
 } from './schema'
 
@@ -62,7 +63,7 @@ export interface LibrarySnapshot {
 export interface OutlineView {
   outline: OutlineFile
   /** Chapter metadata keyed by id (no content), for drawing the binder. */
-  chapters: Record<string, Pick<ChapterFile, 'id' | 'title' | 'type' | 'pov'>>
+  chapters: Record<string, Pick<ChapterFile, 'id' | 'title' | 'type' | 'pov' | 'povEntryId'>>
   problems: LibraryProblem[]
 }
 
@@ -100,6 +101,7 @@ export type TrashTarget =
   | { kind: 'volume'; seriesId: string; volumeId: string }
   | { kind: 'world'; worldId: string }
   | { kind: 'chapter'; seriesId: string; volumeId: string; chapterId: string }
+  | { kind: 'entry'; worldId: string; entryId: string }
 
 /** An item in the device's trash. */
 export interface TrashEntry {
@@ -131,6 +133,34 @@ export type LibraryChange =
   | { kind: 'outline'; seriesId: string; volumeId: string }
   | { kind: 'chapter'; seriesId: string; volumeId: string; chapterId: string }
   | { kind: 'world'; worldId: string }
+  | { kind: 'entry'; worldId: string; entryId: string }
+
+/** A world entry in lists, hover cards and name matching (no full text). */
+export interface EntrySummary {
+  id: string
+  name: string
+  aliases: string[]
+  categoryId: string | null
+  /** The start of the entry's first section with text. */
+  snippet: string
+  updatedAt: string
+}
+
+export interface WorldView {
+  world: WorldFile
+  entries: EntrySummary[]
+}
+
+/** A chapter where an entry's name (or an alias) appears. */
+export interface Appearance {
+  seriesId: string
+  seriesName: string
+  volumeId: string
+  volumeName: string
+  chapterId: string
+  chapterTitle: string
+  count: number
+}
 
 /** What a cover belongs to. Covers live inside that item's folder. */
 export const coverTargetSchema = z.discriminatedUnion('kind', [
@@ -148,7 +178,10 @@ export const trashTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('volume'), seriesId: id('series'), volumeId: id('volume') }),
   z.object({ kind: z.literal('world'), worldId: id('world') }),
   z.object({ kind: z.literal('chapter'), ...volumeRef, chapterId: id('chapter') }),
+  z.object({ kind: z.literal('entry'), worldId: id('world'), entryId: id('entry') }),
 ]) satisfies z.ZodType<TrashTarget>
+
+const sectionTitle = z.string().trim().max(200)
 
 export const ipcInputs = {
   'library:status': z.void(),
@@ -197,6 +230,44 @@ export const ipcInputs = {
     wholeWord: z.boolean(),
   }),
   'spelling:languages': z.void(),
+  'world:get': z.object({ worldId: id('world') }),
+  'category:create': z.object({
+    worldId: id('world'),
+    name: nameSchema,
+    /** Section titles every new entry in this category starts with. */
+    sections: z.array(sectionTitle).max(50),
+  }),
+  'category:update': z.object({
+    worldId: id('world'),
+    categoryId: id('category'),
+    name: nameSchema.optional(),
+    sections: z
+      .array(z.object({ id: id('section').optional(), name: nameSchema }))
+      .max(50)
+      .optional(),
+  }),
+  'category:delete': z.object({ worldId: id('world'), categoryId: id('category') }),
+  'entry:create': z.object({
+    worldId: id('world'),
+    name: nameSchema,
+    categoryId: id('category').nullable(),
+  }),
+  'entry:read': z.object({ worldId: id('world'), entryId: id('entry') }),
+  'entry:save': z.object({
+    worldId: id('world'),
+    entryId: id('entry'),
+    patch: z.object({
+      name: nameSchema.optional(),
+      aliases: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+      categoryId: id('category').nullable().optional(),
+      sections: z
+        .array(z.object({ id: id('section'), title: sectionTitle, content: richTextDocSchema }))
+        .max(100)
+        .optional(),
+      related: z.array(id('entry')).max(500).optional(),
+    }),
+  }),
+  'entry:appearances': z.object({ worldId: id('world'), entryId: id('entry') }),
   'trash:add': z.object({ target: trashTargetSchema }),
   'trash:list': z.void(),
   'trash:restore': z.object({ trashId: id('trash') }),
@@ -222,6 +293,7 @@ export const ipcInputs = {
       title: z.string().trim().max(200).optional(),
       type: chapterTypeSchema.optional(),
       pov: z.string().trim().max(200).nullable().optional(),
+      povEntryId: id('entry').nullable().optional(),
       notes: z.string().optional(),
       content: richTextDocSchema.optional(),
     }),
@@ -271,6 +343,7 @@ export const ipcInputs = {
       })
       .optional(),
     statusBar: z.array(z.enum(STATUS_ITEMS)).max(STATUS_ITEMS.length).optional(),
+    linkNames: z.boolean().optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
@@ -305,6 +378,14 @@ export interface IpcResults {
   'search:volume': SearchResult
   'search:replaceAll': { chapters: number; replacements: number }
   'spelling:languages': string[]
+  'world:get': WorldView
+  'category:create': WorldFile
+  'category:update': WorldFile
+  'category:delete': WorldFile
+  'entry:create': WorldEntryFile
+  'entry:read': WorldEntryFile
+  'entry:save': WorldEntryFile
+  'entry:appearances': Appearance[]
   'trash:add': TrashEntry
   'trash:list': TrashEntry[]
   'trash:restore': TrashEntry
@@ -347,6 +428,8 @@ export type ErrorCode =
 
 export interface IpcEvents {
   'library:changed': LibraryChange
+  /** "Add to world" was chosen on selected text (from the right-click menu). */
+  'text:quickAdd': string
   'settings:changed': AppSettings
   /** The window is about to close: save everything, then invoke `window:flushed`. */
   'window:flush': null

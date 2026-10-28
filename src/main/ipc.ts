@@ -73,6 +73,20 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
         input,
       ),
     'spelling:languages': () => session.defaultSession.availableSpellCheckerLanguages,
+    'world:get': (input) => host.current.getWorldView(input.worldId),
+    'category:create': (input) =>
+      host.current.createCategory(input.worldId, { name: input.name, sections: input.sections }),
+    'category:update': (input) =>
+      host.current.updateCategory(input.worldId, input.categoryId, {
+        name: input.name,
+        sections: input.sections,
+      }),
+    'category:delete': (input) => host.current.deleteCategory(input.worldId, input.categoryId),
+    'entry:create': (input) =>
+      host.current.createEntry(input.worldId, { name: input.name, categoryId: input.categoryId }),
+    'entry:read': (input) => host.current.readEntry(input.worldId, input.entryId),
+    'entry:save': (input) => host.current.saveEntry(input.worldId, input.entryId, input.patch),
+    'entry:appearances': (input) => host.current.entryAppearances(input.worldId, input.entryId),
     'trash:add': (input) => host.current.moveToTrash(input.target),
     'trash:list': () => host.current.listTrash(),
     'trash:restore': (input) => host.current.restoreFromTrash(input.trashId),

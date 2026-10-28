@@ -55,6 +55,8 @@ export interface AppSettings {
   dictionary: string[]
   analysis: AnalysisSettings
   statusBar: StatusItem[]
+  /** Mark names from the world in chapters (hover for a card, Ctrl/Cmd+click to open). */
+  linkNames: boolean
 }
 
 export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const
@@ -88,4 +90,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   dictionary: [],
   analysis: DEFAULT_ANALYSIS,
   statusBar: DEFAULT_STATUS_BAR,
+  linkNames: true,
 }

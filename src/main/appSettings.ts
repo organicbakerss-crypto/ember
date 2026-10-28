@@ -45,6 +45,7 @@ const appSettingsSchema = z.looseObject({
   dictionary: z.array(z.string()).catch([]).default([]),
   analysis: analysisSettingsSchema.catch(DEFAULT_ANALYSIS).default(DEFAULT_ANALYSIS),
   statusBar: z.array(z.enum(STATUS_ITEMS)).catch(DEFAULT_STATUS_BAR).default(DEFAULT_STATUS_BAR),
+  linkNames: z.boolean().catch(true).default(true),
 })
 
 export class AppSettingsStore {

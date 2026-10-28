@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { OutlineView, SeriesSummary, VolumeStats, VolumeSummary } from '@shared/ipc'
+import type {
+  OutlineView,
+  SeriesSummary,
+  VolumeStats,
+  VolumeSummary,
+  WorldView as WorldData,
+} from '@shared/ipc'
 import type { OutlineArc, OutlineFile } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
 import { Binder } from '../binder/Binder'
@@ -19,6 +25,9 @@ import { useSettings } from '../useTheme'
 import { loadLocal, saveLocal } from '../storage'
 import { MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
+import { QuickAddDialog } from '../world/QuickAddDialog'
+import { entryTerms } from '@shared/names'
+import type { NameIndex } from '../editor/NameCards'
 import { HistoryPanel } from './HistoryPanel'
 import { SearchPanel } from './SearchPanel'
 import { SettingsWindow } from './SettingsWindow'
@@ -28,12 +37,22 @@ import { useLibraryActions } from './useLibraryActions'
 
 type Panel = 'binder' | 'search' | 'history' | 'diagnostics'
 
+/** A chapter to open, optionally showing the first use of a name. */
+export interface ChapterTarget {
+  chapterId: string
+  find?: string
+  token: number
+}
+
 /** Write mode: top bar, icon rail, side panel (binder), the page, and the status bar. */
 export function WritingView(props: {
   series: SeriesSummary
   volume: VolumeSummary
   /** Back to the bookshelf. */
   onBack: () => void
+  open?: ChapterTarget
+  /** Switch to World mode (the series' world), optionally at an entry. */
+  onOpenWorld?: (entryId?: string) => void
   onOpenSeries: () => void
 }) {
   const { series, volume } = props
@@ -67,7 +86,6 @@ export function WritingView(props: {
   const [rhythm, setRhythm] = useState(() => loadLocal('writing.rhythm') === 'on')
   const [echo, setEcho] = useState(() => loadLocal('writing.echo') === 'on')
   const [highlightStem, setHighlightStem] = useState<string | null>(null)
-  const [names, setNames] = useState<string[]>([])
   const [chapterParagraphs, setChapterParagraphs] = useState<string[]>([])
   const [selectionParagraphs, setSelectionParagraphs] = useState<string[] | null>(null)
   const { settings } = useSettings()
@@ -79,9 +97,42 @@ export function WritingView(props: {
     api.invoke('volume:stats', ref).then(setStats, () => {})
   }, [ref])
   useEffect(refresh, [refresh])
+  // The series' world: its entries become linked names, POV choices and names left out of analysis.
+  const worldId = series.worldId
+  const [worldData, setWorldData] = useState<WorldData | null>(null)
+  const loadWorld = useCallback(() => {
+    if (worldId) api.invoke('world:get', { worldId }).then(setWorldData, () => {})
+  }, [worldId])
+  useEffect(loadWorld, [loadWorld])
+  useIpcEvent('library:changed', (c) => {
+    if ((c.kind === 'entry' || c.kind === 'world') && c.worldId === worldId) loadWorld()
+  })
+  const world = worldId && worldData?.world.id === worldId ? worldData : null
+  const nameIndex = useMemo<NameIndex | null>(
+    () =>
+      world && {
+        entries: new Map(world.entries.map((e) => [e.id, e])),
+        categories: new Map(world.world.categories.map((c) => [c.id, c.name])),
+        terms: entryTerms(world.entries),
+      },
+    [world],
+  )
+  const names = useMemo(
+    () =>
+      (world?.entries ?? []).flatMap((e) =>
+        [e.name, ...e.aliases].flatMap((n) => n.toLowerCase().match(/[\p{L}\p{N}'’-]+/gu) ?? []),
+      ),
+    [world],
+  )
+
+  // Quick add: a selected name becomes a world entry.
+  const [quickAdd, setQuickAdd] = useState<string | null>(null)
+  const startQuickAdd = (text?: string) => setQuickAdd(text ?? editor.current?.selectedText() ?? '')
+  useIpcEvent('text:quickAdd', (text) => startQuickAdd(text))
+  const openWorldRef = useRef(props.onOpenWorld)
   useEffect(() => {
-    api.invoke('volume:names', ref).then(setNames, () => {})
-  }, [ref])
+    openWorldRef.current = props.onOpenWorld
+  })
 
   const toggleRhythm = () =>
     setRhythm((on) => {
@@ -134,6 +185,26 @@ export function WritingView(props: {
     return chapterOrder(toContainers(view.outline))[0] ?? null
   }, [view, chosenId])
 
+  // Open a chapter asked for from elsewhere (an entry's appearances), at the first mention.
+  const { open } = props
+  const [openToken, setOpenToken] = useState<number | null>(null)
+  if (open && open.token !== openToken) {
+    setOpenToken(open.token)
+    setChosenId(open.chapterId)
+  }
+  useEffect(() => {
+    if (!open?.find) return
+    api
+      .invoke('search:volume', { ...ref, query: open.find, matchCase: true, wholeWord: true })
+      .then(
+        (result) => {
+          const hit = result.hits.find((h) => h.chapterId === open.chapterId)
+          if (hit) setReveal({ ...hit, token: Date.now() })
+        },
+        () => {},
+      )
+  }, [open, ref])
+
   const select = (chapterId: string) => {
     setChosenId(chapterId)
     setScenes([])
@@ -168,6 +239,7 @@ export function WritingView(props: {
       else if (modKey(e) && !e.shiftKey && (key === 'f' || key === 'h')) openSearch()
       else if (modKey(e) && e.altKey && e.code === 'KeyR') toggleRhythm()
       else if (modKey(e) && e.altKey && e.code === 'KeyE') toggleEcho()
+      else if (modKey(e) && e.altKey && e.code === 'KeyN') startQuickAdd()
       else if (e.key === 'Escape' && focusMode) setFocusMode(false)
       else return
       e.preventDefault()
@@ -273,11 +345,14 @@ export function WritingView(props: {
     [],
   )
 
+  // POV choices: names from the world first, then tags already used in this volume.
   const povOptions = useMemo(() => {
-    if (!view) return []
-    const all = Object.keys(view.chapters).map((id) => liveMeta[id]?.pov ?? view.chapters[id]?.pov)
-    return [...new Set(all.filter((p): p is string => !!p))].sort()
-  }, [view, liveMeta])
+    const fromWorld = (world?.entries ?? []).map((e) => e.name)
+    const used = view
+      ? Object.keys(view.chapters).map((id) => liveMeta[id]?.pov ?? view.chapters[id]?.pov)
+      : []
+    return [...new Set([...fromWorld, ...used.filter((p): p is string => !!p).sort()])]
+  }, [view, liveMeta, world])
 
   const current = selectedId ? (liveMeta[selectedId] ?? view?.chapters[selectedId]) : undefined
   const arc = view?.outline.items.find(
@@ -308,6 +383,15 @@ export function WritingView(props: {
       run: toggleEcho,
     },
     { id: 'diagnostics', title: 'Diagnostics', run: () => openPanel('diagnostics') },
+    {
+      id: 'quick-add',
+      title: 'Add selection to the world',
+      shortcut: `${MOD}Alt+N`,
+      run: () => startQuickAdd(),
+    },
+    ...(props.onOpenWorld
+      ? [{ id: 'world', title: 'Switch to World mode', run: () => props.onOpenWorld?.() }]
+      : []),
     {
       id: 'scene-break',
       title: 'Insert scene break',
@@ -380,6 +464,22 @@ export function WritingView(props: {
             </>
           )}
         </nav>
+        <span className="status-spacer" />
+        {props.onOpenWorld && (
+          <div className="segmented mode-switch" role="radiogroup" aria-label="Mode">
+            <button role="radio" aria-checked className="active">
+              Write
+            </button>
+            <button
+              role="radio"
+              aria-checked={false}
+              onClick={() => props.onOpenWorld?.()}
+              title="Open this series' world"
+            >
+              World
+            </button>
+          </div>
+        )}
       </header>
 
       <nav className="icon-rail" aria-label="Panels">
@@ -437,6 +537,7 @@ export function WritingView(props: {
               onTrashChapter={trashChapter}
               onDeleteArc={(arc) => void deleteArc(arc)}
               revealArcId={revealArcId}
+              entryName={(id) => nameIndex?.entries.get(id)?.name}
             />
           )}
           {panel === 'search' && (
@@ -508,6 +609,9 @@ export function WritingView(props: {
               onToggleRhythm={toggleRhythm}
               onToggleEcho={toggleEcho}
               onParagraphs={setChapterParagraphs}
+              nameIndex={nameIndex}
+              linkNames={settings.linkNames}
+              onOpenEntry={(entryId) => props.onOpenWorld?.(entryId)}
               onSelection={setSelectionParagraphs}
             />
           ) : (
@@ -536,6 +640,24 @@ export function WritingView(props: {
         saveError={save.error}
         onOpenDiagnostics={() => openPanel('diagnostics')}
       />
+      {quickAdd !== null && (
+        <QuickAddDialog
+          series={series}
+          world={world}
+          name={quickAdd}
+          onDone={(created) => {
+            setQuickAdd(null)
+            if (!created) return
+            actions.toast(
+              `Added “${created.name}”${created.category ? ` to ${created.category}` : ' to the world'}.`,
+              {
+                label: 'Open',
+                run: () => openWorldRef.current?.(created.entryId),
+              },
+            )
+          }}
+        />
+      )}
     </div>
   )
 }
