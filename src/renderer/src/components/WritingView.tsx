@@ -27,6 +27,7 @@ import { MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { QuickAddDialog } from '../world/QuickAddDialog'
 import { nameMatcher } from '@shared/names'
+import { guessTemplate } from '@shared/world/guess'
 import type { NameIndex } from '../editor/NameCards'
 import { useWorld } from '../world/useWorld'
 import { useUndo } from '../world/useUndo'
@@ -116,8 +117,11 @@ export function WritingView(props: {
   )
 
   // Quick add: a selected name becomes a world entry.
-  const [quickAdd, setQuickAdd] = useState<string | null>(null)
-  const startQuickAdd = (text?: string) => setQuickAdd(text ?? editor.current?.selectedText() ?? '')
+  const [quickAdd, setQuickAdd] = useState<{ name: string; guess: string | null } | null>(null)
+  const startQuickAdd = (text?: string) => {
+    const name = text ?? editor.current?.selectedText() ?? ''
+    setQuickAdd({ name, guess: guessTemplate(name, editor.current?.textBeforeSelection() ?? '') })
+  }
   useIpcEvent('text:quickAdd', (text) => startQuickAdd(text))
   useIpcEvent('text:captured', (message) => actions.toast(message))
   const openWorldRef = useRef(props.onOpenWorld)
@@ -725,7 +729,8 @@ export function WritingView(props: {
         <QuickAddDialog
           templates={world?.view.templates ?? []}
           existing={world?.view.entries.flatMap((e) => [e.name, ...e.aliases]) ?? []}
-          name={quickAdd}
+          name={quickAdd.name}
+          template={quickAdd.guess}
           noWorld={
             worldId
               ? undefined

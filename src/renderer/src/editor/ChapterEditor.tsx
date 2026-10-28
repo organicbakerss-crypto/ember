@@ -32,6 +32,8 @@ export interface EditorHandle {
   insertSceneBreak: () => void
   /** The selected text (for quick add). */
   selectedText: () => string
+  /** The text just before the selection, in the same paragraph (to guess what a name is). */
+  textBeforeSelection: () => string
 }
 
 /** A search match to select once the chapter is open. */
@@ -303,6 +305,10 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
     selectedText() {
       const { from, to } = editor.state.selection
       return editor.state.doc.textBetween(from, to, ' ').trim()
+    },
+    textBeforeSelection() {
+      const { $from } = editor.state.selection
+      return $from.parent.textBetween(Math.max(0, $from.parentOffset - 40), $from.parentOffset, ' ')
     },
     insertSceneBreak() {
       editor.chain().focus().insertSceneBreak().run()

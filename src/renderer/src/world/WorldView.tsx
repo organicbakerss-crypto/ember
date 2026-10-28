@@ -62,7 +62,11 @@ export function WorldView(props: {
     state: 'saved',
     error: null,
   })
-  const [quickAdd, setQuickAdd] = useState<{ lens?: Lens; name?: string } | null>(null)
+  const [quickAdd, setQuickAdd] = useState<{
+    lens?: Lens
+    name?: string
+    template?: string
+  } | null>(null)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [digest, setDigest] = useState<string | null>(null)
 
@@ -383,7 +387,8 @@ export function WorldView(props: {
         <QuickAddDialog
           templates={view.templates}
           existing={view.entries.flatMap((e) => [e.name, ...e.aliases])}
-          lens={quickAdd.lens ?? currentLens ?? undefined}
+          lens={quickAdd.lens}
+          template={quickAdd.template}
           name={quickAdd.name}
           onCreate={async (name, template) => {
             const created = await actions.create(name, template)

@@ -71,12 +71,7 @@ export function attachTextMenu(
       )
     }
     const selected = params.selectionText.trim()
-    if (
-      params.isEditable &&
-      selected.length >= 2 &&
-      selected.length <= 80 &&
-      !selected.includes('\n')
-    ) {
+    if (params.isEditable && looksLikeName(selected)) {
       // Quick add: make a world entry from the selected name (handled by the writing view).
       items.push(
         {
@@ -101,4 +96,10 @@ export function attachTextMenu(
     }
     if (items.length) Menu.buildFromTemplate(items).popup({ window })
   })
+}
+
+/** A short selection that could be a name ("Mara Voss", "the Iron Guild"), not a sentence. */
+export function looksLikeName(text: string): boolean {
+  const words = text.split(/\s+/).filter(Boolean)
+  return text.length >= 2 && text.length <= 60 && words.length <= 5 && !/\n|[.!?;:]$/.test(text)
 }
