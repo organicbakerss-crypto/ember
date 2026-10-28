@@ -152,17 +152,209 @@ Everything here is computed locally (no AI), and every number shows its unit. Th
 
 ## Worldbuilding
 
-Worlds are flexible: the user creates categories as the story needs them, instead of the app shipping a fixed set of empty tabs.
+The milestone 4 that was built works, but in use it feels like a filing cabinet: a blank form, generic text boxes, and a separate room the writer never visits. This redesign keeps the same ground rules (core stays basic, never lose words, light branding, local-first) and replaces the World experience.
 
-- **Custom categories:** characters, places, magic systems, factions, items, languages, religions, or anything else. Each category defines its own sections: a template that new entries start with. An empty world offers one-click starters (Characters, Places, Lore, Factions, Items) or a custom category; nothing is created until picked. Deleting a category keeps its entries, uncategorised.
-- **Entries with subsections:** an entry has a name, aliases and sections; each entry can add, rename, reorder or remove its own sections, for example a character's past life and current life under one entry. Entries autosave like chapters and go to the trash when deleted.
-- **Links by ID:** entries link to other entries (a "Linked entries" list, by ID) and, through their appearances, to chapters.
-- **Appearances:** each entry lists the chapters (in every series using the world) where its name or an alias appears, with a count; clicking one opens the chapter at the first mention. The World view reads the manuscript but never edits it.
-- **World mode:** opened from a world card on the bookshelf, the Write/World switch in the writing view, or the command palette. Categories and entries on the left (filterable, right-click menus, F2 to rename), the entry on the right.
-- **Maps:** an uploaded image with pins, each pin linked to a world entry. Maps are world data and sync with the world.
-- **Timeline:** dated or ordered events, linkable to entries and chapters.
+### Goals
+
+1. **Explore, don't file.** World mode should feel like travelling through the world, not filling in forms.
+2. **It should feel like the story.** World mode takes on the look and language of the theme (fantasy, cyberpunk, arcade).
+3. **The world comes to the writer.** Most day-to-day worldbuilding happens beside the page, not in a separate mode.
+4. **Little typing.** Certain facts fill in automatically; everything else is captured in a click or suggested for approval.
+5. **Never wrong on its own.** The app only fills in what it knows for certain. Anything guessed is a suggestion until accepted.
+6. **Readable by AI.** Every visual feature also exists as text and links, so Ollama or ChatGPT can understand the whole world without seeing images.
+
+### Clear the test data
+
+The existing world data (Mara Voss, The Shattered Isles, etc.) is test data created during development. No migration is needed; remove it.
+
+### Entries: pages, not forms
+
+Every person, place, faction, event and system is an entry, stored as one small file.
+
+- **Reading mode by default.** A page shows only what has been written, laid out like part of the world. Empty fields are hidden; a single "+ add detail" adds one. Inputs appear only when you click something to edit it.
+- **A page you write.** Each entry has a free-written body (like a chapter), not a stack of text boxes.
+- **Quick facts strip.** 3–5 key facts at the top from the entry's template. These show in hover cards.
+- **Linking by typing.** Names of existing entries in world pages are recognised and linked, the same way they are in chapters. Typing `@` opens a picker to link anything explicitly.
+- **Facts that change over time.** A fact can have a history, each value with "from chapter X" or "from event Y" (location, status, ruler, allegiance). Everything that displays the fact shows the value for the selected moment (see Time).
+- **Portraits and images.** Drag an image onto an entry to set its portrait, with simple cropping.
+
+#### Templates
+
+Templates decide which quick facts an entry shows. Most fields are **links** to other entries, not text, so the map, board and timeline can draw them. When creating, the app guesses the template from context (a region on a world map defaults to Kingdom; inside a city, District), and you can change it.
+
+| Lens | Templates | Key fields (→ = link) |
+| --- | --- | --- |
+| Where | Continent, Kingdom, City, District, Landmark, Wilds | within →, ruled by →, population, climate, known for |
+| Who | Person, Faction, Family, Creature | home →, member of →, leader →, territory →, status, role |
+| When | Era, Event | era →, where →, who was involved →, outcome |
+| How | Magic, Religion, Law, Technology, Custom | rules, costs, limits, who can use it →, where it works → |
+
+Every template keeps a free notes area. Templates are editable, users can make their own, and customised templates are saved into the world folder (so they travel with it).
+
+### The four lenses
+
+World mode is organised around four questions, each a visual space. What you create is decided by where you create it, so there is no category setup.
+
+#### Where: the map (the front door)
+
+Opening World mode lands on the world map. You travel instead of browsing folders.
+
+- **Places are locations you visit.** A place shows who is there (at the selected moment), what happened there, what is inside it, and **what's nearby** as exits. Moving between neighbouring places, or stepping back out to the parent, is how you navigate.
+- **Interactive regions.** Import a map image, then detect regions:
+  - **Auto-detect all** finds every area enclosed by border lines (best on clean, flat-colour maps).
+  - **Magic wand:** click inside a region to fill just that area, with a tolerance slider.
+  - **Fix-up tools:** merge regions, split a region by drawing a line, trace a region by hand.
+  - Detection runs locally with OpenCV.js. No AI, no internet.
+- Regions are saved as **vector outlines**, separate from the image. Hovering a region highlights it and shows its name; clicking opens its place. Each region links to a place entry (existing or new).
+- **Nested maps:** a region can link to its own sub-map (click a kingdom to open the kingdom's map).
+- **Territory colours:** regions can be tinted by the faction that rules them.
+- **Who's where:** portraits sit on the map at each person's location at the selected moment.
+- **Unplaced tray:** people without a location wait at the edge of the map; drag one onto a place to set it.
+- **Event pins:** events with a "where" show as markers.
+- **No map yet?** Start with a **travel sketch**: places as dots joined by roads. It can be replaced by a real map later.
+
+#### Who: the Cast view and the people board
+
+**Cast view (the default for Who).** Every person, grouped automatically using only certain data (where they have actually been mentioned):
+
+- **In the story:** appeared recently.
+- **Waiting in the wings:** created but not yet mentioned in any chapter.
+- **Gone quiet:** appeared before, but not mentioned in the last 10 chapters (adjustable).
+- **Left the story:** marked dead or departed.
+
+Each card shows portrait, name, role and one key line: "Last seen: Ch 4, Gullhaven", or for waiting characters an optional "Enters around: Arc 3" note. Filter by faction, place or POV; sort by last seen; search. "Gone quiet" is shown, never announced. The same groups are available for places, factions and systems.
+
+**People board.** A board of portraits and groups (factions and families as frames).
+
+- **Link by dragging** one portrait onto another, then choose the relationship type.
+- **Coloured lines by relationship type**, with a legend:
+
+  | Colour | Means |
+  | --- | --- |
+  | Grey | Met |
+  | Green | Friends / allies |
+  | Red | Fought / enemies |
+  | Blue | Family |
+  | Pink | Romance |
+  | Gold | Mentor / loyal to |
+  | Purple | Rivals |
+
+- **Solid = current, dashed = over.**
+- **Several types between the same two people blend along the line** (red fading into pink; blue into gold; three types = three bands). Colours are never averaged, because averaged colours would collide with other types. Hovering a line lists the types in words ("Rivals, then lovers").
+- **Grey "met" never blends.** It only shows when there is no other relationship.
+- Click the legend to show or hide types. Types and colours are editable.
+- **Family tree view** rearranges family links into a tree.
+- Relationships respect time (a relationship can start or end at a chapter or event).
+
+#### When: the time scrubber
+
+Time is a scrubber that sits above the map (and is available on the board).
+
+- World history shows as **era bands** with **event ticks**; the story's **chapters** are markers along it.
+- **Defaults to "now":** the chapter last written.
+- Dragging it changes everything below to that moment: who is where, territory colours, statuses, relationships, hover cards.
+- **People move:** portraits move to their location at that moment, with a faint trail showing where they came from. A play button animates the story's movements.
+- **Recording a move is a drag:** set the scrubber to chapter 8 and drag Mara to Saltmere. That records "in Saltmere from chapter 8".
+- **Map versions:** a map can change at an event (a coastline drowns, borders shift, a city burns). Choose "the map changes here" on an event and upload a new image or redraw borders. Places keep their identity across versions; a place that splits becomes new places linked to the old one.
+- **Calendar:** no calendar for now. Ordering is by eras, events and chapters. Leave room for an optional date field later.
+
+#### How: the rulebook
+
+Systems (magic, religion, law, technology, customs) are rulebook pages: numbered rules, costs and limits, who can use it, where it works. Rules can be tagged in chapters, and each rule lists the chapters where it comes up.
+
+### One card everywhere
+
+Clicking anything in any lens (a region, a portrait, an event, a rule) opens the same entry card. It shows what that thing touches across all four lenses: who lives in a place, what happened there, which rules apply there.
+
+### The world while writing
+
+The Write mode side panel has two tabs:
+
+- **In this chapter:** people, places and terms mentioned in the current chapter. Click one to expand its card; add a fact without leaving the page; open its full page.
+- **Waiting and gone quiet:** characters due to enter, or not seen in a while.
+
+Plus:
+
+- **Hover cards** on linked names show quick facts as of the current chapter.
+- **One-click capture:** select a sentence, right-click, "Add to Mara → Appearance". It saves the quote with a link back to the chapter.
+- **Bug fix:** names must not match inside hyphenated words ("Mara-blue" must not link to Mara).
+
+### What fills in automatically, and what doesn't
+
+**Certain, automatic (no AI):**
+
+- Mentions, with the line each appears in.
+- Chapters each entry appears in, first and last appearance, POV chapters.
+- Last seen, and the Cast view groups.
+- Region adjacency (from region outlines).
+- New capitalised names that repeat 3+ times and aren't just sentence starts (to the inbox, never a popup).
+
+**Never automatic:** "met" because two people share a chapter, "lives here" because a person is mentioned near a place, "family" because of a shared surname. These are not drawn and not suggested.
+
+**Suggested (inbox only, always with the quote):** clear phrases that state a relationship ("her brother Odo", "Mara of Gullhaven"), and later, AI suggestions.
+
+**Rules:** nothing guessed appears on the map, board or timeline until accepted. User edits always win; automation never overwrites them. Rejected suggestions are remembered (one small synced file) and never come back.
+
+### The inbox
+
+A quiet review queue in World mode. No popups, no badges that nag. Three kinds of items:
+
+1. **Captured:** things you saved from your writing.
+2. **Suggestions:** new names, stated relationships, and (later) AI-proposed facts, moves and events. Grouped by chapter, with "accept all from chapter 4".
+3. **Questions:** things the AI needs answered (see below).
+
+Accepting a suggestion is dropping it into place: it becomes a normal entry or fact.
+
+### Convenience
+
+- **Command palette searches the world** and jumps to any entry.
+- **Quick add hotkey** from anywhere (including the writing page): type a name, pick a template.
+- **Back and forward** like a browser (mouse side buttons, Alt+arrows).
+- **Recent and pinned** entries.
+- **Peek:** hover for the card; middle-click to open in split view or a new window.
+- **Undo** for world actions (moving portraits, deleting links, redrawing borders).
+- **Fix-up:** merge duplicate entries, change an entry's type, duplicate an entry.
+- **Safe deletes:** deleting a place asks what to do with linked people and events; everything goes to the trash first.
+- **Export a world bible** to PDF or Markdown.
+
+### Settings and fallbacks
+
+Every visual feature has a plain fallback, so turning something off never leaves a hole.
+
+| Setting | When off, you get |
+| --- | --- |
+| World skin (full / plain / minimal) | The clean default layout in the theme's colours |
+| Themed vocabulary | Plain words, even inside a skin |
+| Map | A travel sketch, or a simple list |
+| Time scrubber | The world as it stands at the latest chapter |
+| Movement trails and animations | Portraits jump to their new spot (also follows the system's reduced-motion setting) |
+| Blended relationship lines | One line in the strongest relationship's colour |
+| Name underlines in the writer | Names link only on Ctrl+click |
+| Hover cards | The side panel only |
+| Name catcher | No new-name suggestions |
+| AI suggestions (off / Ollama / ChatGPT; after each chapter, when idle, or only when asked) | The inbox holds only captured items and questions |
+| AI questions (voice / inbox only) | Questions go to the inbox |
+| Every visual lens | A list view toggle: a plain sortable list of the same data |
+
+Also:
+
+- **Lighter mode** for slower machines: no animations, lower-resolution map rendering.
+- **Accessibility:** keyboard navigation between map regions and board portraits; readable contrast in every skin.
+
+### Data and sync
+
+- **One small file per entry** (place, person, faction, event, system), as before.
+- **Fact history lives inside each entry** (location, status, etc., each with its "from" anchor). Small; syncs with the entry.
+- **Each relationship is its own tiny file** (from, to, type, current or over, start and end anchors). The reverse side is computed, not stored twice, so adding links on two devices never conflicts.
+- **Layout is separate from content:** portrait positions on the board are a small per-world layout file. Dragging a portrait never rewrites the person. If two devices disagree on layout, the newest wins.
+- **Map images are stored once,** named by content hash, and never re-uploaded. Region outlines and map versions are small separate files. A new device downloads map images only when the Where lens is opened.
+- **Templates and the rejected-suggestions list** live in the world folder and sync with it.
+- **Derived data** (mentions, appearances, Cast groups, adjacency, the digest, search indexes) is rebuilt locally and never synced, except that each volume's search index and chapter summaries are kept available when the volume goes cold.
+- **Smart Storage** still treats a world as one unit; a cold world archives everything, including map images and versions.
+
+World skins are described under Themes; the AI side of the world (readable by AI, "Update the worldbuilding", AI questions) under AI layer. Build order: milestones 4a–4e.
+
 - **Ownership rule:** World mode edits world files; Write mode edits chapter files. Each file has one writer, so the two modes never fight over a file.
-- **Later (not core):** a relationship web, drawn as a graph of who is connected to whom.
 
 ## Sync engine
 
@@ -261,6 +453,43 @@ On-screen and selection reads also get a short summary of the chapter so far, so
 
 **Nothing touches files without consent.** AI output is a suggestion until the user accepts it.
 
+### The world and the AI
+
+#### Readable by AI (baked in from the start)
+Every world feature must also exist as text and links. The map, board and timeline are views over structured data. The AI never needs to see an image.
+
+- **Map as facts:** within, borders (from adjacency), on the coast, and "who is where at chapter X" as a list.
+- **Board as facts:** "Mara: sister of Odo; fought Kael (from ch 7)".
+- **Timeline as facts:** events in order, with eras and places.
+- **World digest:** a compact, automatically rebuilt text summary of every entry (ID, name, aliases, type, one line, current location and status). Small enough for Ollama. Derived data, rebuilt locally.
+- **Lookup tools for the AI:** search entries, get an entry, get relationships, where was X at chapter N, what is in place P, list the cast by status. The AI looks things up instead of being handed everything. For models without tool calling, the app does the lookup itself and includes only the relevant entries.
+- **Cold volumes stay searchable:** each volume keeps a small search index and chapter summaries that remain available when it is compacted, so the AI can search old volumes without unpacking them.
+
+#### "Update the worldbuilding" (built at the AI milestone)
+
+A fixed pipeline. The app drives each step; the AI only answers narrow questions.
+
+1. The app finds which known entries appear in the chapter (certain matching).
+2. The app gives the AI the chapter (chunked if long), those entries, the digest and everyone's positions at that chapter.
+3. The AI returns structured proposed changes (new entries, fact updates with "from chapter N", moves, relationships, events), each with a quote and real entry IDs. Smaller Ollama models run this as several short passes (people, places, events); ChatGPT can do one pass.
+4. The app validates every proposal (IDs exist, schema correct) and drops anything invalid.
+5. Valid proposals go to the inbox. The AI never writes to the world directly.
+
+#### When the AI can't find something
+
+1. Search everything first, including cold volumes' indexes and summaries.
+2. Fetch quietly if needed: unpack a cold volume temporarily, or download a small cloud-only one.
+3. Otherwise **ask the user**: something unclear ("Is 'the Captain' in chapter 9 Mara, or someone new?"), something not written anywhere, or something needing permission (a large download, or offline).
+
+- Asks **by voice by default** once the companion and voice exist, only at a natural pause, never while typing. Unanswered questions move to the inbox. Setting: voice or inbox only. Until voice exists, questions go to the inbox.
+- The pipeline continues with everything else; only changes that depend on the answer wait.
+- Answers become facts marked "you told me", so the same question is never asked twice.
+
+#### Proving it
+
+Build a small test world with a few chapters and the changes they should produce. Run the pipeline against it with the local Ollama model to measure how well it does before trusting it with real work.
+
+
 ## Companion and character presets
 
 The companion is an optional on-screen character who is also the AI you talk to. It is a module, off by default, built after the core works.
@@ -334,7 +563,15 @@ Themes are data files (colours, fonts, page style), so adding one is a new file,
 - **Cyberpunk:** near-black and deep navy, hot pink and acid-green accents, faint glow on the active line, techy UI font.
 - **'90s Desktop:** grey windows, bevelled buttons, classic title bars.
 - **Arcade:** black cabinet with deep reds, pixel-art icons and borders, pixel UI font.
+- **Fantasy:** a new theme with a full world skin (parchment, inked borders; Atlas / Chronicle / Lore).
 - **Starter set:** about 15 more (for example sepia paper, forest, ocean, solarized), generated to fill out roughly 20 total.
+
+**World skins.** World mode should feel like the story. Each theme can carry a **world skin**:
+
+- Frames, typography, map styling (parchment and inked borders; neon wireframe glow; pixel grid), transitions, and a **vocabulary file** (fantasy: Atlas / Chronicle / Lore; cyberpunk: NETDB / Logs / Protocols; arcade: Stages / Players / Unlocked).
+- Same layout and data underneath; a new skin is new art and words, not new code.
+- **Full skins for three themes only:** a new **Fantasy** theme, **Cyberpunk** and **Arcade**. All other themes use the clean default skin in their own colours.
+- **The writing page stays readable in every skin.** Immersion lives in World mode and the surrounding app.
 
 Optional: picking a theme can suggest a matching companion (Cyberpunk suggests Capri), as a suggestion only. Themes and characters mix freely.
 
@@ -358,13 +595,18 @@ Build in this order. Each milestone ends with a working app the user can actuall
 1. **Foundation:** project scaffold (Electron + React + TypeScript), `app.config.ts` for branding, library folder format, main-process file service with safe writes, IPC skeleton.
 2. **Writing core:** Write mode, binder with arcs and drag-and-drop, TipTap editor on a page, autosave, word counts and goals, light/dark themes.
 3. **Writing polish:** separate pages (fixed paper size, Word-style page breaks), spellcheck with personal dictionary, find and replace, focus mode, version history and restore, local trash, command palette, Diagnostics panel, customisable status bar, Rhythm and Echo.
-4. **World core:** World mode, custom categories and entries, linked names with hover cards, quick add, appearances list.
+4. **World** (built in steps; each must be usable on its own before the next starts):
+   - **4a: Pages.** Clear test data. Entry pages in reading mode, templates and quick facts, linking by typing and `@`, fact history (data only), the two Write-mode side panel tabs, hover cards, one-click capture, the hyphen bug fix, the Cast view, the inbox (captured items and name catcher), convenience basics (palette search, quick add, back/forward, recent and pinned, undo, merge, safe deletes), list views. The world digest and text forms start here.
+   - **4b: The map.** Import, region detection (auto, magic wand, fix-up tools), regions linked to places, nested maps, nearby/exits navigation, unplaced tray, travel sketch fallback, territory colours.
+   - **4c: The people board.** Drag-to-link, coloured relationship lines, blending, dashed for over, legend filters, family tree view.
+   - **4d: Time.** The scrubber, facts as of the selected moment everywhere, moving people by dragging, trails and playback, map versions, event pins.
+   - **4e: Skins.** The world-skin system and vocabulary files; Fantasy, Cyberpunk and Arcade skins; lighter mode.
 5. **Layout:** split screen, tear-off windows, live updates across windows.
 6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export.
 7. **Sync engine:** Cloudflare Worker, R2 and D1 with step-by-step setup instructions; outbox, manifests, pull rule, conditional uploads, conflict copies, and the failure test harness. Ship only when the harness passes.
 8. **Smart Storage and settings sync.**
-9. **World extras:** maps with pins, timeline.
-10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in.
+9. **World extras:** nothing left here; maps moved to 4b and time (the timeline) to 4d.
+10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
 12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
 13. **Themes:** Cyberpunk, '90s Desktop, Arcade, high contrast, and the starter set.
