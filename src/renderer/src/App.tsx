@@ -5,7 +5,7 @@ import { flushAll } from './saving'
 import { SettingsProvider } from './useTheme'
 import { Home } from './components/Home'
 import { CommandProvider, useCommands } from './components/commands'
-import { OverlayProvider } from './components/overlays'
+import { OverlayProvider, useOverlays } from './components/overlays'
 import { SYSTEM_THEME, themes } from './themes'
 import { Welcome } from './components/Welcome'
 
@@ -28,6 +28,7 @@ export function App() {
       <OverlayProvider>
         <CommandProvider>
           <ThemeCommands />
+          <MainNotices />
           {status.state === 'none' ? (
             <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
           ) : (
@@ -50,5 +51,12 @@ function ThemeCommands() {
       run: () => void api.invoke('settings:update', { theme: t.id }),
     })),
   )
+  return null
+}
+
+/** Notices sent by the main process (like "Screenshot copied"). */
+function MainNotices() {
+  const { toast } = useOverlays()
+  useIpcEvent('app:notice', (message) => toast(message))
   return null
 }

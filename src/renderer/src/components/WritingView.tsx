@@ -221,11 +221,11 @@ export function WritingView(props: {
     setSearchFocus((n) => n + 1)
   }
 
-  // Keyboard: F2 rename, Ctrl/Cmd+F find, Ctrl/Cmd+Shift+F focus mode, Esc leaves focus mode.
+  // Keyboard: F3 rename, Ctrl/Cmd+F find, Ctrl/Cmd+Shift+F focus mode, Esc leaves focus mode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase()
-      if (e.key === 'F2') renameOpenChapter()
+      if (e.key === 'F3') renameOpenChapter()
       else if (modKey(e) && e.shiftKey && key === 'f') setFocusMode((f) => !f)
       else if (modKey(e) && !e.shiftKey && (key === 'f' || key === 'h')) openSearch()
       else if (modKey(e) && e.altKey && e.code === 'KeyR') toggleRhythm()
@@ -412,7 +412,7 @@ export function WritingView(props: {
       shortcut: `${MOD}Shift+F`,
       run: () => setFocusMode((f) => !f),
     },
-    { id: 'rename', title: 'Rename chapter', shortcut: 'F2', run: renameOpenChapter },
+    { id: 'rename', title: 'Rename chapter', shortcut: 'F3', run: renameOpenChapter },
     {
       id: 'rhythm',
       title: rhythm ? 'Turn off Rhythm (sentence lengths)' : 'Turn on Rhythm (sentence lengths)',

@@ -23,7 +23,7 @@ export function SeriesPage(props: {
   const actions = useLibraryActions()
 
   const volumeMenu = (volume: VolumeSummary): MenuItem[] => [
-    { label: 'Rename', hint: 'F2', onSelect: () => setRenaming(volume.id) },
+    { label: 'Rename', hint: 'F3', onSelect: () => setRenaming(volume.id) },
     {
       label: 'Change cover',
       onSelect: () =>
@@ -90,7 +90,7 @@ export function SeriesPage(props: {
               onClick={() => props.onOpenVolume(volume.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') props.onOpenVolume(volume.id)
-                if (e.key === 'F2') setRenaming(volume.id)
+                if (e.key === 'F3') setRenaming(volume.id)
               }}
             >
               <CoverDropZone

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { describeError } from '../api'
 
 /**
- * Text that turns into a field when renamed (double-click, F2 or a menu).
+ * Text that turns into a field when renamed (double-click, F3 or a menu).
  * `editing` is controlled so menus and shortcuts can start a rename.
  * Renaming only changes the display name.
  */

@@ -57,7 +57,7 @@ interface BinderProps {
   onSave: (outline: OutlineFile) => Promise<void>
   onCreateChapter: (arcId?: string) => void
   onCreateArc: (name: string) => Promise<unknown>
-  /** The item being renamed inline (a chapter or arc id), shared so F2 can start it. */
+  /** The item being renamed inline (a chapter or arc id), shared so F3 can start it. */
   renamingId: string | null
   onRenamingChange: (id: string | null) => void
   onRenameChapter: (chapterId: string, title: string) => Promise<unknown>
@@ -177,7 +177,7 @@ export function Binder(props: BinderProps) {
   const chapterMenu = (id: string): MenuItem[] => {
     const current = findContainer(containers, id)
     return [
-      { label: 'Rename', hint: 'F2', onSelect: () => props.onRenamingChange(id) },
+      { label: 'Rename', hint: 'F3', onSelect: () => props.onRenamingChange(id) },
       {
         label: 'Move to arc',
         disabled: arcs.size === 0 && current === ROOT,
@@ -198,7 +198,7 @@ export function Binder(props: BinderProps) {
     ]
   }
   const arcMenu = (arc: OutlineArc): MenuItem[] => [
-    { label: 'Rename', hint: 'F2', onSelect: () => props.onRenamingChange(arc.id) },
+    { label: 'Rename', hint: 'F3', onSelect: () => props.onRenamingChange(arc.id) },
     { label: 'Delete', danger: true, onSelect: () => props.onDeleteArc(arc) },
   ]
   const menu = (items: () => MenuItem[]) => (e: React.MouseEvent) => {

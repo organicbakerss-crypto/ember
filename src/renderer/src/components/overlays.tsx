@@ -22,7 +22,7 @@ export interface MenuItem {
   submenu?: MenuItem[]
   danger?: boolean
   disabled?: boolean
-  /** Shown on the right, e.g. "F2". */
+  /** Shown on the right, e.g. "F3". */
   hint?: string
   /** A tick-box item (shown with ✓ when on). */
   checked?: boolean

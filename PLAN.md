@@ -104,7 +104,7 @@ One app, two modes: **Write** and **World**. Each mode keeps its own toolbar and
 - Arc (in the binder): Rename, Delete. Deleting an arc that holds chapters asks whether to move them out of the arc (to where it was) or send them to the trash too.
 - Chapter (in the binder): Rename, Move to arc, Delete.
 
-Delete always moves to the local trash, with an Undo notice. Double-clicking a title (binder, series page, card labels) renames it inline, and F2 renames the selected item.
+Delete always moves to the local trash, with an Undo notice. Double-clicking a title (binder, series page, card labels) renames it inline, and F3 renames the selected item. F2 copies a screenshot of the window to the clipboard (nothing is saved).
 
 **Windows and panes:**
 

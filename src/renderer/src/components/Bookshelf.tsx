@@ -26,7 +26,7 @@ export function Bookshelf(props: {
 
   const seriesMenu = (series: SeriesSummary): MenuItem[] => [
     { label: 'New volume', onSelect: () => props.onOpenSeries(series, { newVolume: true }) },
-    { label: 'Rename', hint: 'F2', onSelect: () => setRenaming(series.id) },
+    { label: 'Rename', hint: 'F3', onSelect: () => setRenaming(series.id) },
     {
       label: 'Change cover',
       onSelect: () => actions.pickCover({ kind: 'series', seriesId: series.id }),
@@ -39,7 +39,7 @@ export function Bookshelf(props: {
     },
   ]
   const worldMenu = (world: WorldSummary): MenuItem[] => [
-    { label: 'Rename', hint: 'F2', onSelect: () => setRenaming(world.id) },
+    { label: 'Rename', hint: 'F3', onSelect: () => setRenaming(world.id) },
     {
       label: 'Change cover',
       onSelect: () => actions.pickCover({ kind: 'world', worldId: world.id }),
@@ -109,7 +109,7 @@ export function Bookshelf(props: {
                 onClick={() => props.onOpenSeries(series)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') props.onOpenSeries(series)
-                  if (e.key === 'F2') setRenaming(series.id)
+                  if (e.key === 'F3') setRenaming(series.id)
                 }}
               >
                 <CoverDropZone
@@ -148,7 +148,7 @@ export function Bookshelf(props: {
                 onClick={() => props.onOpenWorld(world.id)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') props.onOpenWorld(world.id)
-                  if (e.key === 'F2') setRenaming(world.id)
+                  if (e.key === 'F3') setRenaming(world.id)
                 }}
               >
                 <CoverDropZone

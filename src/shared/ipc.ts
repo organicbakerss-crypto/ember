@@ -563,6 +563,8 @@ export interface IpcEvents {
   /** Something was captured from the right-click menu (a short confirmation to show). */
   'text:captured': string
   'settings:changed': AppSettings
+  /** A short message from main to show as a notice (e.g. "Screenshot copied"). */
+  'app:notice': string
   /** The window is about to close: save everything, then invoke `window:flushed`. */
   'window:flush': null
 }

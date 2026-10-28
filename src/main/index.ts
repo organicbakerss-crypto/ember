@@ -5,6 +5,7 @@ import { AppSettingsStore } from './appSettings'
 import { guardClose } from './closeGuard'
 import { DeviceSettingsStore } from './deviceSettings'
 import { captureMenuItems } from './capture'
+import { attachScreenshotKey } from './screenshot'
 import { broadcast, registerIpc } from './ipc'
 import { LibraryHost } from './libraryHost'
 import { handleMediaRequests, registerMediaScheme } from './media'
@@ -37,6 +38,7 @@ function createWindow(settings: AppSettingsStore, host: LibraryHost): BrowserWin
   })
   window.once('ready-to-show', () => window.show())
   guardClose(window)
+  attachScreenshotKey(window)
   attachTextMenu(
     window,
     settings,

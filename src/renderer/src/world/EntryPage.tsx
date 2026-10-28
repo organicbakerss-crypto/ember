@@ -209,7 +209,7 @@ function EntryView(
         label: pinned ? 'Unpin' : 'Pin to the side',
         onSelect: () => summary && void actions.pin(summary, !pinned),
       },
-      { label: 'Rename', hint: 'F2', onSelect: () => setRenaming(true) },
+      { label: 'Rename', hint: 'F3', onSelect: () => setRenaming(true) },
       { label: 'Change type', submenu: typeItems() },
       {
         label: 'Duplicate',
@@ -236,10 +236,10 @@ function EntryView(
       },
     ])
 
-  // F2 renames.
+  // F3 renames.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'F2') {
+      if (e.key === 'F3') {
         e.preventDefault()
         setRenaming(true)
       }
