@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EntrySummary, WorldIndex, WorldView } from '@shared/ipc'
 import type { Template } from '@shared/schema'
 import { entryTerms } from '@shared/names'
-import { chapterPositions } from '@shared/world/story'
-import type { ChapterPositions } from '@shared/world/facts'
+import type { ChapterPositions, Moment } from '@shared/world/facts'
+import { buildTimeline, type Timeline } from '@shared/world/timeline'
 import { api, describeError, useIpcEvent } from '../api'
 
 export interface WorldData {
@@ -13,7 +13,12 @@ export interface WorldData {
   /** Entries by id, including ids of entries merged into them. */
   resolve: (entryId: string) => EntrySummary | undefined
   templates: Map<string, Template>
+  /** Eras, events and chapters in time order. */
+  timeline: Timeline
+  /** Positions on the timeline (chapters, and placed eras and events). */
   positions: ChapterPositions
+  /** The moment views show: the time scrubber's, or null for now. */
+  at: Moment
   terms: ReturnType<typeof entryTerms>
 }
 
@@ -70,13 +75,19 @@ export function useWorld(worldId: string | null): { data: WorldData | null; erro
     const byId = new Map(view.entries.map((e) => [e.id, e]))
     const merged = new Map<string, EntrySummary>()
     for (const e of view.entries) for (const old of e.mergedFrom) merged.set(old, e)
+    const templates = new Map(view.templates.map((t) => [t.id, t]))
+    // Eras and events (anything in the When lens), and anything already placed.
+    const timed = view.entries.filter((e) => e.when || templates.get(e.template)?.lens === 'when')
+    const timeline = buildTimeline(timed, index?.chapters ?? [])
     return {
       view,
       index: index,
       byId,
       resolve: (id) => byId.get(id) ?? merged.get(id),
-      templates: new Map(view.templates.map((t) => [t.id, t])),
-      positions: index ? chapterPositions(index) : new Map(),
+      templates,
+      timeline,
+      positions: timeline.positions,
+      at: null,
       terms: entryTerms(view.entries),
     }
   }, [view, index, worldId])

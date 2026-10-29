@@ -27,6 +27,8 @@ import {
   regionSchema,
   sketchSchema,
   templateFieldSchema,
+  timelinePlaceSchema,
+  factAnchorSchema,
   nameSchema,
   outlineFileSchema,
   richTextDocSchema,
@@ -40,6 +42,7 @@ import {
   type RelationshipFile,
   type RelationshipType,
   type Portrait,
+  type TimelinePlace,
   type RichTextDoc,
   type Template,
   type OutlineFile,
@@ -176,6 +179,8 @@ export interface EntrySummary {
   mergedFrom: string[]
   /** Entries linked from the page: with `@`, or by typing their name. */
   links: string[]
+  /** For eras and events: their place on the timeline. */
+  when: TimelinePlace | null
   updatedAt: string
 }
 
@@ -339,6 +344,7 @@ export const ipcInputs = {
       quotes: z.array(quoteSchema).max(2000).optional(),
       portrait: portraitSchema.nullable().optional(),
       mergedFrom: z.array(id('entry')).max(500).optional(),
+      when: timelinePlaceSchema.nullable().optional(),
     }),
   }),
   'entry:appearances': z.object({ worldId: id('world'), entryId: id('entry') }),
@@ -397,6 +403,11 @@ export const ipcInputs = {
         height: z.number().int().positive().max(20000),
       })
       .nullable(),
+    /**
+     * A new version of an existing map, from an event onwards: it starts as a
+     * copy of `copyFrom` (the version shown), with a new image if one is given.
+     */
+    version: z.object({ of: id('map'), copyFrom: id('map'), from: factAnchorSchema }).optional(),
   }),
   'map:save': z.object({
     worldId: id('world'),
@@ -529,6 +540,8 @@ export const ipcInputs = {
         map: z.boolean(),
         lighter: z.boolean(),
         blendLines: z.boolean(),
+        timeScrubber: z.boolean(),
+        trails: z.boolean(),
       })
       .optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),

@@ -10,6 +10,7 @@ import { loadLocal, saveLocal } from '../../storage'
 import { useSettings } from '../../useTheme'
 import { initials, lensOf } from '../model'
 import type { UndoStep } from '../useUndo'
+import { TimeScrubber } from '../time/TimeScrubber'
 import type { WorldData } from '../useWorld'
 import { RelationshipEditor } from './RelationshipEditor'
 import { RelationshipTypesDialog } from './RelationshipTypesDialog'
@@ -100,7 +101,7 @@ export function PeopleBoard(props: {
 
   const members = (group: EntrySummary) =>
     people.filter((p) =>
-      valuesAt({ multiple: true }, p.facts['memberOf'], null, world.positions).some(
+      valuesAt({ multiple: true }, p.facts['memberOf'], world.at, world.positions).some(
         (v) => v.link === group.id,
       ),
     )
@@ -120,7 +121,7 @@ export function PeopleBoard(props: {
   const lines = boardLines(
     world.view.relationships.filter((r) => onBoard.has(r.from) && onBoard.has(r.to)),
     world.view.relationshipTypes,
-    { at: null, positions: world.positions, hidden, blend: settings.world.blendLines },
+    { at: world.at, positions: world.positions, hidden, blend: settings.world.blendLines },
   )
 
   const toBoard = (e: { clientX: number; clientY: number }) => {
@@ -225,6 +226,7 @@ export function PeopleBoard(props: {
           Drag someone onto another person to link them. Drag to move; click a line to change it.
         </p>
       )}
+      <TimeScrubber world={world} />
       <div className="board-scroll">
         <svg
           ref={svg}

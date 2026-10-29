@@ -32,6 +32,14 @@ const placeFields = (): TemplateField[] => [
   field({ id: 'population', label: 'Population', kind: 'text', quick: true }),
   field({ id: 'climate', label: 'Climate', kind: 'text', quick: true }),
   field({ id: 'knownFor', label: 'Known for', kind: 'text', quick: true }),
+  // A place that splits (or is renamed) becomes new places linked to the old one.
+  field({
+    id: 'formerly',
+    label: 'Formerly part of',
+    kind: 'link',
+    multiple: true,
+    reverse: 'Became',
+  }),
 ]
 
 const systemFields = (): TemplateField[] => [

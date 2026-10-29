@@ -3,10 +3,18 @@
  * ids), so a language model can understand the whole world without seeing
  * any image. Derived data, rebuilt locally whenever it's asked for.
  */
-import type { FactValue, Quote, RelationshipFile, RelationshipType, Template } from '../schema'
+import type {
+  FactValue,
+  Quote,
+  RelationshipFile,
+  RelationshipType,
+  Template,
+  TimelinePlace,
+} from '../schema'
 import { currentValue, inTimeOrder, valuesAt, type ChapterPositions } from './facts'
 import { chapterName, type EntryMentions, type StoryChapter } from './story'
 import { effectiveTemplate, LENS_LABELS } from './templates'
+import { buildTimeline, type Timeline } from './timeline'
 
 export interface DigestEntry {
   id: string
@@ -16,6 +24,36 @@ export interface DigestEntry {
   facts: Record<string, FactValue[]>
   /** The first line of the entry's page. */
   snippet: string
+  /** For eras and events: their place on the timeline. */
+  when?: TimelinePlace | null
+}
+
+/** The world's timeline from its eras and events (those placed, or of an era or event template). */
+function timelineOf(
+  entries: readonly DigestEntry[],
+  templates: readonly Template[],
+  chapters: readonly StoryChapter[],
+): Timeline {
+  const timed = entries.filter(
+    (e) => e.when || effectiveTemplate(templates, e.template, e.facts).lens === 'when',
+  )
+  return buildTimeline(
+    timed.map((e) => ({ id: e.id, template: e.template, when: e.when ?? null })),
+    chapters,
+  )
+}
+
+/** Where an era or event sits, in words: "before the story (2 of 5)", "during Ch 3". */
+function whenText(id: string, timeline: Timeline, chapters: readonly StoryChapter[]): string {
+  const h = timeline.history.indexOf(id)
+  if (h >= 0) return `before the story (${h + 1} of ${timeline.history.length})`
+  for (const [chapterId, ids] of timeline.during) {
+    if (ids.includes(id)) {
+      const chapter = chapters.find((c) => c.id === chapterId)
+      return chapter ? `during ${chapter.label}` : 'during the story'
+    }
+  }
+  return 'not on the timeline yet'
 }
 
 const ONE_LINE = 120
@@ -59,8 +97,16 @@ export function worldDigest(
     relationships: [],
     types: [],
   },
+  /** The story's chapters in reading order, for the timeline. */
+  chapters: readonly StoryChapter[] = [],
 ): string {
   const names = new Map(entries.map((e) => [e.id, e.name]))
+  const timeline = timelineOf(entries, templates, chapters)
+  const timed = new Set([
+    ...timeline.history,
+    ...timeline.unplaced,
+    ...[...timeline.during.values()].flat(),
+  ])
   const lines = [`World: ${worldName}`, `Entries: ${entries.length}`, '']
   for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
     const template = effectiveTemplate(templates, e.template, e.facts)
@@ -86,7 +132,24 @@ export function worldDigest(
         return `${words} ${other}${r.over || r.end ? ' (over)' : ''}`
       })
     if (ties.length) parts.push(`ties: ${ties.join('; ')}`)
+    if (timed.has(e.id)) parts.push(`when: ${whenText(e.id, timeline, chapters)}`)
     lines.push(parts.join(' | '))
+  }
+  const byId = new Map(entries.map((e) => [e.id, e]))
+  const item = (id: string, at: string) => {
+    const e = byId.get(id)!
+    const where = currentValue(e.facts['where'], null, positions)
+    const kind = e.template === 'era' ? 'era' : 'event'
+    return `- ${at}: [${id}] ${e.name} (${kind})${where ? ` | where: ${valueText(where, names)}` : ''}`
+  }
+  const story = chapters.flatMap((c) =>
+    (timeline.during.get(c.id) ?? []).map((id) => item(id, c.label)),
+  )
+  if (timeline.history.length || story.length) {
+    lines.push('', 'Timeline (earliest first):')
+    lines.push(...timeline.history.map((id) => item(id, 'before the story')), ...story)
+    const unplaced = timeline.unplaced.map((id) => byId.get(id)!.name)
+    if (unplaced.length) lines.push(`Not on the timeline yet: ${unplaced.join(', ')}`)
   }
   return lines.join('\n')
 }
@@ -99,6 +162,7 @@ export interface EntryTextInput {
     template: string
     facts: Record<string, FactValue[]>
     quotes: Quote[]
+    when?: TimelinePlace | null
   }
   /** The page's paragraphs. */
   body: string[]
@@ -120,7 +184,12 @@ export interface EntryTextInput {
 /** One entry as text: facts with their history, the page, what links here, and appearances. */
 export function entryText(input: EntryTextInput): string {
   const { entry, templates, chapters } = input
-  const positions: ChapterPositions = new Map(chapters.map((c, i) => [c.id, i]))
+  const timeline = timelineOf(
+    [...input.entries.filter((e) => e.id !== entry.id), { ...entry, snippet: '' }],
+    templates,
+    chapters,
+  )
+  const positions: ChapterPositions = timeline.positions
   const names = new Map(input.entries.map((e) => [e.id, e.name]))
   const template = effectiveTemplate(templates, entry.template, entry.facts)
   const out = [
@@ -128,6 +197,8 @@ export function entryText(input: EntryTextInput): string {
     `ID: ${entry.id}`,
     `Type: ${template.name} (${LENS_LABELS[template.lens]})`,
   ]
+  if (entry.when || template.lens === 'when')
+    out.push(`When: ${whenText(entry.id, timeline, chapters)}`)
   if (entry.aliases.length) out.push(`Also called: ${entry.aliases.join(', ')}`)
 
   const facts: string[] = []

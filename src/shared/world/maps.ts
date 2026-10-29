@@ -5,6 +5,7 @@
  * runs in the app and in tests, and its results are derived data.
  */
 import type { MapFile, MapRegion, Point } from '../schema'
+import { anchorPosition, reached, type ChapterPositions, type Moment } from './facts'
 
 /** Regions are compared on a grid this many cells across (the long side). */
 const GRID = 400
@@ -77,6 +78,49 @@ export function regionAdjacency(
     }
   }
   return [...pairs].map((key) => [regions[Math.floor(key / n) - 1]!.id, regions[(key % n) - 1]!.id])
+}
+
+/* ---------- map versions ---------- */
+
+/** Maps that aren't versions of another map (the world map, maps of places). */
+export function baseMaps<M extends Pick<MapFile, 'versionOf'>>(maps: readonly M[]): M[] {
+  return maps.filter((m) => !m.versionOf)
+}
+
+/** A map's versions, oldest first (by where they start on the timeline). */
+export function mapVersions<M extends Pick<MapFile, 'id' | 'versionOf' | 'from' | 'createdAt'>>(
+  maps: readonly M[],
+  baseId: string,
+  positions: ChapterPositions,
+): M[] {
+  return maps
+    .filter((m) => m.versionOf === baseId)
+    .sort(
+      (a, b) =>
+        anchorPosition(a.from, positions) - anchorPosition(b.from, positions) ||
+        a.createdAt.localeCompare(b.createdAt),
+    )
+}
+
+/** The version of a map shown at a moment: the latest that has started, else the map itself. */
+export function mapAt<M extends Pick<MapFile, 'id' | 'versionOf' | 'from' | 'createdAt'>>(
+  maps: readonly M[],
+  base: M,
+  at: Moment,
+  positions: ChapterPositions,
+): M {
+  const started = mapVersions(maps, base.id, positions).filter((v) =>
+    reached(v.from, at, positions),
+  )
+  return started[started.length - 1] ?? base
+}
+
+/** Each map as it stands now (its latest version), for what's nearby. */
+export function mapsNow<M extends Pick<MapFile, 'id' | 'versionOf' | 'from' | 'createdAt'>>(
+  maps: readonly M[],
+  positions: ChapterPositions,
+): M[] {
+  return baseMaps(maps).map((m) => mapAt(maps, m, null, positions))
 }
 
 /** Places next to each place, from every map's touching regions and the travel sketch's roads. */

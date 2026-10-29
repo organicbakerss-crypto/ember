@@ -2355,13 +2355,25 @@ kbd {
   padding: 1rem 1.25rem 1.25rem;
   height: 100%;
   box-sizing: border-box;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* The map fills what the lens header (if any) leaves. */
+  display: flex;
+  flex-direction: column;
+}
+.lens-map > .where-map {
+  flex: 1 1 0;
 }
 .where-map {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* The map body takes the room left by the header, scrubber and notes above it. */
+  display: flex;
+  flex-direction: column;
   gap: 0.6rem;
   min-height: 0;
+}
+.where-map > .map-body {
+  flex: 1 1 0;
+}
+.map-version-note {
+  margin: 0;
 }
 .map-head {
   display: flex;
@@ -2467,6 +2479,26 @@ kbd {
   stroke: var(--accent);
   stroke-linejoin: round;
   pointer-events: none;
+}
+.map-people.glide .map-person {
+  transition: transform 0.8s ease;
+}
+.map-trail {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  fill: none;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.map-event path {
+  fill: var(--surface);
+  stroke: var(--cover-5, var(--accent));
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+.map-event.current path {
+  fill: var(--cover-5, var(--accent));
 }
 .map-person circle {
   fill: var(--surface);
@@ -2999,4 +3031,193 @@ kbd {
   width: 2.2rem;
   height: 2rem;
   padding: 0.1rem;
+}
+
+/* ---------- time ---------- */
+
+.time-scrubber {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, 1fr) minmax(8rem, auto) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.scrubber-play {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.8rem;
+}
+.scrubber-body {
+  position: relative;
+  height: 2.6rem;
+}
+.scrubber-marks {
+  position: absolute;
+  /* Inset by half the range thumb so marks line up with it. */
+  inset: 0 8px;
+  pointer-events: none;
+}
+.scrubber-era {
+  position: absolute;
+  top: 0;
+  height: 1.05rem;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  line-height: 1.05rem;
+  padding: 0 0.3rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+  color: var(--text);
+  background: color-mix(in srgb, var(--cover-1) 30%, transparent);
+}
+.scrubber-era.era-1 {
+  background: color-mix(in srgb, var(--cover-3) 30%, transparent);
+}
+.scrubber-era.era-2 {
+  background: color-mix(in srgb, var(--cover-5) 30%, transparent);
+}
+.scrubber-era.era-3 {
+  background: color-mix(in srgb, var(--cover-6) 30%, transparent);
+}
+.scrubber-tick {
+  position: absolute;
+  bottom: 0.25rem;
+  width: 2px;
+  height: 0.55rem;
+  margin-left: -1px;
+  background: var(--muted);
+  opacity: 0.6;
+}
+.scrubber-tick.event,
+.scrubber-tick.era {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: -0.25rem;
+  bottom: 0.3rem;
+  transform: rotate(45deg);
+  background: var(--cover-5, var(--accent));
+  opacity: 1;
+}
+.scrubber-tick.era {
+  background: var(--text);
+}
+.scrubber-tick.now {
+  background: var(--accent);
+  height: 0.8rem;
+  opacity: 1;
+}
+.scrubber-range {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.15rem;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  accent-color: var(--accent);
+}
+.scrubber-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.moment-note {
+  margin: 0 0 0.75rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.timeline-view {
+  display: grid;
+  gap: 1.25rem;
+}
+.timeline-view h2 {
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+.timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.75rem;
+  border-left: 2px solid var(--border);
+  display: grid;
+  gap: 0.15rem;
+}
+.timeline-list ul {
+  list-style: none;
+  margin: 0.15rem 0 0.3rem;
+  padding-left: 1.5rem;
+}
+.timeline-item,
+.timeline-chapter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+}
+.timeline-chapter > ul {
+  flex-basis: 100%;
+}
+.timeline-item[draggable='true'] {
+  cursor: grab;
+}
+.timeline-item.era .timeline-name {
+  font-weight: 700;
+}
+.timeline-item.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.timeline-chapter-name {
+  font-weight: 600;
+}
+.timeline-marker {
+  width: 0.7rem;
+  height: 0.7rem;
+  min-width: 0;
+  padding: 0;
+  margin-left: calc(-0.75rem - 0.45rem);
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: var(--surface);
+  cursor: pointer;
+}
+.timeline-list ul .timeline-marker {
+  margin-left: 0;
+}
+.timeline-marker.event,
+.timeline-marker.era {
+  border-radius: 1px;
+  transform: rotate(45deg);
+  border-color: var(--cover-5, var(--accent));
+}
+.timeline-marker.current {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.timeline-nudge {
+  display: inline-flex;
+  gap: 0.1rem;
+}
+.timeline-drop {
+  padding: 0.35rem 0;
+}
+.when-row {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.map-people.glide .map-person.dragging {
+  transition: none;
+}
+.map-person {
+  cursor: grab;
 }

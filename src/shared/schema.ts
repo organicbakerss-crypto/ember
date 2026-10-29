@@ -176,6 +176,16 @@ export const quoteSchema = z.looseObject({
 })
 export type Quote = z.infer<typeof quoteSchema>
 
+/**
+ * Where an era or event sits on the timeline: in the world's history before
+ * the story (ordered by `order`, smaller first), or during a chapter.
+ */
+export const timelinePlaceSchema = z.discriminatedUnion('kind', [
+  z.looseObject({ kind: z.literal('history'), order: z.number() }),
+  z.looseObject({ kind: z.literal('chapter'), chapterId: id('chapter') }),
+])
+export type TimelinePlace = z.infer<typeof timelinePlaceSchema>
+
 /** Portrait images are stored once per world, named by content hash. Crop is in fractions of the image. */
 export const portraitSchema = z.looseObject({
   file: z.string().regex(/^[0-9a-f]{64}\.(png|jpg|gif|webp)$/),
@@ -203,6 +213,8 @@ export const worldEntryFileSchema = z.looseObject({
   portrait: portraitSchema.nullable().default(null),
   /** Entries merged into this one; links and POV tags to them now mean this entry. */
   mergedFrom: z.array(id('entry')).default([]),
+  /** For eras and events: their place on the timeline (null: not placed yet). */
+  when: timelinePlaceSchema.nullable().default(null),
   createdAt: timestamp,
   updatedAt: timestamp,
 })
@@ -376,6 +388,13 @@ export const mapFileSchema = z.looseObject({
   pins: z.array(pinSchema).default([]),
   /** Without an image: the travel sketch. */
   sketch: sketchSchema.nullable().default(null),
+  /**
+   * A later version of another map (a coastline drowns, borders shift): it
+   * replaces that map from `from` (usually an event) onwards. Places keep
+   * their identity across versions.
+   */
+  versionOf: id('map').nullable().default(null),
+  from: factAnchorSchema.nullable().default(null),
   createdAt: timestamp,
   updatedAt: timestamp,
 })

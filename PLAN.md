@@ -66,7 +66,8 @@ library/
                                 (with history), page text, captured quotes, portrait
     images/<sha256>.<ext>       portraits and map images, stored once, named by content hash
     maps/<map-id>.json          a map: its image (by hash), the place it shows, its regions
-                                (vector outlines) and pins linked to places; or the travel sketch
+                                (vector outlines) and pins linked to places; or the travel sketch.
+                                A later version of a map is its own file (versionOf, from an event)
     templates.json              customised or new templates (only once used)
     inbox.json                  captured lines waiting to be filed (only once used)
     rejected.json               turned-down suggestions, never shown again (only once used)
@@ -74,7 +75,6 @@ library/
                                 words, starts/ends (chapter or event), over
     relationship-types.json     renamed or added relationship types (only once used)
     board.json                  where each person sits on the people board (layout only)
-    …                           added by milestone 4d
     manifest.json
   .ember-local/                 device-only: SQLite index, outbox, trash, doodles, window layout
 ```
@@ -404,6 +404,18 @@ Choices made while building 4a, so later steps start from what exists:
 - **Entry pages** of people and groups (and any entry with links) have a Relationships section with "+ Add a relationship".
 - **Merging** two entries moves their relationships to the kept one; **deleting** an entry with "remove links to it" removes its relationships too (otherwise they are hidden until it is restored); Undo restores them.
 - **Text forms:** the entry's text gains "## Relationships"; the digest gains "ties: …".
+
+### As built in 4d
+
+- **One timeline.** Eras and events are placed on it from their page ("When": before the story, or during a chapter) or from the When lens's **Timeline** view (now its default). History before the story is ordered (drag, or ↑/↓; the order is a number between neighbours, so moving one rewrites only that entry); events during a chapter share that chapter's moment. Eras run from where they start to the next era. The placement is stored in the entry as `when`; nothing is stored about chapters.
+- **Moments:** each chapter, event and era is a stop; "now" is the latest chapter. Facts, relationships and map versions anchored to an event take effect at that event's place on the timeline; an event not on the timeline still counts as already true.
+- **The time scrubber** sits above the map, the board and the timeline: era bands, event diamonds, chapter ticks and "now" at the end. It defaults to now, isn't remembered between visits, and is hidden until the world has chapters, eras or events. Moving it (drag, or arrow keys) changes everything in World mode: who is where, territory colours, statuses and other facts, relationships on the board, entry pages ("As of Ch 8 · Back to now") and their hover cards. Play steps through the story stop by stop and stops at now. The writing side still shows facts as of the chapter being written.
+- **Moving people:** drag a portrait on the map to another place. That records "in Saltmere from Ch 8" at the scrubber's moment (from the latest chapter at now); a move recorded at the same moment replaces the earlier one. Dropping from the unplaced tray works the same way. A new relationship made on the board starts at the scrubber's moment. A relationship with an end is solid until then and dashed after (before 4d it was dashed throughout).
+- **Trails and animation:** someone who moved at this moment or the one before has a faint dashed trail from where they were; portraits glide to their new place. Off with "Movement trails and animations" (Settings → World); gliding also stops in lighter mode and with the system's reduced motion.
+- **Event pins:** events with a "Where" show as diamonds above that place once they have happened (the one at the current moment filled in); click opens the event.
+- **Map versions:** on an event, "The map changes here…" makes a new version of a map from that event on: redraw its borders (a copy of the map as it was just before) or upload a new image (regions and pins scaled to it). The version is its own map file (`versionOf`, `from`). The map shows the version in effect at the moment, with a note; edit tools change only the version shown. Removing a map removes its versions; a version can be removed on its own. What's nearby uses each map's latest version. Places keep their identity across versions; a place that splits gets new places with "Formerly part of" (a new place field, shown in reverse as "Became").
+- **Text forms:** an era's or event's text says "When: before the story (2 of 5)" or "during Ch 3"; the digest ends with the timeline in order, with places, and lists what isn't placed.
+- **Settings → World:** the time scrubber can be turned off (the world as it stands now), and trails and animations separately.
 
 World skins are described under Themes; the AI side of the world (readable by AI, "Update the worldbuilding", AI questions) under AI layer. Build order: milestones 4a–4e.
 

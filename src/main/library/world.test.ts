@@ -625,3 +625,88 @@ describe('relationships and the board', () => {
     expect(await lib.world.digest(worldId)).toContain('ties: sister of Odo')
   })
 })
+
+describe('time', () => {
+  it('places eras and events on the timeline; facts from an event start there', async () => {
+    const worldId = await world()
+    const { chapterIds } = await story(worldId, [['One.'], ['Two.'], ['Three.']])
+    const flood = await lib.world.createEntry(worldId, { name: 'The Flood', template: 'event' })
+    const ash = await lib.world.createEntry(worldId, { name: 'Age of Ash', template: 'era' })
+    const fire = await lib.world.createEntry(worldId, { name: 'The Burning', template: 'event' })
+    const salt = await lib.world.createEntry(worldId, { name: 'Saltmere', template: 'city' })
+    await lib.world.saveEntry(worldId, ash.id, { when: { kind: 'history', order: 0 } })
+    await lib.world.saveEntry(worldId, flood.id, { when: { kind: 'history', order: 1 } })
+    await lib.world.saveEntry(worldId, fire.id, {
+      when: { kind: 'chapter', chapterId: chapterIds[1]! },
+      facts: { where: [link(salt.id)] },
+    })
+    const view = await lib.world.view(worldId)
+    expect(view.entries.find((e) => e.id === flood.id)!.when).toEqual({
+      kind: 'history',
+      order: 1,
+    })
+    const digest = await lib.world.digest(worldId)
+    expect(digest).toContain('Timeline (earliest first):')
+    expect(digest).toContain(`- before the story: [${ash.id}] Age of Ash (era)`)
+    expect(digest).toContain(`- Ch 2: [${fire.id}] The Burning (event) | where: Saltmere`)
+    expect(digest.indexOf('Age of Ash (era)\n')).toBeLessThan(digest.indexOf('The Flood (event)'))
+    expect(await lib.world.entryText(worldId, flood.id)).toContain(
+      'When: before the story (2 of 2)',
+    )
+    expect(await lib.world.entryText(worldId, fire.id)).toContain('When: during Ch 2')
+  })
+
+  it('makes a version of a map from an event, scaled to a new image; the newest is nearby now', async () => {
+    const worldId = await world()
+    const a = await lib.world.createEntry(worldId, { name: 'North', template: 'kingdom' })
+    const b = await lib.world.createEntry(worldId, { name: 'South', template: 'kingdom' })
+    const flood = await lib.world.createEntry(worldId, { name: 'The Flood', template: 'event' })
+    await lib.world.saveEntry(worldId, flood.id, { when: { kind: 'history', order: 0 } })
+    const square = (x: number, placeId: string) => ({
+      id: newId('region'),
+      placeId,
+      rings: [
+        [
+          [x, 0],
+          [x + 100, 0],
+          [x + 100, 100],
+          [x, 100],
+        ] as [number, number][],
+      ],
+    })
+    const map = await lib.world.createMap(worldId, {
+      name: 'Isles map',
+      placeId: null,
+      image: { data: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1]), width: 400, height: 200 },
+    })
+    await lib.world.saveMap(worldId, map.id, {
+      regions: [square(0, a.id), square(100, b.id)],
+      pins: [{ id: newId('pin'), placeId: a.id, x: 50, y: 50 }],
+    })
+    expect((await lib.world.view(worldId)).nearby[a.id]).toEqual([b.id])
+
+    const after = await lib.world.createMap(worldId, {
+      name: 'ignored',
+      placeId: null,
+      image: { data: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 2]), width: 800, height: 400 },
+      version: { of: map.id, copyFrom: map.id, from: { kind: 'event', entryId: flood.id } },
+    })
+    expect(after).toMatchObject({ name: 'Isles map', versionOf: map.id, placeId: null })
+    expect(after.regions[0]!.rings[0]![1]).toEqual([200, 0])
+    expect(after.pins[0]).toMatchObject({ x: 100, y: 100 })
+    // The flood drowns the border: in the new version the kingdoms no longer touch.
+    await lib.world.saveMap(worldId, after.id, { regions: [after.regions[0]!] })
+    const view = await lib.world.view(worldId)
+    expect(view.maps.map((m) => m.id)).toEqual([map.id, after.id])
+    expect(view.nearby[a.id]).toBeUndefined()
+
+    await expect(
+      lib.world.createMap(worldId, {
+        name: 'x',
+        placeId: null,
+        image: null,
+        version: { of: after.id, copyFrom: after.id, from: { kind: 'event', entryId: flood.id } },
+      }),
+    ).rejects.toThrow('itself a version')
+  })
+})

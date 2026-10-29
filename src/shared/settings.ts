@@ -74,6 +74,10 @@ export interface WorldSettings {
   lighter: boolean
   /** Lines with several relationship types show each colour in its own band (else the strongest). */
   blendLines: boolean
+  /** The time scrubber above the map and board (otherwise the world as it stands now). */
+  timeScrubber: boolean
+  /** Faint trails behind people who moved, and portraits gliding to their new place. */
+  trails: boolean
 }
 
 export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
@@ -83,6 +87,8 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   map: true,
   lighter: false,
   blendLines: true,
+  timeScrubber: true,
+  trails: true,
 }
 
 export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const

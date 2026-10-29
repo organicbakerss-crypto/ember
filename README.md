@@ -44,6 +44,12 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - coloured lines, several types shown as bands, dashed when over, a legend that hides types
   - groups drawn as frames around their members; editable relationship types per world
   - a family tree view and a sortable list; relationships on entry pages and in the text forms
+- **World, step 4d (time):**
+  - one timeline: eras and events placed before the story or during a chapter; the When lens's Timeline view
+  - a time scrubber above the map and board: drag it and the whole world shows that moment; play through the story
+  - move people by dragging their portrait at a moment; faint trails and gliding portraits
+  - event pins on the map; map versions from an event ("the map changes here")
+  - the timeline in the text forms; settings for the scrubber and for trails
 
 ## Requirements
 

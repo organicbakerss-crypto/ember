@@ -19,6 +19,8 @@ import { MentionTrigger, WorldLink, type MentionTrigger as Trigger } from '../ed
 import { useSettings } from '../useTheme'
 import { EntryPicker } from './EntryPicker'
 import { FactEditor } from './FactEditor'
+import { MomentNote } from './time/TimeScrubber'
+import { WhenSection } from './time/WhenSection'
 import { backlinks, MAX_QUICK_FACTS, shownFacts, templateOf, valueLabel } from './model'
 import { Portrait } from './Portrait'
 import { mapOfPlace } from './map/mapModel'
@@ -151,7 +153,7 @@ function EntryView(
 
   const names = useMemo(
     () => ({
-      index: { world, terms: world.terms.filter((t) => t.entryId !== entry.id) },
+      index: { world, at: world.at, terms: world.terms.filter((t) => t.entryId !== entry.id) },
       enabled: settings.linkNames,
       hoverCards: settings.world.hoverCards,
       onOpen: props.onOpenEntry,
@@ -180,9 +182,9 @@ function EntryView(
     return created && { ...created, snippet: '', links: [] }
   }
 
-  const quick = shownFacts(world, entry, null, true).slice(0, MAX_QUICK_FACTS)
+  const quick = shownFacts(world, entry, world.at, true).slice(0, MAX_QUICK_FACTS)
   const quickIds = new Set(quick.map((f) => f.field.id))
-  const details = shownFacts(world, entry, null).filter((f) => !quickIds.has(f.field.id))
+  const details = shownFacts(world, entry, world.at).filter((f) => !quickIds.has(f.field.id))
   const empty = template.fields.filter((f) => !entry.facts[f.id]?.length)
   const editingField = template.fields.find((f) => f.id === editing)
 
@@ -303,7 +305,7 @@ function EntryView(
 
   /* ----- what links here, and the story ----- */
 
-  const touches = backlinks(world, entry.id, null)
+  const touches = backlinks(world, entry.id, world.at)
   const isPlace = template.lens === 'where'
   const nearby = (world.view.nearby[entry.id] ?? [])
     .map((id) => world.resolve(id))
@@ -365,6 +367,7 @@ function EntryView(
 
   return (
     <article className="entry-page page" aria-label={entry.name}>
+      <MomentNote world={world} />
       <header
         className="entry-head"
         onDragOver={(e) => {
@@ -605,6 +608,15 @@ function EntryView(
             </div>
           ))}
         </section>
+      )}
+
+      {template.lens === 'when' && (
+        <WhenSection
+          world={world}
+          entryId={entry.id}
+          record={props.record}
+          onOpenMap={props.onOpenMap}
+        />
       )}
 
       {isPlace && (

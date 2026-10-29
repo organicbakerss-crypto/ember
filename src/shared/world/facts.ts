@@ -1,27 +1,43 @@
 /**
  * Facts that change over time. Each value says when it starts ("from chapter
  * 8", "from the Flood"); everything that shows a fact shows the value for a
- * chosen moment in the story. Until events have a place on the timeline,
- * a value from an event counts as already true.
+ * chosen moment. Moments are positions on the timeline (see timeline.ts); a
+ * value from an event that isn't on the timeline counts as already true.
  */
 import type { FactAnchor, FactValue, TemplateField } from '../schema'
 
-/** A moment in the story: a position in reading order, or `null` for "now" (the latest chapter). */
+/**
+ * A moment: a position on the timeline (chapters 0, 1, 2… in reading order;
+ * history before the story is negative), or `null` for "now" (the latest chapter).
+ */
 export type Moment = number | null
 
-/** Positions of chapters in reading order (across the series that use the world). */
+/**
+ * Positions on the timeline by id: chapters in reading order (across the
+ * series that use the world), and eras and events once placed.
+ */
 export type ChapterPositions = ReadonlyMap<string, number>
 
-function applies(value: FactValue, at: Moment, positions: ChapterPositions): boolean {
-  if (at === null || !value.from || value.from.kind !== 'chapter') return true
-  const position = positions.get(value.from.chapterId)
-  return position === undefined || position <= at
+/** Before everything: values "from the start", or from something not on the timeline. */
+export const EARLIEST = -1e9
+
+/** Where an anchor sits in time; one not on the timeline (or none) counts as the start. */
+export function anchorPosition(anchor: FactAnchor | null, positions: ChapterPositions): number {
+  if (!anchor) return EARLIEST
+  return positions.get(anchor.kind === 'chapter' ? anchor.chapterId : anchor.entryId) ?? EARLIEST
 }
 
-/** Where a value sits in time; values without a known chapter sit at the start. */
+/** Whether something anchored here has happened by a moment. */
+export function reached(anchor: FactAnchor | null, at: Moment, positions: ChapterPositions) {
+  return at === null || anchorPosition(anchor, positions) <= at
+}
+
+function applies(value: FactValue, at: Moment, positions: ChapterPositions): boolean {
+  return reached(value.from, at, positions)
+}
+
 function start(value: FactValue, positions: ChapterPositions): number {
-  if (value.from?.kind !== 'chapter') return -1
-  return positions.get(value.from.chapterId) ?? -1
+  return anchorPosition(value.from, positions)
 }
 
 /** The single value in effect at a moment: the latest one that has started. */

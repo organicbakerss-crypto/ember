@@ -39,6 +39,8 @@ export function LensView(props: {
   extra?: { mode: string; label: string; render: () => ReactNode }[]
   /** Shown under the List view's table (the board's relationships). */
   listExtra?: ReactNode
+  /** The view to open on when none was chosen before (one of `extra`, say). */
+  defaultMode?: string
 }) {
   const { world, lens } = props
   const key = `world.lensMode.${lens}`
@@ -49,7 +51,9 @@ export function LensView(props: {
     const stored = loadLocal(key)
     if (stored === 'list') return 'list'
     if (stored === 'map' && map) return 'map'
-    return stored && props.extra?.some((x) => x.mode === stored) ? stored : 'visual'
+    if (stored === 'visual') return 'visual'
+    if (stored && props.extra?.some((x) => x.mode === stored)) return stored
+    return props.defaultMode ?? 'visual'
   })
   const setMode = (m: Mode) => {
     setModeState(m)
@@ -184,7 +188,9 @@ function CastView(props: {
   const mentions = world.index?.mentions ?? {}
   const q = query.trim().toLowerCase()
   const has = (e: EntrySummary, field: string, id: string) =>
-    valuesAt({ multiple: true }, e.facts[field], null, world.positions).some((v) => v.link === id)
+    valuesAt({ multiple: true }, e.facts[field], world.at, world.positions).some(
+      (v) => v.link === id,
+    )
   const isCustom = (e: EntrySummary) => !Object.values(KIND_TEMPLATES).flat().includes(e.template)
 
   const shown = props.entries
@@ -275,7 +281,7 @@ function CastView(props: {
           </h2>
           <div className="cast-cards">
             {g.entries.map((e) => {
-              const role = currentValue(e.facts['role'], null, world.positions)?.text
+              const role = currentValue(e.facts['role'], world.at, world.positions)?.text
               return (
                 <button key={e.id} className="cast-card" onClick={() => props.onOpenEntry(e.id)}>
                   <Portrait worldId={world.view.world.id} name={e.name} portrait={e.portrait} />
@@ -304,7 +310,7 @@ function PlaceTree(props: {
   const { world, entries } = props
   const ids = new Set(entries.map((e) => e.id))
   const parentOf = (e: EntrySummary) => {
-    const link = currentValue(e.facts['within'], null, world.positions)?.link
+    const link = currentValue(e.facts['within'], world.at, world.positions)?.link
     return link && ids.has(link) && link !== e.id ? link : null
   }
   const children = new Map<string | null, EntrySummary[]>()
@@ -324,7 +330,7 @@ function PlaceTree(props: {
   const roots = [...(children.get(null) ?? []), ...entries.filter((e) => !reached.has(e.id))]
   const people = (placeId: string) =>
     world.view.entries.filter((p) =>
-      valuesAt({ multiple: false }, p.facts['location'], null, world.positions).some(
+      valuesAt({ multiple: false }, p.facts['location'], world.at, world.positions).some(
         (v) => v.link === placeId,
       ),
     )
@@ -368,7 +374,7 @@ function Eras(props: {
   onOpenEntry: (entryId: string) => void
 }) {
   const { world, entries } = props
-  const eraOf = (e: EntrySummary) => currentValue(e.facts['era'], null, world.positions)?.link
+  const eraOf = (e: EntrySummary) => currentValue(e.facts['era'], world.at, world.positions)?.link
   const eras = entries.filter((e) => e.template === 'era')
   const byEra = (id: string | undefined) =>
     entries
@@ -378,7 +384,7 @@ function Eras(props: {
       )
       .sort((a, b) => a.name.localeCompare(b.name))
   const line = (e: EntrySummary) =>
-    shownFacts(world, e, null, true)
+    shownFacts(world, e, world.at, true)
       .filter((f) => f.field.id !== 'era')
       .map((f) => `${f.field.label}: ${f.values.map((v) => valueLabel(world, v)).join(', ')}`)
       .join(' · ')
@@ -410,7 +416,6 @@ function Eras(props: {
           <ul>{loose.map(item)}</ul>
         </section>
       )}
-      <p className="muted small">The time scrubber and timeline come in a later step.</p>
     </div>
   )
 }
@@ -428,8 +433,8 @@ function Rulebook(props: {
       {[...props.entries]
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((e) => {
-          const rules = valuesAt({ multiple: true }, e.facts['rules'], null, world.positions)
-          const facts = shownFacts(world, e, null).filter((f) => f.field.id !== 'rules')
+          const rules = valuesAt({ multiple: true }, e.facts['rules'], world.at, world.positions)
+          const facts = shownFacts(world, e, world.at).filter((f) => f.field.id !== 'rules')
           return (
             <article key={e.id} className="rule-page">
               <h2>
@@ -484,7 +489,7 @@ function EntryTable(props: {
     return {
       e,
       type: templateName(world, e.template),
-      facts: shownFacts(world, e, null, true)
+      facts: shownFacts(world, e, world.at, true)
         .slice(0, 2)
         .map((f) => `${f.field.label}: ${f.values.map((v) => valueLabel(world, v)).join(', ')}`)
         .join(' · '),

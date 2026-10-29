@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EntrySummary } from '@shared/ipc'
 import type { MapFile, MapPin, MapRegion, Point } from '@shared/schema'
 import { newId } from '@shared/ids'
-import { worldImageUrl } from '@shared/media'
 import { labelPoint, pointInRegion, regionPath, smallestRegionAt } from '@shared/world/maps'
 import { describeError } from '../../api'
 import { useOverlays, type MenuItem } from '../../components/overlays'
 import { EntryPicker } from '../EntryPicker'
-import { initials, templateName } from '../model'
+import { templateName } from '../model'
 import type { WorldData } from '../useWorld'
 import type { Method, Rings } from './detect'
 import { detector } from './detectClient'
-import { mapOfPlace, peopleAt, pinColour, rulerColour, rulerOf } from './mapModel'
+import { mapOfPlace, pinColour, rulerColour, rulerOf } from './mapModel'
+import { MapPeople } from './MapPeople'
 import { PLACE_PIN_DRAG } from './PinBar'
 import { mapPixels, useMapImage, type MapPixels } from './usePixels'
 
@@ -59,6 +59,10 @@ export function MapCanvas(props: {
   map: MapFile
   editing: boolean
   territory: boolean
+  /** Portraits glide to new places as the moment changes. */
+  glide: boolean
+  /** Faint trails behind people who just moved. */
+  trails: boolean
   lighter: boolean
   onSave: (patch: { regions?: MapRegion[]; pins?: MapPin[] }, label: string) => Promise<void>
   onOpenEntry: (entryId: string) => void
@@ -89,6 +93,13 @@ export function MapCanvas(props: {
   const [pickingSea, setPickingSea] = useState(false)
   const [wand, setWand] = useState<{ ops: WandOp[]; rings: Rings | null } | null>(null)
   const [box, setBox] = useState<{ from: Point; to: Point; screen: Point } | null>(null)
+  // A portrait being dragged to another place (records a move at the scrubber's moment).
+  const [personDrag, setPersonDrag] = useState<{
+    id: string
+    at: Point
+    screen: Point
+    moved: boolean
+  } | null>(null)
   const [drag, setDrag] = useState<{
     pin: MapPin
     at: Point
@@ -285,6 +296,8 @@ export function MapCanvas(props: {
     if (!props.editing || tool !== 'select' || e.button !== 0) return
     const p = toImage(e)
     if (pinAt(p)) return
+    // Keep the drag even if it ends outside the map (or over a notice).
+    svg.current?.setPointerCapture(e.pointerId)
     setBox({ from: p, to: p, screen: [e.clientX, e.clientY] })
   }
   const onPointerMove = (e: React.PointerEvent) => {
@@ -296,8 +309,30 @@ export function MapCanvas(props: {
         drag.moved || Math.hypot(e.clientX - drag.screen[0], e.clientY - drag.screen[1]) > 4
       setDrag({ ...drag, at: p, moved })
     }
+    if (personDrag) {
+      const moved =
+        personDrag.moved ||
+        Math.hypot(e.clientX - personDrag.screen[0], e.clientY - personDrag.screen[1]) > 4
+      setPersonDrag({ ...personDrag, at: p, moved })
+    }
   }
   const onPointerUp = (e: React.PointerEvent) => {
+    if (personDrag) {
+      const { id, at, moved } = personDrag
+      setPersonDrag(null)
+      swallowClick.current = true
+      if (!moved) props.onOpenEntry(id)
+      else {
+        const placeId =
+          pinAt(at)?.placeId ??
+          smallestRegionAt(
+            regions.filter((r) => r.placeId),
+            at,
+          )?.placeId
+        if (placeId) props.onDropPerson(id, placeId)
+        else toast('Drop them on a place (a linked region or a pin).')
+      }
+    }
     if (box) {
       const far = Math.hypot(e.clientX - box.screen[0], e.clientY - box.screen[1]) > 6
       setBox(null)
@@ -460,51 +495,6 @@ export function MapCanvas(props: {
       const ruler = r.placeId ? rulerOf(world, r.placeId) : undefined
       if (ruler) rulers.set(ruler.id, ruler)
     }
-  }
-
-  const people = (placeId: string, x: number, y: number): ReactNode => {
-    const here = peopleAt(world, placeId)
-    if (!here.length) return null
-    return (
-      <g className="map-markers">
-        {here.slice(0, 4).map((p, i) => {
-          const cx = x + (i - (Math.min(here.length, 4) - 1) / 2) * unit * 2.6
-          return (
-            <g
-              key={p.id}
-              className="map-person"
-              onClick={(e) => {
-                e.stopPropagation()
-                props.onOpenEntry(p.id)
-              }}
-            >
-              <title>{p.name}</title>
-              <circle cx={cx} cy={y} r={unit * 1.2} />
-              {p.portrait ? (
-                <image
-                  href={worldImageUrl(worldId, p.portrait.file)}
-                  x={cx - unit * 1.1}
-                  y={y - unit * 1.1}
-                  width={unit * 2.2}
-                  height={unit * 2.2}
-                  clipPath="url(#map-portrait)"
-                  preserveAspectRatio="xMidYMid slice"
-                />
-              ) : (
-                <text x={cx} y={y + unit * 0.4} fontSize={unit * 1.1} textAnchor="middle">
-                  {initials(p.name)}
-                </text>
-              )}
-            </g>
-          )
-        })}
-        {here.length > 4 && (
-          <text x={x + unit * 6} y={y + unit * 0.4} fontSize={unit * 1.1} className="map-more">
-            +{here.length - 4}
-          </text>
-        )}
-      </g>
-    )
   }
 
   const dropPerson = (placeId: string | null) => ({
@@ -713,7 +703,6 @@ export function MapCanvas(props: {
               const sub = mapOfPlace(world, r.placeId)
               return (
                 <g key={`m-${r.id}`}>
-                  {people(r.placeId, x, y + unit * 1.8)}
                   {sub && (
                     <g
                       className="map-enter"
@@ -768,10 +757,29 @@ export function MapCanvas(props: {
                   />
                   <circle cx={0} cy={-1.9 * s} r={0.4 * s} className="map-pin-eye" />
                 </g>
-                {!props.editing && !drag && people(pin.placeId, at[0] + s * 2.6, at[1] - s * 1.9)}
               </g>
             )
           })}
+          {!props.editing && (
+            <MapPeople
+              world={world}
+              regions={regions}
+              pins={pins}
+              unit={unit}
+              s={s}
+              hidePlace={drag?.moved ? drag.pin.placeId : undefined}
+              glide={props.glide}
+              trails={props.trails}
+              dragging={personDrag?.moved ? personDrag : undefined}
+              onPersonDown={(id, e) => {
+                if (e.button !== 0) return
+                e.stopPropagation()
+                svg.current?.setPointerCapture(e.pointerId)
+                setPersonDrag({ id, at: toImage(e), screen: [e.clientX, e.clientY], moved: false })
+              }}
+              onOpenEntry={props.onOpenEntry}
+            />
+          )}
           {wand?.rings && (
             <path
               className="map-preview"

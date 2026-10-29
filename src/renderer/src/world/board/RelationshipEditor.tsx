@@ -3,6 +3,8 @@ import type { FactAnchor, RelationshipFile } from '@shared/schema'
 import { chapterName } from '@shared/world/story'
 import { EntryPicker } from '../EntryPicker'
 import { lensOf } from '../model'
+import { anchorOf } from '@shared/world/timeline'
+import { useTime } from '../time/TimeContext'
 import type { WorldData } from '../useWorld'
 import type { RelationshipDraft } from './useRelationships'
 
@@ -41,7 +43,9 @@ export function RelationshipEditor(props: {
     rel?.kin === 'parent' ? 'parentOf' : rel?.kin === 'partner' ? 'partner' : 'sibling',
   )
   const [over, setOver] = useState(rel?.over ?? false)
-  const [start, setStart] = useState(anchorKey(rel?.start ?? null))
+  // A new link made with the scrubber at a moment starts there.
+  const { stop } = useTime()
+  const [start, setStart] = useState(anchorKey(rel ? rel.start : stop && anchorOf(stop)))
   const [end, setEnd] = useState(anchorKey(rel?.end ?? null))
   const chapters = world.index?.chapters ?? []
   const events = world.view.entries.filter((e) => lensOf(world, e) === 'when')

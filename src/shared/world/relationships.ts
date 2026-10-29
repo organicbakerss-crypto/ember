@@ -5,7 +5,7 @@
  * family tree layout.
  */
 import type { RelationshipFile, RelationshipType } from '../schema'
-import type { ChapterPositions, Moment } from './facts'
+import { anchorPosition, reached, type ChapterPositions, type Moment } from './facts'
 
 export const BUILT_IN_RELATIONSHIP_TYPES: readonly RelationshipType[] = [
   { id: 'met', label: 'Met', colour: '#8a8a8a' },
@@ -27,7 +27,7 @@ export function relationshipTypes(custom: readonly RelationshipType[]): Relation
 }
 
 function startOf(rel: RelationshipFile, positions: ChapterPositions): number {
-  return rel.start?.kind === 'chapter' ? (positions.get(rel.start.chapterId) ?? -1) : -1
+  return anchorPosition(rel.start, positions)
 }
 
 /** Whether a relationship has started by a moment, and whether it is over then. */
@@ -36,14 +36,10 @@ export function relationshipAt(
   at: Moment,
   positions: ChapterPositions,
 ): { over: boolean } | null {
-  const reached = (anchor: RelationshipFile['start']) => {
-    if (!anchor) return true
-    if (at === null || anchor.kind !== 'chapter') return true
-    const p = positions.get(anchor.chapterId)
-    return p === undefined || p <= at
-  }
-  if (rel.start && !reached(rel.start)) return null
-  return { over: rel.over || (!!rel.end && reached(rel.end)) }
+  if (!reached(rel.start, at, positions)) return null
+  // "Over" without an end is over throughout; with an end, from then on.
+  if (rel.end) return { over: reached(rel.end, at, positions) }
+  return { over: rel.over }
 }
 
 export interface BoardLine {

@@ -392,6 +392,28 @@ function WorldSettings() {
         On the people board, show every relationship type along a line (otherwise one colour: the
         strongest)
       </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.timeScrubber}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, timeScrubber: e.target.checked } }))
+          }
+        />
+        Show the time scrubber above the map and the board (otherwise the world as it stands at the
+        latest chapter)
+      </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.trails}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, trails: e.target.checked } }))
+          }
+        />
+        Movement trails and animations (portraits glide to where they are; off when reduced motion
+        is on)
+      </label>
       <label>
         “Gone quiet” after
         <input

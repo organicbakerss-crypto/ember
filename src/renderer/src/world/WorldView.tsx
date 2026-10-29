@@ -24,6 +24,8 @@ import { PeopleBoard } from './board/PeopleBoard'
 import { RelationshipsTable } from './board/RelationshipsTable'
 import { worldMapOf } from './map/mapModel'
 import { useSettings } from '../useTheme'
+import { TimeContext, type TimeState } from './time/TimeContext'
+import { TimelineView } from './time/TimelineView'
 
 type Place =
   | { kind: 'lens'; lens: Lens }
@@ -51,9 +53,19 @@ export function WorldView(props: {
   onOpenAppearance: (appearance: Appearance, name: string) => void
 }) {
   const { worldId } = props
-  const { data: world, error } = useWorld(worldId)
+  const { data: loaded, error } = useWorld(worldId)
   const record = useUndo()
   const { settings } = useSettings()
+  // The time scrubber's moment, shared by every view in World mode.
+  const [stopId, setStopId] = useState<string | null>(null)
+  const timeOn = settings.world.timeScrubber
+  const stop = (timeOn && stopId && loaded?.timeline.stops.find((s) => s.id === stopId)) || null
+  const world = loaded && { ...loaded, at: stop ? stop.position : null }
+  const time: TimeState = {
+    stop,
+    setStop: (next) => setStopId(next?.id ?? null),
+    enabled: timeOn,
+  }
   const actions = useWorldActions(world, record)
   const { openMenu, toast } = useOverlays()
   const lensKey = `world.lens.${worldId}`
@@ -236,245 +248,262 @@ export function WorldView(props: {
   )
 
   return (
-    <div className="world-view">
-      <header className="top-bar">
-        <button className="link" onClick={props.onBack} title="Back to the bookshelf">
-          ← Bookshelf
-        </button>
-        <span className="nav-buttons">
+    <TimeContext.Provider value={time}>
+      <div className="world-view">
+        <header className="top-bar">
+          <button className="link" onClick={props.onBack} title="Back to the bookshelf">
+            ← Bookshelf
+          </button>
+          <span className="nav-buttons">
+            <button
+              className="icon"
+              aria-label="Back"
+              title="Back (Alt+←)"
+              disabled={nav.at === 0}
+              onClick={back}
+            >
+              ‹
+            </button>
+            <button
+              className="icon"
+              aria-label="Forward"
+              title="Forward (Alt+→)"
+              disabled={nav.at >= nav.stack.length - 1}
+              onClick={forward}
+            >
+              ›
+            </button>
+          </span>
+          <nav className="breadcrumb small" aria-label="Breadcrumb">
+            <span>{view.world.name}</span>
+            {currentLens && (
+              <>
+                <span className="muted">/</span>
+                <button className="link" onClick={() => go({ kind: 'lens', lens: currentLens })}>
+                  {LENS_LABELS[currentLens]}
+                </button>
+              </>
+            )}
+            {entry && (
+              <>
+                <span className="muted">/</span>
+                <span className="breadcrumb-current">{entry.name}</span>
+              </>
+            )}
+          </nav>
+          <span className="status-spacer" />
           <button
             className="icon"
-            aria-label="Back"
-            title="Back (Alt+←)"
-            disabled={nav.at === 0}
-            onClick={back}
+            aria-label="World menu"
+            onClick={(e) =>
+              openMenu(e, [
+                {
+                  label: 'Add to the world…',
+                  hint: `${MOD}Alt+N`,
+                  onSelect: () => setQuickAdd({}),
+                },
+                { label: 'Templates…', onSelect: () => setTemplatesOpen(true) },
+                { label: 'View the world as text', onSelect: showDigest },
+              ])
+            }
           >
-            ‹
+            ⋯
           </button>
-          <button
-            className="icon"
-            aria-label="Forward"
-            title="Forward (Alt+→)"
-            disabled={nav.at >= nav.stack.length - 1}
-            onClick={forward}
-          >
-            ›
-          </button>
-        </span>
-        <nav className="breadcrumb small" aria-label="Breadcrumb">
-          <span>{view.world.name}</span>
-          {currentLens && (
-            <>
-              <span className="muted">/</span>
-              <button className="link" onClick={() => go({ kind: 'lens', lens: currentLens })}>
-                {LENS_LABELS[currentLens]}
+          {props.onWrite && (
+            <div className="segmented mode-switch" role="radiogroup" aria-label="Mode">
+              <button
+                role="radio"
+                aria-checked={false}
+                onClick={props.onWrite}
+                title={`Write: ${props.writeLabel}`}
+              >
+                Write
               </button>
-            </>
+              <button role="radio" aria-checked className="active">
+                World
+              </button>
+            </div>
           )}
-          {entry && (
-            <>
-              <span className="muted">/</span>
-              <span className="breadcrumb-current">{entry.name}</span>
-            </>
+        </header>
+
+        <aside className="side-panel world-panel">
+          <nav className="world-lenses" aria-label="Lenses">
+            {LENSES.map((lens) => (
+              <button
+                key={lens}
+                className={`world-nav-item ${currentLens === lens && place.kind === 'lens' ? 'active' : ''}`}
+                aria-current={currentLens === lens && place.kind === 'lens' ? 'page' : undefined}
+                onClick={() => go({ kind: 'lens', lens })}
+              >
+                <span className="world-nav-label">{LENS_LABELS[lens]}</span>
+                <span className="muted small">
+                  {view.entries.filter((e) => lensOf(world, e) === lens).length}
+                </span>
+              </button>
+            ))}
+            <button
+              className={`world-nav-item ${place.kind === 'inbox' ? 'active' : ''}`}
+              onClick={() => go({ kind: 'inbox' })}
+            >
+              <span className="world-nav-label">Inbox</span>
+              {view.inboxCount > 0 && <span className="muted small">{view.inboxCount}</span>}
+            </button>
+          </nav>
+          {pinned.length > 0 && (
+            <section aria-label="Pinned">
+              <h3 className="panel-heading small muted">Pinned</h3>
+              <ul className="world-side-list">{pinned.map(sideItem)}</ul>
+            </section>
           )}
-        </nav>
-        <span className="status-spacer" />
-        <button
-          className="icon"
-          aria-label="World menu"
-          onClick={(e) =>
-            openMenu(e, [
-              { label: 'Add to the world…', hint: `${MOD}Alt+N`, onSelect: () => setQuickAdd({}) },
-              { label: 'Templates…', onSelect: () => setTemplatesOpen(true) },
-              { label: 'View the world as text', onSelect: showDigest },
-            ])
-          }
-        >
-          ⋯
-        </button>
-        {props.onWrite && (
-          <div className="segmented mode-switch" role="radiogroup" aria-label="Mode">
-            <button
-              role="radio"
-              aria-checked={false}
-              onClick={props.onWrite}
-              title={`Write: ${props.writeLabel}`}
-            >
-              Write
-            </button>
-            <button role="radio" aria-checked className="active">
-              World
-            </button>
-          </div>
-        )}
-      </header>
+          {recentEntries.length > 0 && (
+            <section aria-label="Recent">
+              <h3 className="panel-heading small muted">Recent</h3>
+              <ul className="world-side-list">{recentEntries.map(sideItem)}</ul>
+            </section>
+          )}
+          {view.problems.length > 0 && (
+            <div className="warning small world-problems">
+              <p>
+                {view.problems.length === 1
+                  ? 'One entry file'
+                  : `${view.problems.length} entry files`}{' '}
+                couldn’t be read and {view.problems.length === 1 ? 'is' : 'are'} left untouched:
+              </p>
+              <ul>
+                {view.problems.slice(0, 5).map((p) => (
+                  <li key={p.path} title={p.message}>
+                    {p.path}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </aside>
 
-      <aside className="side-panel world-panel">
-        <nav className="world-lenses" aria-label="Lenses">
-          {LENSES.map((lens) => (
-            <button
-              key={lens}
-              className={`world-nav-item ${currentLens === lens && place.kind === 'lens' ? 'active' : ''}`}
-              aria-current={currentLens === lens && place.kind === 'lens' ? 'page' : undefined}
-              onClick={() => go({ kind: 'lens', lens })}
-            >
-              <span className="world-nav-label">{LENS_LABELS[lens]}</span>
-              <span className="muted small">
-                {view.entries.filter((e) => lensOf(world, e) === lens).length}
-              </span>
-            </button>
-          ))}
-          <button
-            className={`world-nav-item ${place.kind === 'inbox' ? 'active' : ''}`}
-            onClick={() => go({ kind: 'inbox' })}
-          >
-            <span className="world-nav-label">Inbox</span>
-            {view.inboxCount > 0 && <span className="muted small">{view.inboxCount}</span>}
-          </button>
-        </nav>
-        {pinned.length > 0 && (
-          <section aria-label="Pinned">
-            <h3 className="panel-heading small muted">Pinned</h3>
-            <ul className="world-side-list">{pinned.map(sideItem)}</ul>
-          </section>
-        )}
-        {recentEntries.length > 0 && (
-          <section aria-label="Recent">
-            <h3 className="panel-heading small muted">Recent</h3>
-            <ul className="world-side-list">{recentEntries.map(sideItem)}</ul>
-          </section>
-        )}
-        {view.problems.length > 0 && (
-          <div className="warning small world-problems">
-            <p>
-              {view.problems.length === 1
-                ? 'One entry file'
-                : `${view.problems.length} entry files`}{' '}
-              couldn’t be read and {view.problems.length === 1 ? 'is' : 'are'} left untouched:
-            </p>
-            <ul>
-              {view.problems.slice(0, 5).map((p) => (
-                <li key={p.path} title={p.message}>
-                  {p.path}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </aside>
-
-      <main className="page-area world-main">
-        <div className="page-scroll">
-          {place.kind === 'entry' ? (
-            entry ? (
-              <EntryPage
+        <main className="page-area world-main">
+          <div className="page-scroll">
+            {place.kind === 'entry' ? (
+              entry ? (
+                <EntryPage
+                  world={world}
+                  entryId={entry.id}
+                  actions={actions}
+                  record={record}
+                  onOpenEntry={openEntry}
+                  onOpenAppearance={props.onOpenAppearance}
+                  onSaveState={onSaveState}
+                  onDeleted={back}
+                  onOpenMap={(mapId) => openMap(mapId)}
+                />
+              ) : (
+                <div className="page-message">
+                  <p className="muted">
+                    This entry is no longer in the world (it may be in the trash).
+                  </p>
+                  <button onClick={back}>Go back</button>
+                </div>
+              )
+            ) : place.kind === 'inbox' ? (
+              <InboxView world={world} actions={actions} record={record} onOpenEntry={openEntry} />
+            ) : place.kind === 'map' ? (
+              world.view.maps.some((m) => m.id === place.mapId) ? (
+                <div className="lens-view lens-map">{whereMap(place.mapId)}</div>
+              ) : (
+                <div className="page-message">
+                  <p className="muted">
+                    This map is no longer in the world (it may be in the trash).
+                  </p>
+                  <button onClick={back}>Go back</button>
+                </div>
+              )
+            ) : (
+              <LensView
+                key={place.lens}
                 world={world}
-                entryId={entry.id}
-                actions={actions}
-                record={record}
+                lens={place.lens}
                 onOpenEntry={openEntry}
-                onOpenAppearance={props.onOpenAppearance}
-                onSaveState={onSaveState}
-                onDeleted={back}
-                onOpenMap={(mapId) => openMap(mapId)}
+                onNew={(lens) => setQuickAdd({ lens })}
+                map={
+                  settings.world.map
+                    ? { exists: !!worldMapOf(world), render: () => whereMap(null) }
+                    : undefined
+                }
+                extra={
+                  place.lens === 'who'
+                    ? [
+                        {
+                          mode: 'board',
+                          label: 'Board',
+                          render: () => (
+                            <PeopleBoard world={world} record={record} onOpenEntry={openEntry} />
+                          ),
+                        },
+                        {
+                          mode: 'tree',
+                          label: 'Family tree',
+                          render: () => <FamilyTreeView world={world} onOpenEntry={openEntry} />,
+                        },
+                      ]
+                    : place.lens === 'when'
+                      ? [
+                          {
+                            mode: 'timeline',
+                            label: 'Timeline',
+                            render: () => (
+                              <TimelineView world={world} record={record} onOpenEntry={openEntry} />
+                            ),
+                          },
+                        ]
+                      : undefined
+                }
+                defaultMode={place.lens === 'when' ? 'timeline' : undefined}
+                listExtra={
+                  place.lens === 'who' ? (
+                    <RelationshipsTable world={world} record={record} onOpenEntry={openEntry} />
+                  ) : undefined
+                }
               />
-            ) : (
-              <div className="page-message">
-                <p className="muted">
-                  This entry is no longer in the world (it may be in the trash).
-                </p>
-                <button onClick={back}>Go back</button>
-              </div>
-            )
-          ) : place.kind === 'inbox' ? (
-            <InboxView world={world} actions={actions} record={record} onOpenEntry={openEntry} />
-          ) : place.kind === 'map' ? (
-            world.view.maps.some((m) => m.id === place.mapId) ? (
-              <div className="lens-view lens-map">{whereMap(place.mapId)}</div>
-            ) : (
-              <div className="page-message">
-                <p className="muted">
-                  This map is no longer in the world (it may be in the trash).
-                </p>
-                <button onClick={back}>Go back</button>
-              </div>
-            )
-          ) : (
-            <LensView
-              key={place.lens}
-              world={world}
-              lens={place.lens}
-              onOpenEntry={openEntry}
-              onNew={(lens) => setQuickAdd({ lens })}
-              map={
-                settings.world.map
-                  ? { exists: !!worldMapOf(world), render: () => whereMap(null) }
-                  : undefined
-              }
-              extra={
-                place.lens === 'who'
-                  ? [
-                      {
-                        mode: 'board',
-                        label: 'Board',
-                        render: () => (
-                          <PeopleBoard world={world} record={record} onOpenEntry={openEntry} />
-                        ),
-                      },
-                      {
-                        mode: 'tree',
-                        label: 'Family tree',
-                        render: () => <FamilyTreeView world={world} onOpenEntry={openEntry} />,
-                      },
-                    ]
-                  : undefined
-              }
-              listExtra={
-                place.lens === 'who' ? (
-                  <RelationshipsTable world={world} record={record} onOpenEntry={openEntry} />
-                ) : undefined
-              }
-            />
-          )}
-        </div>
-      </main>
+            )}
+          </div>
+        </main>
 
-      <footer className="status-bar small">
-        <span>
-          {view.entries.length} {view.entries.length === 1 ? 'entry' : 'entries'}
-          {entry && ` · ${templateName(world, entry.template)}`}
-        </span>
-        <span className="status-spacer" />
-        <span className={save.state === 'error' ? 'error' : 'muted'} role="status">
-          {save.state === 'error'
-            ? `Not saved: ${save.error} (retrying)`
-            : { saved: 'Saved', unsaved: 'Editing…', saving: 'Saving…' }[save.state]}
-        </span>
-      </footer>
+        <footer className="status-bar small">
+          <span>
+            {view.entries.length} {view.entries.length === 1 ? 'entry' : 'entries'}
+            {entry && ` · ${templateName(world, entry.template)}`}
+          </span>
+          <span className="status-spacer" />
+          <span className={save.state === 'error' ? 'error' : 'muted'} role="status">
+            {save.state === 'error'
+              ? `Not saved: ${save.error} (retrying)`
+              : { saved: 'Saved', unsaved: 'Editing…', saving: 'Saving…' }[save.state]}
+          </span>
+        </footer>
 
-      {quickAdd && (
-        <QuickAddDialog
-          templates={view.templates}
-          existing={view.entries.flatMap((e) => [e.name, ...e.aliases])}
-          lens={quickAdd.lens}
-          template={quickAdd.template}
-          name={quickAdd.name}
-          onCreate={async (name, template) => {
-            const created = await actions.create(name, template)
-            if (created) openEntry(created.id)
-            return !!created
-          }}
-          onCancel={() => setQuickAdd(null)}
-        />
-      )}
-      {templatesOpen && <TemplateDialog world={world} onClose={() => setTemplatesOpen(false)} />}
-      {digest !== null && (
-        <TextFormDialog
-          title={`${view.world.name} as text`}
-          text={digest}
-          onClose={() => setDigest(null)}
-        />
-      )}
-    </div>
+        {quickAdd && (
+          <QuickAddDialog
+            templates={view.templates}
+            existing={view.entries.flatMap((e) => [e.name, ...e.aliases])}
+            lens={quickAdd.lens}
+            template={quickAdd.template}
+            name={quickAdd.name}
+            onCreate={async (name, template) => {
+              const created = await actions.create(name, template)
+              if (created) openEntry(created.id)
+              return !!created
+            }}
+            onCancel={() => setQuickAdd(null)}
+          />
+        )}
+        {templatesOpen && <TemplateDialog world={world} onClose={() => setTemplatesOpen(false)} />}
+        {digest !== null && (
+          <TextFormDialog
+            title={`${view.world.name} as text`}
+            text={digest}
+            onClose={() => setDigest(null)}
+          />
+        )}
+      </div>
+    </TimeContext.Provider>
   )
 }

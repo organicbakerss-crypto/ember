@@ -34,6 +34,7 @@ import {
   type WorldFile,
 } from '@shared/schema'
 import { newId } from '@shared/ids'
+import type { FactAnchor } from '@shared/schema'
 import type {
   Appearance,
   EntryChangeResult,
@@ -52,9 +53,11 @@ import { splitSentences } from '@shared/analysis/sentences'
 import { DEFAULT_FILLER_WORDS } from '@shared/analysis/fillers'
 import { catchNames } from '@shared/world/nameCatcher'
 import { entryText, worldDigest } from '@shared/world/digest'
-import { chapterPositions, type StoryChapter, type WorldIndex } from '@shared/world/story'
+import { type StoryChapter, type WorldIndex } from '@shared/world/story'
 import { isBuiltIn, worldTemplates } from '@shared/world/templates'
-import { nearbyPlaces } from '@shared/world/maps'
+import { baseMaps, mapsNow, nearbyPlaces } from '@shared/world/maps'
+import { anchorPosition, type ChapterPositions } from '@shared/world/facts'
+import { buildTimeline, timelinePositions } from '@shared/world/timeline'
 import { relationshipText, relationshipTypes } from '@shared/world/relationships'
 import { AppError } from '../errors'
 import { isTempFileName } from '../fs/atomicWrite'
@@ -105,7 +108,15 @@ export interface RelationshipInput {
 export type EntryPatch = Partial<
   Pick<
     WorldEntryFile,
-    'name' | 'aliases' | 'template' | 'facts' | 'body' | 'quotes' | 'portrait' | 'mergedFrom'
+    | 'name'
+    | 'aliases'
+    | 'template'
+    | 'facts'
+    | 'body'
+    | 'quotes'
+    | 'portrait'
+    | 'mergedFrom'
+    | 'when'
   >
 >
 
@@ -176,7 +187,7 @@ export class WorldStore {
       problems: [...problems, ...mapProblems, ...relProblems],
       inboxCount: inbox.items.length,
       maps,
-      nearby: this.nearbyFor(maps),
+      nearby: this.nearbyFor(maps, buildTimeline(entries, []).positions),
       relationships,
       relationshipTypes: relationshipTypes(await this.customRelationshipTypes(worldId)),
       board: (await this.readBoard(worldId)).positions,
@@ -240,6 +251,7 @@ export class WorldStore {
       quotes: [],
       portrait: null,
       mergedFrom: [],
+      when: null,
       createdAt: time,
       updatedAt: time,
     }
@@ -280,6 +292,7 @@ export class WorldStore {
     if (patch.mergedFrom !== undefined) {
       next.mergedFrom = [...new Set(patch.mergedFrom.filter((id) => id !== entryId))]
     }
+    if (patch.when !== undefined) next.when = patch.when
     next.updatedAt = this.host.timestamp()
     await this.host.writeFile(worldId, unitPaths.entry(entryId), next)
     return next
@@ -488,7 +501,9 @@ export class WorldStore {
   /**
    * A new map: an imported image (stored once, by content hash), or a travel
    * sketch when there is no image. `placeId` is the place it shows (null for
-   * the world map).
+   * the world map). With `version`, a later version of an existing map, from
+   * an event onwards: a copy of the version shown (its regions and pins
+   * scaled to a new image if there is one).
    */
   async createMap(
     worldId: string,
@@ -496,6 +511,7 @@ export class WorldStore {
       name: string
       placeId: string | null
       image: { data: Uint8Array; width: number; height: number } | null
+      version?: { of: string; copyFrom: string; from: FactAnchor }
     },
   ): Promise<MapFile> {
     await this.host.getWorld(worldId)
@@ -506,7 +522,7 @@ export class WorldStore {
         width: input.image.width,
         height: input.image.height,
       }
-      const created: MapFile = {
+      let created: MapFile = {
         formatVersion: FORMAT_VERSION,
         id: newId('map'),
         worldId,
@@ -516,8 +532,36 @@ export class WorldStore {
         regions: [],
         pins: [],
         sketch: image ? null : { nodes: [], roads: [] },
+        versionOf: null,
+        from: null,
         createdAt: time,
         updatedAt: time,
+      }
+      if (input.version) {
+        const base = await this.readMap(worldId, input.version.of)
+        if (base.versionOf) throw new AppError('invalid-input', 'That map is itself a version.')
+        const source = await this.readMap(worldId, input.version.copyFrom)
+        if (source.id !== base.id && source.versionOf !== base.id) {
+          throw new AppError('invalid-input', 'That map is not a version of this one.')
+        }
+        const sx = image && source.image ? image.width / source.image.width : 1
+        const sy = image && source.image ? image.height / source.image.height : 1
+        created = {
+          ...created,
+          name: base.name,
+          placeId: base.placeId,
+          image: image ?? source.image,
+          regions: source.regions.map((r) => ({
+            ...r,
+            rings: r.rings.map((ring) =>
+              ring.map(([x, y]) => [x * sx, y * sy] as [number, number]),
+            ),
+          })),
+          pins: source.pins.map((p) => ({ ...p, x: p.x * sx, y: p.y * sy })),
+          sketch: source.sketch,
+          versionOf: base.id,
+          from: input.version.from,
+        }
       }
       await fs.promises.mkdir(join(this.dir(worldId), 'maps'), { recursive: true })
       await this.host.writeFile(worldId, unitPaths.map(created.id), created)
@@ -550,9 +594,15 @@ export class WorldStore {
   }
 
   /** Places next to each place, from touching regions and sketch roads (cached per map version). */
-  private nearbyFor(maps: MapFile[]): Record<string, string[]> {
+  private nearbyFor(maps: MapFile[], positions: ChapterPositions): Record<string, string[]> {
     const key = maps.map((m) => `${m.id}@${m.updatedAt}`).join('|')
-    if (this.nearbyCache?.key !== key) this.nearbyCache = { key, nearby: nearbyPlaces(maps) }
+    // Only each map's latest version counts. Versions are ordered by history
+    // (positions without chapters: ones from events during the story go by age).
+    const order = maps.map((m) => `${m.id}:${m.from ? anchorPosition(m.from, positions) : ''}`)
+    const keyed = `${key}#${order.join(',')}`
+    if (this.nearbyCache?.key !== keyed) {
+      this.nearbyCache = { key: keyed, nearby: nearbyPlaces(mapsNow(maps, positions)) }
+    }
     return this.nearbyCache.nearby
   }
 
@@ -1043,9 +1093,10 @@ export class WorldStore {
       view.world.name,
       view.entries,
       view.templates,
-      chapterPositions(index),
+      timelinePositions(view.entries, index),
       view.nearby,
       { relationships: view.relationships, types: view.relationshipTypes },
+      index.chapters,
     )
   }
 
@@ -1064,8 +1115,10 @@ export class WorldStore {
       chapters: index.chapters,
       mentions: index.mentions[entryId],
       nearby: view.nearby[entryId] ?? [],
-      maps: view.maps.filter((m) => m.placeId === entryId).map((m) => m.name),
-      pinnedOn: view.maps
+      maps: baseMaps(view.maps)
+        .filter((m) => m.placeId === entryId)
+        .map((m) => m.name),
+      pinnedOn: mapsNow(view.maps, timelinePositions(view.entries, index))
         .filter((m) => m.pins.some((p) => p.placeId === entryId))
         .map((m) => m.name),
       relationships: view.relationships
@@ -1096,6 +1149,7 @@ function toSummary(entry: WorldEntryFile): EntrySummary {
     portrait: entry.portrait,
     mergedFrom: entry.mergedFrom,
     links: bodyLinks(entry.body),
+    when: entry.when,
     updatedAt: entry.updatedAt,
   }
 }

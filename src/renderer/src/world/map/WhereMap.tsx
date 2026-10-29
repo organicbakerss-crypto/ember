@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
-import type { EntrySummary } from '@shared/ipc'
-import type { MapFile, MapPin, MapRegion, Point, Sketch } from '@shared/schema'
+import type { EntrySummary, TrashEntry } from '@shared/ipc'
+import type { FactAnchor, MapFile, MapPin, MapRegion, Point, Sketch } from '@shared/schema'
 import { newId } from '@shared/ids'
 import { regionTemplate, smallestRegionAt } from '@shared/world/maps'
-import { currentValue } from '@shared/world/facts'
+import { currentValue, sameAnchor } from '@shared/world/facts'
+import { anchorOf } from '@shared/world/timeline'
 import { api, describeError } from '../../api'
 import { EditableText } from '../../components/EditableText'
 import { useOverlays } from '../../components/overlays'
@@ -15,7 +16,10 @@ import type { WorldData } from '../useWorld'
 import type { WorldActions } from '../useWorldActions'
 import { MapCanvas, type NewPlaceTarget } from './MapCanvas'
 import { PinBar } from './PinBar'
-import { parentMapOf, sketchOf, withinChain, worldMapOf } from './mapModel'
+import { baseOf, parentMapOf, shownMap, sketchOf, withinChain, worldMapOf } from './mapModel'
+import { useTime } from '../time/TimeContext'
+import { TimeScrubber } from '../time/TimeScrubber'
+import { motionAllowed, stopShort } from '../time/timeModel'
 import { TravelSketch } from './TravelSketch'
 import { UnplacedTray } from './UnplacedTray'
 
@@ -83,12 +87,16 @@ export function WhereMap(props: {
   const fileInput = useRef<HTMLInputElement>(null)
   const importMap = useMapImport(world, record)
 
-  const map = props.mapId ? world.view.maps.find((m) => m.id === props.mapId) : worldMapOf(world)
+  const asked = props.mapId ? world.view.maps.find((m) => m.id === props.mapId) : undefined
+  const base = asked ? baseOf(world, asked) : worldMapOf(world)
+  // The version of the map in effect at the scrubber's moment.
+  const map = base && shownMap(world, base)
   const sketch = sketchOf(world)
+  const { stop } = useTime()
 
   // Breadcrumbs: this map, the map its place sits on, and so on up to the world map.
   const trail: MapFile[] = []
-  for (let m = map; m && trail.length < 8;) {
+  for (let m = base; m && trail.length < 8;) {
     trail.unshift(m)
     m = m.placeId ? (parentMapOf(world, m.placeId) ?? undefined) : undefined
     if (m && trail.includes(m)) break
@@ -261,22 +269,35 @@ export function WhereMap(props: {
     }
   }
 
+  /**
+   * Moving someone is a drag: it records where they are from the scrubber's
+   * moment ("in Saltmere from Ch 8"); at "now", from the latest chapter.
+   */
   const dropPerson = async (personId: string, placeId: string) => {
     const person = world.resolve(personId)
     const place = world.resolve(placeId)
     if (!person || !place) return
     const before = person.facts
+    const chapters = world.index?.chapters ?? []
+    const latest = chapters[chapters.length - 1]
+    const from: FactAnchor | null = stop
+      ? anchorOf(stop)
+      : latest
+        ? { kind: 'chapter', chapterId: latest.id }
+        : null
+    const when = stop ? stopShort(world, stop) : latest?.label
     const facts = {
       ...person.facts,
       location: [
-        ...(person.facts['location'] ?? []),
-        { id: newId('fact'), link: placeId, from: null },
+        // A move at the same moment replaces the one recorded there.
+        ...(person.facts['location'] ?? []).filter((v) => !sameAnchor(v.from, from)),
+        { id: newId('fact'), link: placeId, from },
       ],
     }
     try {
       await api.invoke('entry:save', { worldId, entryId: person.id, patch: { facts } })
       record({
-        label: `${person.name} is now in ${place.name}`,
+        label: `${person.name} is in ${place.name}${when ? ` from ${when}` : ''}`,
         undo: () =>
           api.invoke('entry:save', { worldId, entryId: person.id, patch: { facts: before } }),
       })
@@ -285,22 +306,32 @@ export function WhereMap(props: {
     }
   }
 
+  /** Removes a map with all its versions, or just one version. */
   const removeMap = async (target: MapFile) => {
+    const version = !!target.versionOf
+    const versions = version ? [] : world.view.maps.filter((m) => m.versionOf === target.id)
     const answer = await choose(
-      `Remove “${target.name}”?`,
+      version ? `Remove this version of “${target.name}”?` : `Remove “${target.name}”?`,
       [{ value: 'remove', label: 'Move to trash', danger: true }],
-      'Its regions go with it; the places stay. You can restore it from the trash.',
+      version
+        ? 'Earlier moments keep the map as it was before. You can restore it from the trash.'
+        : `Its regions go with it${versions.length ? `, and its ${versions.length === 1 ? 'later version' : `${versions.length} later versions`}` : ''}; the places stay. You can restore it from the trash.`,
     )
     if (!answer) return
     try {
-      const trashed = await api.invoke('trash:add', {
-        target: { kind: 'map', worldId, mapId: target.id },
-      })
+      const trashed: TrashEntry[] = []
+      for (const m of [...versions, target]) {
+        trashed.push(
+          await api.invoke('trash:add', { target: { kind: 'map', worldId, mapId: m.id } }),
+        )
+      }
       record({
-        label: `Removed ${target.name}`,
-        undo: () => api.invoke('trash:restore', { trashId: trashed.id }),
+        label: version ? `Removed a version of ${target.name}` : `Removed ${target.name}`,
+        undo: async () => {
+          for (const t of trashed.reverse()) await api.invoke('trash:restore', { trashId: t.id })
+        },
       })
-      props.onOpenMap(null)
+      if (!version) props.onOpenMap(null)
     } catch (err) {
       toast(describeError(err).message)
     }
@@ -320,7 +351,7 @@ export function WhereMap(props: {
             trail.map((m, i) => (
               <span key={m.id}>
                 {i > 0 && <span className="muted"> › </span>}
-                {m.id === map.id ? (
+                {m.id === base!.id ? (
                   <EditableText
                     className="breadcrumb-current"
                     value={m.name}
@@ -369,7 +400,20 @@ export function WhereMap(props: {
                           },
                         ]
                       : []),
-                    { label: 'Remove map…', danger: true, onSelect: () => void removeMap(map) },
+                    ...(map.versionOf
+                      ? [
+                          {
+                            label: 'Remove this version…',
+                            danger: true,
+                            onSelect: () => void removeMap(map),
+                          },
+                        ]
+                      : []),
+                    {
+                      label: 'Remove map…',
+                      danger: true,
+                      onSelect: () => void removeMap(base!),
+                    },
                   ]
                 : [{ label: 'Import a map image…', onSelect: () => fileInput.current?.click() }]),
             ])
@@ -398,6 +442,8 @@ export function WhereMap(props: {
         />
       </header>
 
+      {(map || sketch) && <TimeScrubber world={world} />}
+      {map?.versionOf && <VersionNote world={world} map={map} />}
       <div className="map-body">
         {map ? (
           <MapCanvas
@@ -406,6 +452,8 @@ export function WhereMap(props: {
             editing={editing}
             territory={territory}
             lighter={settings.world.lighter}
+            glide={motionAllowed(settings.world)}
+            trails={settings.world.trails}
             onSave={(patch, label) => saveMap(map, patch, label)}
             onOpenEntry={props.onOpenEntry}
             onOpenMap={(id) => props.onOpenMap(id)}
@@ -509,5 +557,21 @@ export function WhereMap(props: {
         />
       )}
     </div>
+  )
+}
+
+/** Says which version of a map is shown, and from when. */
+function VersionNote(props: { world: WorldData; map: MapFile }) {
+  const { world, map } = props
+  const from = map.from
+  const name =
+    from?.kind === 'event'
+      ? world.resolve(from.entryId)?.name
+      : world.index?.chapters.find((c) => c.id === from?.chapterId)?.label
+  return (
+    <p className="map-version-note small muted" role="note">
+      The map as it is from {name ?? 'a later moment'} on. Earlier moments show it as it was; edits
+      here change only this version.
+    </p>
   )
 }

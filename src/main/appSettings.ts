@@ -55,6 +55,8 @@ const appSettingsSchema = z.looseObject({
       map: z.boolean().default(true),
       lighter: z.boolean().default(false),
       blendLines: z.boolean().default(true),
+      timeScrubber: z.boolean().default(true),
+      trails: z.boolean().default(true),
     })
     .catch(DEFAULT_WORLD_SETTINGS)
     .default(DEFAULT_WORLD_SETTINGS),
