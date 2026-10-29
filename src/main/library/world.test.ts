@@ -528,3 +528,100 @@ describe('pins', () => {
     expect((await lib.world.readMap(worldId, map.id)).pins).toEqual([])
   })
 })
+
+describe('relationships and the board', () => {
+  const tie = (from: string, to: string, type: string, extra = {}) => ({
+    from,
+    to,
+    type,
+    label: '',
+    kin: null,
+    over: false,
+    start: null,
+    end: null,
+    ...extra,
+  })
+
+  it('saves each relationship as its own file, edits it, deletes it and puts it back', async () => {
+    const worldId = await world()
+    const mara = await lib.world.createEntry(worldId, { name: 'Mara', template: 'person' })
+    const odo = await lib.world.createEntry(worldId, { name: 'Odo', template: 'person' })
+    const rel = await lib.world.saveRelationship(
+      worldId,
+      tie(mara.id, odo.id, 'family', { label: ' sister of ', kin: 'sibling' }),
+    )
+    expect(rel).toMatchObject({ label: 'sister of', kin: 'sibling', over: false })
+    expect(
+      fs.existsSync(join(lib.paths.worldDir(worldId), 'relationships', `${rel.id}.json`)),
+    ).toBe(true)
+    const over = await lib.world.saveRelationship(worldId, {
+      ...tie(mara.id, odo.id, 'friends'),
+      id: rel.id,
+      over: true,
+    })
+    expect(over).toMatchObject({
+      id: rel.id,
+      type: 'friends',
+      kin: null,
+      over: true,
+      createdAt: rel.createdAt,
+    })
+
+    const removed = await lib.world.deleteRelationship(worldId, rel.id)
+    expect((await lib.world.view(worldId)).relationships).toEqual([])
+    await lib.world.saveRelationship(worldId, removed)
+    expect((await lib.world.view(worldId)).relationships.map((r) => r.id)).toEqual([rel.id])
+    await expect(
+      lib.world.saveRelationship(worldId, tie(mara.id, mara.id, 'met')),
+    ).rejects.toMatchObject({ code: 'invalid-input' })
+  })
+
+  it('saves the board layout and the world’s own relationship types', async () => {
+    const worldId = await world()
+    const mara = await lib.world.createEntry(worldId, { name: 'Mara', template: 'person' })
+    await lib.world.saveBoard(worldId, { [mara.id]: { x: 0.25, y: 0.5 } })
+    await lib.world.saveRelationshipTypes(worldId, [
+      { id: 'met', label: 'Crossed paths', colour: '#999999' },
+      { id: 'debt', label: 'Owes a debt', colour: '#336699' },
+    ])
+    const view = await lib.world.view(worldId)
+    expect(view.board).toEqual({ [mara.id]: { x: 0.25, y: 0.5 } })
+    expect(view.relationshipTypes.find((t) => t.id === 'met')?.label).toBe('Crossed paths')
+    expect(view.relationshipTypes.some((t) => t.id === 'debt')).toBe(true)
+    // A damaged layout file starts the board fresh rather than failing.
+    await fs.promises.writeFile(join(lib.paths.worldDir(worldId), 'board.json'), '{ nope')
+    expect((await lib.world.view(worldId)).board).toEqual({})
+  })
+
+  it('merging moves relationships to the entry kept; deleting with unlink removes them (undoable)', async () => {
+    const worldId = await world()
+    const mara = await lib.world.createEntry(worldId, { name: 'Mara', template: 'person' })
+    const dupe = await lib.world.createEntry(worldId, { name: 'Mara Voss', template: 'person' })
+    const odo = await lib.world.createEntry(worldId, { name: 'Odo', template: 'person' })
+    const a = await lib.world.saveRelationship(worldId, tie(dupe.id, odo.id, 'rivals'))
+    const b = await lib.world.saveRelationship(worldId, tie(mara.id, dupe.id, 'met'))
+    const merged = await lib.world.merge(worldId, mara.id, dupe.id)
+    expect(merged.relationships.map((r) => r.id).sort()).toEqual([a.id, b.id].sort())
+    let rels = (await lib.world.view(worldId)).relationships
+    expect(rels).toEqual([expect.objectContaining({ id: a.id, from: mara.id, to: odo.id })])
+
+    const deleted = await lib.world.deleteEntry(worldId, odo.id, true)
+    expect(deleted.relationships.map((r) => r.id)).toEqual([a.id])
+    rels = (await lib.world.view(worldId)).relationships
+    expect(rels).toEqual([])
+  })
+
+  it('writes relationships into the text forms and the digest', async () => {
+    const worldId = await world()
+    const mara = await lib.world.createEntry(worldId, { name: 'Mara', template: 'person' })
+    const odo = await lib.world.createEntry(worldId, { name: 'Odo', template: 'person' })
+    await lib.world.saveRelationship(
+      worldId,
+      tie(mara.id, odo.id, 'family', { label: 'sister of', kin: 'sibling' }),
+    )
+    expect(await lib.world.entryText(worldId, odo.id)).toContain(
+      `## Relationships\n- Mara [${mara.id}] — sister of → Odo [${odo.id}] (family, siblings)`,
+    )
+    expect(await lib.world.digest(worldId)).toContain('ties: sister of Odo')
+  })
+})

@@ -70,7 +70,11 @@ library/
     templates.json              customised or new templates (only once used)
     inbox.json                  captured lines waiting to be filed (only once used)
     rejected.json               turned-down suggestions, never shown again (only once used)
-    relationships/, …           added by milestones 4c–4d
+    relationships/<rel-id>.json one file per relationship: from, to, type, kin (family),
+                                words, starts/ends (chapter or event), over
+    relationship-types.json     renamed or added relationship types (only once used)
+    board.json                  where each person sits on the people board (layout only)
+    …                           added by milestone 4d
     manifest.json
   .ember-local/                 device-only: SQLite index, outbox, trash, doodles, window layout
 ```
@@ -389,6 +393,17 @@ Choices made while building 4a, so later steps start from what exists:
 - **Territory colours** (toggle, remembered per device) tint regions by their place's "Ruled by", with a legend.
 - **Settings → World:** the map can be turned off (Places and List remain); lighter mode shows map images at most 1200 px across and turns off animations and transitions everywhere.
 - **Trash:** removing a map moves its file to the trash (its image stays, as it's stored once).
+
+### As built in 4c
+
+- **The Who lens has Cast, Board, Family tree and List.** Board shows every person and group as a portrait; groups (factions, families) are drawn as frames around their members (from "Member of"), and dragging a frame's label moves its members.
+- **Linking:** drag one portrait onto another to open the relationship editor; dragging onto empty space just moves the portrait (saved in `board.json`, with Undo). The editor has the type (chips), for Family whether one is the other's parent or they're siblings or partners, optional words ("sworn brother"), when it starts and ends (a chapter or an event), and "It's over". Clicking a line lists that pair's links to edit or remove.
+- **Lines:** one line per pair, in the type's colour. Several types on one pair are drawn as bands side by side in a gradient (never mixed into a new colour); hovering says it in words ("Rivals, then romance"). "Met" shows only when the pair has nothing else. A line whose links are all over is dashed. With blending off (Settings → World) a line takes its strongest type: family, romance, enemies, rivals, mentor, friends, met.
+- **Types:** met, friends/allies, fought/enemies, family, romance, mentor/loyal to, rivals, each with a colour. "Edit types…" renames, recolours or adds types per world (`relationship-types.json`). The legend toggles each type's lines (remembered per device).
+- **Family tree** lays out family links: parents above children, partners and siblings side by side (siblings without a shared parent joined by a light bracket). **List** is a sortable table of every relationship.
+- **Entry pages** of people and groups (and any entry with links) have a Relationships section with "+ Add a relationship".
+- **Merging** two entries moves their relationships to the kept one; **deleting** an entry with "remove links to it" removes its relationships too (otherwise they are hidden until it is restored); Undo restores them.
+- **Text forms:** the entry's text gains "## Relationships"; the digest gains "ties: …".
 
 World skins are described under Themes; the AI side of the world (readable by AI, "Update the worldbuilding", AI questions) under AI layer. Build order: milestones 4a–4e.
 

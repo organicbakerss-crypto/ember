@@ -211,6 +211,10 @@ export class Library {
           size: bytes.byteLength,
         })
       },
+      removeFile: async (worldId, rel) => {
+        await fs.promises.rm(join(this.paths.worldDir(worldId), rel), { force: true })
+        await this.recordInManifest(this.worldUnit(worldId), rel, null)
+      },
       story: (worldId) => this.worldStory(worldId),
       moveToTrash: (target) => this.moveToTrash(target),
     })

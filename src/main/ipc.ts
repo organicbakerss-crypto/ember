@@ -115,6 +115,16 @@ export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void
     },
     'map:create': (input) => host.current.world.createMap(input.worldId, input),
     'map:save': (input) => host.current.world.saveMap(input.worldId, input.mapId, input.patch),
+    'relationship:save': (input) =>
+      host.current.world.saveRelationship(input.worldId, input.relationship),
+    'relationship:delete': (input) =>
+      host.current.world.deleteRelationship(input.worldId, input.relationshipId),
+    'relationship:types': (input) =>
+      host.current.world.saveRelationshipTypes(input.worldId, input.types),
+    'board:save': async (input) => {
+      await host.current.world.saveBoard(input.worldId, input.positions)
+      return null
+    },
     'capture:context': (input, event) => {
       setCaptureContext(event.sender, input.context)
       return null

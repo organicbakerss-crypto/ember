@@ -3,6 +3,7 @@ import type { Appearance, EntrySummary, IpcInput } from '@shared/ipc'
 import type {
   FactValue,
   Portrait as PortraitData,
+  RelationshipFile,
   TemplateField,
   WorldEntryFile,
 } from '@shared/schema'
@@ -21,6 +22,8 @@ import { FactEditor } from './FactEditor'
 import { backlinks, MAX_QUICK_FACTS, shownFacts, templateOf, valueLabel } from './model'
 import { Portrait } from './Portrait'
 import { mapOfPlace } from './map/mapModel'
+import { RelationshipEditor } from './board/RelationshipEditor'
+import { useRelationships } from './board/useRelationships'
 import { useMapImport } from './map/WhereMap'
 import { PortraitCropDialog } from './PortraitCropDialog'
 import { TextFormDialog } from './TextFormDialog'
@@ -106,6 +109,8 @@ function EntryView(
   const fileInput = useRef<HTMLInputElement>(null)
   const mapInput = useRef<HTMLInputElement>(null)
   const importMap = useMapImport(world, record)
+  const ties$ = useRelationships(world, record)
+  const [tie, setTie] = useState<{ rel?: RelationshipFile } | null>(null)
 
   /* ----- saving: fields at once (with undo), the page text by autosave ----- */
 
@@ -304,6 +309,7 @@ function EntryView(
     .map((id) => world.resolve(id))
     .filter((e): e is EntrySummary => !!e)
   const ownMap = mapOfPlace(world, entry.id)
+  const ties = world.view.relationships.filter((r) => r.from === entry.id || r.to === entry.id)
   const mentions = world.index?.mentions[entry.id]
   const chapters = world.index?.chapters ?? []
   const first = firstSeen(mentions)
@@ -643,6 +649,71 @@ function EntryView(
               }}
             />
           </div>
+        </section>
+      )}
+
+      {(template.lens === 'who' || ties.length > 0) && (
+        <section className="entry-section" aria-label="Relationships">
+          <h3>Relationships</h3>
+          {ties.length ? (
+            <ul className="pair-list">
+              {ties.map((r) => {
+                const type = world.view.relationshipTypes.find((t) => t.id === r.type)
+                const person = (id: string) =>
+                  id === entry.id ? (
+                    <strong>{entry.name}</strong>
+                  ) : (
+                    <button
+                      className="link"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        props.onOpenEntry(id)
+                      }}
+                    >
+                      {world.resolve(id)?.name ?? '(missing)'}
+                    </button>
+                  )
+                return (
+                  <li key={r.id}>
+                    <div
+                      className="pair-item"
+                      role="button"
+                      tabIndex={0}
+                      title="Change this link"
+                      onClick={() => setTie({ rel: r })}
+                      onKeyDown={(e) => e.key === 'Enter' && setTie({ rel: r })}
+                    >
+                      <span className="swatch" style={{ background: type?.colour }} />
+                      <span>
+                        {person(r.from)} — {r.label || type?.label.toLowerCase() || r.type} →{' '}
+                        {person(r.to)}
+                        {(r.over || r.end) && <span className="muted"> (over)</span>}
+                      </span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="muted small">
+              No links yet. Add one here, or drag {entry.name} onto someone on the people board.
+            </p>
+          )}
+          <button className="link small" onClick={() => setTie({})}>
+            + Add a relationship
+          </button>
+          {tie && (
+            <RelationshipEditor
+              world={world}
+              relationship={tie.rel}
+              from={tie.rel ? undefined : entry.id}
+              onSave={(draft) => void ties$.save(draft).then(() => setTie(null))}
+              onDelete={
+                tie.rel ? () => void ties$.remove(tie.rel!).then(() => setTie(null)) : undefined
+              }
+              onCancel={() => setTie(null)}
+            />
+          )}
         </section>
       )}
 

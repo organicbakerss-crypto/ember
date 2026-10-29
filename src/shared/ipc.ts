@@ -20,7 +20,10 @@ import {
   lensSchema,
   portraitSchema,
   quoteSchema,
+  boardFileSchema,
   pinSchema,
+  relationshipFileSchema,
+  relationshipTypeSchema,
   regionSchema,
   sketchSchema,
   templateFieldSchema,
@@ -32,7 +35,10 @@ import {
   type ChapterSource,
   type FactValue,
   type InboxItem,
+  type BoardFile,
   type MapFile,
+  type RelationshipFile,
+  type RelationshipType,
   type Portrait,
   type RichTextDoc,
   type Template,
@@ -188,6 +194,12 @@ export interface WorldView {
   maps: MapFile[]
   /** Places next to each place, computed from touching map regions and sketch roads. */
   nearby: Record<string, string[]>
+  /** Every relationship (the people board's lines). */
+  relationships: RelationshipFile[]
+  /** Relationship types in effect: built-ins, replaced or joined by this world's own. */
+  relationshipTypes: RelationshipType[]
+  /** Where portraits sit on the board (0–1 across and down). */
+  board: BoardFile['positions']
 }
 
 /** A chapter where an entry is mentioned (or told from its point of view). */
@@ -212,6 +224,8 @@ export interface EntryChangeResult {
   trash: TrashEntry
   /** Entries as they were before (restore these to undo). */
   before: WorldEntryFile[]
+  /** Relationships changed or removed, as they were (save these again to undo). */
+  relationships: RelationshipFile[]
 }
 
 /** What the right-click menu can capture into, sent by a writing window. */
@@ -395,6 +409,25 @@ export const ipcInputs = {
       placeId: id('entry').nullable().optional(),
     }),
   }),
+  'relationship:save': z.object({
+    worldId: id('world'),
+    relationship: relationshipFileSchema
+      .pick({ from: true, to: true, type: true, kin: true, over: true, start: true, end: true })
+      .extend({
+        id: id('relationship').optional(),
+        label: z.string().trim().max(80),
+        createdAt: z.iso.datetime().optional(),
+      }),
+  }),
+  'relationship:delete': z.object({ worldId: id('world'), relationshipId: id('relationship') }),
+  'relationship:types': z.object({
+    worldId: id('world'),
+    types: z.array(relationshipTypeSchema).max(60),
+  }),
+  'board:save': z.object({
+    worldId: id('world'),
+    positions: boardFileSchema.shape.positions,
+  }),
   'capture:context': z.object({
     context: z
       .object({
@@ -495,6 +528,7 @@ export const ipcInputs = {
         quietAfter: z.number().int().min(1).max(200),
         map: z.boolean(),
         lighter: z.boolean(),
+        blendLines: z.boolean(),
       })
       .optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
@@ -554,6 +588,10 @@ export interface IpcResults {
   'names:reject': null
   'capture:context': null
   'map:create': MapFile
+  'relationship:save': RelationshipFile
+  'relationship:delete': RelationshipFile
+  'relationship:types': RelationshipType[]
+  'board:save': null
   'map:save': MapFile
   'trash:add': TrashEntry
   'trash:list': TrashEntry[]

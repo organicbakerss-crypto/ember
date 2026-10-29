@@ -72,6 +72,8 @@ export interface WorldSettings {
   map: boolean
   /** For slower machines: lower-resolution map images, no animations. */
   lighter: boolean
+  /** Lines with several relationship types show each colour in its own band (else the strongest). */
+  blendLines: boolean
 }
 
 export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
@@ -80,6 +82,7 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   quietAfter: 10,
   map: true,
   lighter: false,
+  blendLines: true,
 }
 
 export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const

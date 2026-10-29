@@ -26,7 +26,7 @@ const NOUN: Record<Lens, string> = {
   how: 'system',
 }
 
-type Mode = 'map' | 'visual' | 'list'
+type Mode = string
 
 export function LensView(props: {
   world: WorldData
@@ -35,6 +35,10 @@ export function LensView(props: {
   onNew: (lens: Lens) => void
   /** The Where lens's map (when maps are on). */
   map?: { exists: boolean; render: () => ReactNode }
+  /** More views after the lens's own (the Who lens's board and family tree). */
+  extra?: { mode: string; label: string; render: () => ReactNode }[]
+  /** Shown under the List view's table (the board's relationships). */
+  listExtra?: ReactNode
 }) {
   const { world, lens } = props
   const key = `world.lensMode.${lens}`
@@ -43,17 +47,24 @@ export function LensView(props: {
   const [mode, setModeState] = useState<Mode>(() => {
     if (map?.exists) return 'map'
     const stored = loadLocal(key)
-    return stored === 'list' ? 'list' : stored === 'map' && map ? 'map' : 'visual'
+    if (stored === 'list') return 'list'
+    if (stored === 'map' && map) return 'map'
+    return stored && props.extra?.some((x) => x.mode === stored) ? stored : 'visual'
   })
   const setMode = (m: Mode) => {
     setModeState(m)
     saveLocal(key, m)
   }
-  const shown: Mode = mode === 'map' && !map ? 'visual' : mode
+  const extra = props.extra?.find((x) => x.mode === mode)
+  const shown: Mode =
+    (mode === 'map' && !map) || (!['map', 'visual', 'list'].includes(mode) && !extra)
+      ? 'visual'
+      : mode
   const entries = world.view.entries.filter((e) => lensOf(world, e) === lens)
   const modes: { mode: Mode; label: string }[] = [
     ...(map ? [{ mode: 'map' as const, label: 'Map' }] : []),
     { mode: 'visual', label: VISUAL[lens] },
+    ...(props.extra ?? []).map((x) => ({ mode: x.mode, label: x.label })),
     { mode: 'list', label: 'List' },
   ]
 
@@ -81,10 +92,15 @@ export function LensView(props: {
       </header>
       {shown === 'map' && map ? (
         map.render()
+      ) : extra && shown === extra.mode ? (
+        extra.render()
       ) : entries.length === 0 ? (
         <EmptyLens lens={lens} onNew={() => props.onNew(lens)} />
       ) : shown === 'list' ? (
-        <EntryTable world={world} entries={entries} onOpenEntry={props.onOpenEntry} />
+        <>
+          <EntryTable world={world} entries={entries} onOpenEntry={props.onOpenEntry} />
+          {props.listExtra}
+        </>
       ) : lens === 'who' ? (
         <CastView world={world} entries={entries} onOpenEntry={props.onOpenEntry} />
       ) : lens === 'where' ? (

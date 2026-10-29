@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { EntrySummary } from '@shared/ipc'
-import type { FactValue, WorldEntryFile } from '@shared/schema'
+import type { FactValue, RelationshipFile, WorldEntryFile } from '@shared/schema'
 import { api, describeError } from '../api'
 import { flushAll } from '../saving'
 import { useOverlays } from '../components/overlays'
@@ -24,6 +24,16 @@ async function restoreEntries(worldId: string, entries: WorldEntryFile[]): Promi
         mergedFrom: e.mergedFrom,
       },
     })
+  }
+}
+
+/** Puts relationships back exactly as they were (saving with the same ids). */
+async function restoreRelationships(
+  worldId: string,
+  relationships: RelationshipFile[],
+): Promise<void> {
+  for (const r of relationships) {
+    await api.invoke('relationship:save', { worldId, relationship: r })
   }
 }
 
@@ -97,6 +107,7 @@ export function useWorldActions(world: WorldData | null, record: (step: UndoStep
             undo: async () => {
               await api.invoke('trash:restore', { trashId: result.trash.id })
               await restoreEntries(worldId, result.before)
+              await restoreRelationships(worldId, result.relationships)
             },
           })
           return true
@@ -127,6 +138,7 @@ export function useWorldActions(world: WorldData | null, record: (step: UndoStep
             undo: async () => {
               await api.invoke('trash:restore', { trashId: result.trash.id })
               await restoreEntries(worldId, result.before)
+              await restoreRelationships(worldId, result.relationships)
             },
           })
           return true

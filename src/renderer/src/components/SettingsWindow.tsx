@@ -381,6 +381,17 @@ function WorldSettings() {
         />
         Lighter mode for slower computers (smaller map images, no animations)
       </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.blendLines}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, blendLines: e.target.checked } }))
+          }
+        />
+        On the people board, show every relationship type along a line (otherwise one colour: the
+        strongest)
+      </label>
       <label>
         “Gone quiet” after
         <input

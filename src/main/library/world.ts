@@ -11,7 +11,10 @@ import { join } from 'node:path'
 import {
   FORMAT_VERSION,
   emptyDoc,
+  boardFileSchema,
   inboxFileSchema,
+  relationshipFileSchema,
+  relationshipTypesFileSchema,
   mapFileSchema,
   rejectedFileSchema,
   templatesFileSchema,
@@ -19,7 +22,10 @@ import {
   type ChapterSource,
   type FactValue,
   type InboxFile,
+  type BoardFile,
   type InboxItem,
+  type RelationshipFile,
+  type RelationshipType,
   type MapFile,
   type RichTextDoc,
   type Template,
@@ -49,6 +55,7 @@ import { entryText, worldDigest } from '@shared/world/digest'
 import { chapterPositions, type StoryChapter, type WorldIndex } from '@shared/world/story'
 import { isBuiltIn, worldTemplates } from '@shared/world/templates'
 import { nearbyPlaces } from '@shared/world/maps'
+import { relationshipText, relationshipTypes } from '@shared/world/relationships'
 import { AppError } from '../errors'
 import { isTempFileName } from '../fs/atomicWrite'
 import type { KeyedLock } from '../fs/keyedLock'
@@ -74,9 +81,25 @@ export interface WorldHost {
   writeFile(worldId: string, rel: string, value: unknown): Promise<void>
   /** Writes raw bytes in the world (call while holding its lock). */
   writeBytes(worldId: string, rel: string, bytes: Uint8Array): Promise<void>
+  /** Deletes a file in the world (call while holding its lock). */
+  removeFile(worldId: string, rel: string): Promise<void>
   /** Chapters of every series using this world, in reading order. */
   story(worldId: string): Promise<StoryText[]>
   moveToTrash(target: TrashTarget): Promise<TrashEntry>
+}
+
+/** A relationship as the app sends it (an id only when it already exists, or is being restored). */
+export interface RelationshipInput {
+  id?: string
+  from: string
+  to: string
+  type: string
+  label: string
+  kin: RelationshipFile['kin']
+  over: boolean
+  start: RelationshipFile['start']
+  end: RelationshipFile['end']
+  createdAt?: string
 }
 
 export type EntryPatch = Partial<
@@ -136,6 +159,7 @@ export class WorldStore {
     const custom = await this.customTemplates(worldId)
     const inbox = await this.readInbox(worldId)
     const { maps, problems: mapProblems } = await this.readMaps(worldId)
+    const { relationships, problems: relProblems } = await this.readRelationships(worldId)
     // Names typed on a page link to their entries, like `@` links do.
     const matcher = nameMatcher(entryTerms(entries))
     const summaries = entries.map((entry) => {
@@ -149,10 +173,13 @@ export class WorldStore {
       templates: worldTemplates(custom),
       customTemplates: custom.map((t) => t.id),
       entries: summaries.sort(byName),
-      problems: [...problems, ...mapProblems],
+      problems: [...problems, ...mapProblems, ...relProblems],
       inboxCount: inbox.items.length,
       maps,
       nearby: this.nearbyFor(maps),
+      relationships,
+      relationshipTypes: relationshipTypes(await this.customRelationshipTypes(worldId)),
+      board: (await this.readBoard(worldId)).positions,
     }
   }
 
@@ -338,9 +365,16 @@ export class WorldStore {
       return result
     })
     for (const e of before) this.host.changed({ kind: 'entry', worldId, entryId: e.id })
+    // Relationships of the duplicate move to the entry kept (one between the two is dropped).
+    const relationships = await this.rewriteRelationships(worldId, (r) => {
+      const from = r.from === mergeId ? keepId : r.from
+      const to = r.to === mergeId ? keepId : r.to
+      if (from === r.from && to === r.to) return r
+      return from === to ? null : { ...r, from, to }
+    })
     const trash = await this.host.moveToTrash({ kind: 'entry', worldId, entryId: mergeId })
     await this.unpin(worldId, mergeId)
-    return { kept, trash, before }
+    return { kept, trash, before, relationships }
   }
 
   /**
@@ -362,9 +396,15 @@ export class WorldStore {
       })
     }
     for (const e of before) this.host.changed({ kind: 'entry', worldId, entryId: e.id })
+    // With unlink, its relationships go too; otherwise they wait (hidden) until it's restored.
+    const relationships = unlink
+      ? await this.rewriteRelationships(worldId, (r) =>
+          r.from === entryId || r.to === entryId ? null : r,
+        )
+      : []
     const trash = await this.host.moveToTrash({ kind: 'entry', worldId, entryId })
     await this.unpin(worldId, entryId)
-    return { trash, before }
+    return { trash, before, relationships }
   }
 
   /** Entries that link to this one through their facts. */
@@ -514,6 +554,173 @@ export class WorldStore {
     const key = maps.map((m) => `${m.id}@${m.updatedAt}`).join('|')
     if (this.nearbyCache?.key !== key) this.nearbyCache = { key, nearby: nearbyPlaces(maps) }
     return this.nearbyCache.nearby
+  }
+
+  /* ---------- relationships and the people board ---------- */
+
+  private async readRelationships(
+    worldId: string,
+  ): Promise<{ relationships: RelationshipFile[]; problems: LibraryProblem[] }> {
+    let names: string[] = []
+    try {
+      names = await fs.promises.readdir(join(this.dir(worldId), 'relationships'))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    }
+    const relationships: RelationshipFile[] = []
+    const problems: LibraryProblem[] = []
+    for (const name of names.filter((n) => n.endsWith('.json') && !isTempFileName(n)).sort()) {
+      const relId = name.slice(0, -'.json'.length)
+      try {
+        relationships.push(
+          await readJsonFile(
+            join(this.dir(worldId), unitPaths.relationship(relId)),
+            relationshipFileSchema,
+          ),
+        )
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+        problems.push({
+          path: `worlds/${worldId}/${unitPaths.relationship(relId)}`,
+          message: 'Not a readable relationship file.',
+        })
+      }
+    }
+    relationships.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    return { relationships, problems }
+  }
+
+  /**
+   * Creates or updates a relationship (an id that doesn't exist yet is
+   * created with that id, so undo can put a deleted one back exactly).
+   */
+  async saveRelationship(worldId: string, input: RelationshipInput): Promise<RelationshipFile> {
+    if (input.from === input.to) {
+      throw new AppError('invalid-input', 'A relationship needs two different entries.')
+    }
+    await Promise.all([this.readEntry(worldId, input.from), this.readEntry(worldId, input.to)])
+    const time = this.host.timestamp()
+    const id = input.id ?? newId('relationship')
+    const saved = await this.host.lock.run(`world:${worldId}`, async () => {
+      let existing: RelationshipFile | null = null
+      try {
+        existing = await readJsonFile(
+          join(this.dir(worldId), unitPaths.relationship(id)),
+          relationshipFileSchema,
+        )
+      } catch (err) {
+        if (!(err instanceof AppError) || err.code !== 'not-found') throw err
+      }
+      const next: RelationshipFile = {
+        ...existing,
+        ...input,
+        formatVersion: FORMAT_VERSION,
+        id,
+        worldId,
+        label: input.label.trim(),
+        kin: input.type === 'family' ? input.kin : null,
+        createdAt: existing?.createdAt ?? input.createdAt ?? time,
+        updatedAt: time,
+      }
+      await fs.promises.mkdir(join(this.dir(worldId), 'relationships'), { recursive: true })
+      await this.host.writeFile(worldId, unitPaths.relationship(id), next)
+      return next
+    })
+    this.host.changed({ kind: 'world', worldId })
+    return saved
+  }
+
+  /** Deletes a relationship; returns it as it was (saving it again undoes the delete). */
+  async deleteRelationship(worldId: string, relId: string): Promise<RelationshipFile> {
+    const removed = await this.host.lock.run(`world:${worldId}`, async () => {
+      const rel = unitPaths.relationship(relId)
+      const file = await readJsonFile(join(this.dir(worldId), rel), relationshipFileSchema)
+      await this.host.removeFile(worldId, rel)
+      return file
+    })
+    this.host.changed({ kind: 'world', worldId })
+    return removed
+  }
+
+  /** Changes (or deletes, with null) every relationship; returns the changed ones as they were. */
+  private async rewriteRelationships(
+    worldId: string,
+    change: (r: RelationshipFile) => RelationshipFile | null,
+  ): Promise<RelationshipFile[]> {
+    const before: RelationshipFile[] = []
+    await this.host.lock.run(`world:${worldId}`, async () => {
+      for (const r of (await this.readRelationships(worldId)).relationships) {
+        const next = change(r)
+        if (next === r) continue
+        before.push(r)
+        const rel = unitPaths.relationship(r.id)
+        if (next)
+          await this.host.writeFile(worldId, rel, { ...next, updatedAt: this.host.timestamp() })
+        else await this.host.removeFile(worldId, rel)
+      }
+    })
+    if (before.length) this.host.changed({ kind: 'world', worldId })
+    return before
+  }
+
+  private async customRelationshipTypes(worldId: string): Promise<RelationshipType[]> {
+    try {
+      return (
+        await readJsonFile(
+          join(this.dir(worldId), 'relationship-types.json'),
+          relationshipTypesFileSchema,
+        )
+      ).types
+    } catch (err) {
+      if (err instanceof AppError) return []
+      throw err
+    }
+  }
+
+  /** Saves the world's relationship types (renamed, recoloured or new ones). */
+  async saveRelationshipTypes(
+    worldId: string,
+    types: RelationshipType[],
+  ): Promise<RelationshipType[]> {
+    await this.host.getWorld(worldId)
+    await this.host.lock.run(`world:${worldId}`, () =>
+      this.host.writeFile(worldId, 'relationship-types.json', {
+        formatVersion: FORMAT_VERSION,
+        worldId,
+        types,
+      }),
+    )
+    this.host.changed({ kind: 'world', worldId })
+    return relationshipTypes(types)
+  }
+
+  private async readBoard(worldId: string): Promise<BoardFile> {
+    try {
+      return await readJsonFile(join(this.dir(worldId), 'board.json'), boardFileSchema)
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err
+      // Layout only: a missing or damaged file starts empty (and is replaced on the next move).
+      return {
+        formatVersion: FORMAT_VERSION,
+        worldId,
+        positions: {},
+        updatedAt: this.host.timestamp(),
+      }
+    }
+  }
+
+  /** Saves where portraits sit on the board. Layout only: the people themselves never change. */
+  async saveBoard(worldId: string, positions: BoardFile['positions']): Promise<void> {
+    await this.host.getWorld(worldId)
+    await this.host.lock.run(`world:${worldId}`, () =>
+      this.host.writeFile(worldId, 'board.json', {
+        formatVersion: FORMAT_VERSION,
+        worldId,
+        positions,
+        updatedAt: this.host.timestamp(),
+      }),
+    )
+    this.host.changed({ kind: 'world', worldId })
   }
 
   /* ---------- capture and the inbox ---------- */
@@ -838,6 +1045,7 @@ export class WorldStore {
       view.templates,
       chapterPositions(index),
       view.nearby,
+      { relationships: view.relationships, types: view.relationshipTypes },
     )
   }
 
@@ -860,6 +1068,16 @@ export class WorldStore {
       pinnedOn: view.maps
         .filter((m) => m.pins.some((p) => p.placeId === entryId))
         .map((m) => m.name),
+      relationships: view.relationships
+        .filter((r) => r.from === entryId || r.to === entryId)
+        .map((r) =>
+          relationshipText(
+            r,
+            new Map(view.entries.map((e) => [e.id, e.name])),
+            view.relationshipTypes,
+            (id) => index.chapters.find((c) => c.id === id)?.label,
+          ),
+        ),
     })
   }
 }

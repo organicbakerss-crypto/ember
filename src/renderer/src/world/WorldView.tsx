@@ -19,6 +19,9 @@ import { useUndo } from './useUndo'
 import { useWorld } from './useWorld'
 import { useWorldActions } from './useWorldActions'
 import { WhereMap } from './map/WhereMap'
+import { FamilyTreeView } from './board/FamilyTreeView'
+import { PeopleBoard } from './board/PeopleBoard'
+import { RelationshipsTable } from './board/RelationshipsTable'
 import { worldMapOf } from './map/mapModel'
 import { useSettings } from '../useTheme'
 
@@ -407,6 +410,29 @@ export function WorldView(props: {
                 settings.world.map
                   ? { exists: !!worldMapOf(world), render: () => whereMap(null) }
                   : undefined
+              }
+              extra={
+                place.lens === 'who'
+                  ? [
+                      {
+                        mode: 'board',
+                        label: 'Board',
+                        render: () => (
+                          <PeopleBoard world={world} record={record} onOpenEntry={openEntry} />
+                        ),
+                      },
+                      {
+                        mode: 'tree',
+                        label: 'Family tree',
+                        render: () => <FamilyTreeView world={world} onOpenEntry={openEntry} />,
+                      },
+                    ]
+                  : undefined
+              }
+              listExtra={
+                place.lens === 'who' ? (
+                  <RelationshipsTable world={world} record={record} onOpenEntry={openEntry} />
+                ) : undefined
               }
             />
           )}

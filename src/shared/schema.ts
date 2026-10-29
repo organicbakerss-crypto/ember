@@ -264,6 +264,61 @@ export const rejectedFileSchema = z.looseObject({
 })
 export type RejectedFile = z.infer<typeof rejectedFileSchema>
 
+/* ---------- relationships (the people board) ---------- */
+
+export const relationshipTypeIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/)
+
+/**
+ * One relationship between two entries, in its own small file. The reverse
+ * side is worked out, never stored twice, so links added on two devices
+ * never conflict.
+ */
+export const relationshipFileSchema = z.looseObject({
+  formatVersion,
+  id: id('relationship'),
+  worldId: id('world'),
+  from: id('entry'),
+  to: id('entry'),
+  type: relationshipTypeIdSchema,
+  /** Words for it, read from → to ("sister of", "mentor to"). Optional. */
+  label: z.string().trim().max(80).default(''),
+  /** For family: `from` is `to`'s parent, they are siblings, or partners (for the family tree). */
+  kin: z.enum(['parent', 'sibling', 'partner']).nullable().default(null),
+  /** Over (shown dashed), whether or not an end is known. */
+  over: z.boolean().default(false),
+  start: factAnchorSchema.nullable().default(null),
+  end: factAnchorSchema.nullable().default(null),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+})
+export type RelationshipFile = z.infer<typeof relationshipFileSchema>
+
+export const relationshipTypeSchema = z.looseObject({
+  id: relationshipTypeIdSchema,
+  label: z.string().trim().min(1).max(40),
+  colour: z.string().regex(/^#[0-9a-f]{6}$/i),
+})
+export type RelationshipType = z.infer<typeof relationshipTypeSchema>
+
+/** A world's own relationship types (same id as a built-in one replaces it). */
+export const relationshipTypesFileSchema = z.looseObject({
+  formatVersion,
+  worldId: id('world'),
+  types: z.array(relationshipTypeSchema),
+})
+
+/** Where portraits sit on the board: layout, kept apart from the people themselves. */
+export const boardFileSchema = z.looseObject({
+  formatVersion,
+  worldId: id('world'),
+  positions: z.record(
+    id('entry'),
+    z.looseObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
+  ),
+  updatedAt: timestamp,
+})
+export type BoardFile = z.infer<typeof boardFileSchema>
+
 /* ---------- maps ---------- */
 
 /** A point in image pixels. */

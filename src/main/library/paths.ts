@@ -13,6 +13,8 @@ import { appConfig } from '../../../app.config'
  *   worlds/<world-id>/entries/<entry-id>.json
  *   worlds/<world-id>/images/<sha256>.<ext>             (portraits and maps, stored once)
  *   worlds/<world-id>/maps/<map-id>.json                (region outlines or a travel sketch)
+ *   worlds/<world-id>/relationships/<rel-id>.json       (one per relationship)
+ *   worlds/<world-id>/{board,relationship-types}.json   (board layout; the world's own types)
  *   <local data folder>/          device-only, never synced
  */
 export class LibraryPaths {
@@ -63,5 +65,6 @@ export const unitPaths = {
   world: 'world.json',
   entry: (entryId: string) => `entries/${entryId}.json`,
   map: (mapId: string) => `maps/${mapId}.json`,
+  relationship: (relId: string) => `relationships/${relId}.json`,
   manifest: 'manifest.json',
 } as const

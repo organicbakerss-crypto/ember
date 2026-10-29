@@ -3,7 +3,7 @@
  * ids), so a language model can understand the whole world without seeing
  * any image. Derived data, rebuilt locally whenever it's asked for.
  */
-import type { FactValue, Quote, Template } from '../schema'
+import type { FactValue, Quote, RelationshipFile, RelationshipType, Template } from '../schema'
 import { currentValue, inTimeOrder, valuesAt, type ChapterPositions } from './facts'
 import { chapterName, type EntryMentions, type StoryChapter } from './story'
 import { effectiveTemplate, LENS_LABELS } from './templates'
@@ -54,6 +54,11 @@ export function worldDigest(
   positions: ChapterPositions,
   /** Places next to each place (from the maps). */
   nearby: Record<string, string[]> = {},
+  /** The people board, for each entry's ties. */
+  board: { relationships: readonly RelationshipFile[]; types: readonly RelationshipType[] } = {
+    relationships: [],
+    types: [],
+  },
 ): string {
   const names = new Map(entries.map((e) => [e.id, e.name]))
   const lines = [`World: ${worldName}`, `Entries: ${entries.length}`, '']
@@ -71,6 +76,16 @@ export function worldDigest(
     }
     const next = (nearby[e.id] ?? []).map((id) => names.get(id)).filter(Boolean)
     if (next.length) parts.push(`borders: ${next.join(', ')}`)
+    const ties = board.relationships
+      .filter((r) => r.from === e.id || r.to === e.id)
+      .slice(0, 8)
+      .map((r) => {
+        const other = names.get(r.from === e.id ? r.to : r.from) ?? '(missing)'
+        const type = board.types.find((t) => t.id === r.type)?.label.toLowerCase() ?? r.type
+        const words = r.from === e.id && r.label ? r.label : type
+        return `${words} ${other}${r.over || r.end ? ' (over)' : ''}`
+      })
+    if (ties.length) parts.push(`ties: ${ties.join('; ')}`)
     lines.push(parts.join(' | '))
   }
   return lines.join('\n')
@@ -98,6 +113,8 @@ export interface EntryTextInput {
   maps?: string[]
   /** Names of maps it is pinned on. */
   pinnedOn?: string[]
+  /** Its relationships, as text (see relationshipText). */
+  relationships?: string[]
 }
 
 /** One entry as text: facts with their history, the page, what links here, and appearances. */
@@ -166,6 +183,8 @@ export function entryText(input: EntryTextInput): string {
   }
   if (input.maps?.length) out.push('', `Has its own map: ${input.maps.join(', ')}`)
   if (input.pinnedOn?.length) out.push(`Pinned on: ${input.pinnedOn.join(', ')}`)
+  if (input.relationships?.length)
+    out.push('', '## Relationships', ...input.relationships.map((r) => `- ${r}`))
 
   const m = input.mentions
   if (m && (m.chapters.length || m.pov.length)) {

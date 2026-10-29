@@ -39,6 +39,11 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - nearby places from touching regions (and sketch roads), on place pages and in the text forms
   - the unplaced tray (drag people onto the map), territory colours, a travel sketch when there's no map
   - settings: map on/off, lighter mode
+- **World, step 4c (the people board):**
+  - a board of portraits; drag one onto another to link them (type, family kin, words, start/end, over)
+  - coloured lines, several types shown as bands, dashed when over, a legend that hides types
+  - groups drawn as frames around their members; editable relationship types per world
+  - a family tree view and a sortable list; relationships on entry pages and in the text forms
 
 ## Requirements
 
