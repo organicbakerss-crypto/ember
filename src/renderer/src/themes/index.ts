@@ -63,6 +63,8 @@ export interface Theme {
   /** `ui` is for the app chrome; `page` must be a readable writing font. */
   fonts: { ui: string; page: string }
   page: Record<(typeof THEME_PAGE_TOKENS)[number], string>
+  /** The world skin this theme carries (a file in `skins/`), if any. */
+  skin?: string
 }
 
 const files = import.meta.glob<Theme>('./*.json', { eager: true, import: 'default' })

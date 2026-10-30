@@ -78,6 +78,14 @@ export interface WorldSettings {
   timeScrubber: boolean
   /** Faint trails behind people who moved, and portraits gliding to their new place. */
   trails: boolean
+  /**
+   * How much of a theme's world skin shows: everything (art, fonts, map
+   * styling, transitions), plain (fonts and map styling), or minimal (the
+   * clean default layout in the theme's colours).
+   */
+  skin: 'full' | 'plain' | 'minimal'
+  /** The skin's words for things (Atlas, Chronicle…) instead of plain ones. */
+  vocabulary: boolean
 }
 
 export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
@@ -89,6 +97,8 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   blendLines: true,
   timeScrubber: true,
   trails: true,
+  skin: 'full',
+  vocabulary: true,
 }
 
 export const PAGE_WIDTH = { default: 660, min: 480, max: 1000 } as const

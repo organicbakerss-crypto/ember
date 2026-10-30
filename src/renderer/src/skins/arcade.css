@@ -1,0 +1,104 @@
+/*
+ * Arcade: a black cabinet with deep reds, pixel lettering, chunky pixel
+ * borders and a pixel-grid map. Fonts and map styling at "plain" and "full";
+ * the grid, frames and transitions only at "full". World mode only.
+ */
+
+:root[data-skin='arcade']
+  .world-view
+  :is(
+    h1,
+    h2,
+    .entry-name,
+    .world-lenses .world-nav-label,
+    .panel-heading,
+    .breadcrumb-current,
+    .scrubber-label
+  ) {
+  font-family: var(--skin-heading-font);
+  font-weight: 400;
+  line-height: 1.6;
+}
+:root[data-skin='arcade'] .world-view :is(h1, .entry-name) {
+  font-size: 1.15rem;
+}
+:root[data-skin='arcade'] .world-view :is(h2, .breadcrumb-current, .scrubber-label) {
+  font-size: 0.72rem;
+}
+:root[data-skin='arcade'] .world-view :is(.world-lenses .world-nav-label, .panel-heading) {
+  font-size: 0.62rem;
+}
+:root[data-skin='arcade'] .world-view .map-svg image {
+  filter: var(--skin-map-filter);
+  image-rendering: pixelated;
+}
+:root[data-skin='arcade'] .world-view .map-svg .map-region {
+  shape-rendering: crispEdges;
+}
+:root[data-skin='arcade'] .world-view .map-svg:not(.editing) .map-region.linked {
+  stroke: var(--skin-region-stroke);
+  stroke-opacity: 0.7;
+  stroke-width: 2px;
+  stroke-dasharray: 4 4;
+}
+:root[data-skin='arcade'] .world-view .map-svg:not(.editing) .map-region.hover {
+  fill: var(--skin-region-hover);
+  fill-opacity: 1;
+  stroke: var(--skin-gold);
+  stroke-opacity: 1;
+  stroke-dasharray: none;
+}
+:root[data-skin='arcade'] .world-view .board-portrait-ring {
+  stroke: var(--skin-gold);
+}
+
+/* ----- art ----- */
+
+:root[data-skin='arcade'][data-skin-art] .world-view .world-main {
+  background: repeating-conic-gradient(
+      var(--bg) 0 25%,
+      color-mix(in srgb, var(--bg) 90%, var(--accent)) 0 50%
+    )
+    0 0 / 16px 16px;
+}
+:root[data-skin='arcade'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: var(--skin-pixel) solid var(--border);
+  border-radius: 0;
+  box-shadow:
+    var(--skin-pixel) var(--skin-pixel) 0 0 #000,
+    inset 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+:root[data-skin='arcade'][data-skin-art] .world-view :is(button, input, select, .segmented) {
+  border-radius: 0;
+}
+:root[data-skin='arcade'][data-skin-art] .world-view .world-nav-item.active {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0;
+}
+:root[data-skin='arcade'][data-skin-art] .world-view .world-nav-item.active::before {
+  content: '▶';
+  font-size: 0.6rem;
+  color: var(--skin-gold);
+  animation: arcade-blink 1s steps(1) infinite;
+}
+:root[data-skin='arcade'][data-skin-art] .world-view .page-scroll > * {
+  animation: arcade-pop 0.28s steps(3) both;
+}
+@keyframes arcade-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes arcade-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

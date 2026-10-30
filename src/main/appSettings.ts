@@ -57,6 +57,8 @@ const appSettingsSchema = z.looseObject({
       blendLines: z.boolean().default(true),
       timeScrubber: z.boolean().default(true),
       trails: z.boolean().default(true),
+      skin: z.enum(['full', 'plain', 'minimal']).default('full'),
+      vocabulary: z.boolean().default(true),
     })
     .catch(DEFAULT_WORLD_SETTINGS)
     .default(DEFAULT_WORLD_SETTINGS),

@@ -3,6 +3,7 @@ import type { EntrySummary } from '@shared/ipc'
 import { currentValue, valuesAt } from '@shared/world/facts'
 import { lastSeen, presence, PRESENCE_LABELS, type Presence } from '@shared/world/story'
 import { LENS_LABELS, type Lens } from '@shared/world/templates'
+import { useWords } from '../skins/useWords'
 import { loadLocal, saveLocal } from '../storage'
 import { useSettings } from '../useTheme'
 import { lensOf, shownFacts, templateName, valueLabel } from './model'
@@ -43,6 +44,7 @@ export function LensView(props: {
   defaultMode?: string
 }) {
   const { world, lens } = props
+  const word = useWords()
   const key = `world.lensMode.${lens}`
   const map = lens === 'where' ? props.map : undefined
   // Where opens on the map once there is one; otherwise on the last view chosen.
@@ -75,7 +77,13 @@ export function LensView(props: {
   return (
     <div className={`lens-view ${shown === 'map' ? 'lens-map' : ''}`}>
       <header className="lens-head">
-        <h1>{LENS_LABELS[lens]}</h1>
+        <h1
+          title={
+            word(lens, LENS_LABELS[lens]) === LENS_LABELS[lens] ? undefined : LENS_LABELS[lens]
+          }
+        >
+          {word(lens, LENS_LABELS[lens])}
+        </h1>
         <div className="segmented" role="radiogroup" aria-label="View">
           {modes.map((m) => (
             <button

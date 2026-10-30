@@ -542,6 +542,8 @@ export const ipcInputs = {
         blendLines: z.boolean(),
         timeScrubber: z.boolean(),
         trails: z.boolean(),
+        skin: z.enum(['full', 'plain', 'minimal']),
+        vocabulary: z.boolean(),
       })
       .optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),

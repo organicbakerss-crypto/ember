@@ -21,10 +21,10 @@ export function stopShort(world: WorldData, stop: TimelineStop): string {
   return world.resolve(stop.id)?.name ?? 'that event'
 }
 
-/** "Now (Ch 12)": the latest chapter, which "now" stands for. */
-export function nowLabel(world: WorldData): string {
+/** "Now (Ch 12)": the latest chapter, which "now" stands for (a skin may say "Live"). */
+export function nowLabel(world: WorldData, now = 'Now'): string {
   const last = world.index?.chapters[world.index.chapters.length - 1]
-  return last ? `Now (${last.label})` : 'Now'
+  return last ? `${now} (${last.label})` : now
 }
 
 /** Whether portraits should glide and leave trails (setting, lighter mode, reduced motion). */

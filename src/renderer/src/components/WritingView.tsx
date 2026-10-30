@@ -40,6 +40,7 @@ import { SettingsWindow } from './SettingsWindow'
 import { useOverlays } from './overlays'
 import { StatusBar } from './StatusBar'
 import { useLibraryActions } from './useLibraryActions'
+import { useWords } from '../skins/useWords'
 
 type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'world'
 
@@ -61,6 +62,7 @@ export function WritingView(props: {
   onOpenWorld?: (entryId?: string) => void
   onOpenSeries: () => void
 }) {
+  const word = useWords()
   const { series, volume } = props
   const ref = useMemo(() => ({ seriesId: series.id, volumeId: volume.id }), [series.id, volume.id])
   const lastChapterKey = `writing.lastChapter.${volume.id}`
@@ -538,7 +540,7 @@ export function WritingView(props: {
               onClick={() => props.onOpenWorld?.()}
               title="Open this series' world"
             >
-              World
+              {word('world', 'World')}
             </button>
           </div>
         )}

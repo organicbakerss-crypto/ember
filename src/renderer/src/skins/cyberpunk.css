@@ -1,0 +1,107 @@
+/*
+ * Cyberpunk: neon wireframes on near-black, a techy mono face, a glitch as
+ * views change. Fonts and map styling at "plain" and "full"; grid, glow and
+ * transitions only at "full". World mode only.
+ */
+
+:root[data-skin='cyberpunk']
+  .world-view
+  :is(
+    h1,
+    h2,
+    .entry-name,
+    .world-lenses .world-nav-label,
+    .panel-heading,
+    .entry-section h3,
+    .breadcrumb-current,
+    .scrubber-label
+  ) {
+  font-family: var(--skin-heading-font);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+:root[data-skin='cyberpunk'] .world-view .map-svg image {
+  filter: var(--skin-map-filter);
+}
+:root[data-skin='cyberpunk'] .world-view .map-svg:not(.editing) .map-region.linked {
+  stroke: var(--skin-region-stroke);
+  stroke-opacity: 0.75;
+  stroke-width: 1.5px;
+}
+:root[data-skin='cyberpunk'] .world-view .map-svg:not(.editing) .map-region.hover {
+  fill: var(--skin-region-hover);
+  fill-opacity: 1;
+  stroke: var(--accent);
+  stroke-opacity: 1;
+}
+:root[data-skin='cyberpunk'] .world-view .board-portrait-ring {
+  stroke: var(--skin-neon);
+}
+
+/* ----- art ----- */
+
+:root[data-skin='cyberpunk'][data-skin-art] .world-view .world-main {
+  background:
+    repeating-linear-gradient(transparent 0 2px, rgb(0 0 0 / 0.16) 2px 3px),
+    linear-gradient(rgb(46 242 255 / 0.05) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(90deg, rgb(46 242 255 / 0.05) 1px, transparent 1px) 0 0 / 32px 32px,
+    var(--bg);
+}
+:root[data-skin='cyberpunk'][data-skin-art] .world-view .map-svg:not(.editing) .map-region.linked {
+  filter: drop-shadow(0 0 3px var(--skin-neon));
+}
+:root[data-skin='cyberpunk'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: 1px solid color-mix(in srgb, var(--skin-neon) 55%, transparent);
+  border-radius: 0;
+  box-shadow: var(--skin-glow);
+}
+:root[data-skin='cyberpunk'][data-skin-art] .world-view .world-panel {
+  border-right: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 1px 0 12px rgb(255 46 136 / 0.15);
+}
+:root[data-skin='cyberpunk'][data-skin-art] .world-view .world-nav-item.active {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--skin-neon);
+  text-shadow: 0 0 6px var(--skin-neon);
+}
+:root[data-skin='cyberpunk'][data-skin-art] .world-view .lens-head h1 {
+  color: var(--skin-neon);
+  text-shadow: 0 0 8px rgb(46 242 255 / 0.6);
+}
+:root[data-skin='cyberpunk'][data-skin-art] .world-view .lens-head h1::after {
+  content: '_';
+  color: var(--skin-acid);
+  animation: cyberpunk-caret 1.1s steps(1) infinite;
+}
+:root[data-skin='cyberpunk'][data-skin-art] .world-view .page-scroll > * {
+  animation: cyberpunk-glitch 0.32s steps(4) both;
+}
+@keyframes cyberpunk-caret {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes cyberpunk-glitch {
+  0% {
+    opacity: 0;
+    transform: translateX(-5px);
+    clip-path: inset(0 0 65% 0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateX(4px);
+    clip-path: inset(35% 0 20% 0);
+  }
+  70% {
+    transform: translateX(-2px);
+    clip-path: inset(8% 0 45% 0);
+  }
+  100% {
+    transform: none;
+    clip-path: inset(0);
+  }
+}

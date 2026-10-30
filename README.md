@@ -50,6 +50,10 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - move people by dragging their portrait at a moment; faint trails and gliding portraits
   - event pins on the map; map versions from an event ("the map changes here")
   - the timeline in the text forms; settings for the scrubber and for trails
+- **World, step 4e (skins):**
+  - Fantasy, Cyberpunk and Arcade themes, each with a world skin: art, fonts, map styling, transitions and its own words (Atlas / Chronicle / Lore, NETDB / Logs / Protocols, Stages / Players / Unlocked)
+  - skins are data files; Settings → World: full, plain or minimal skin, themed words on or off
+  - the writing page stays plain and readable in every skin; lighter mode keeps skins cheap
 
 ## Requirements
 

@@ -417,6 +417,16 @@ Choices made while building 4a, so later steps start from what exists:
 - **Text forms:** an era's or event's text says "When: before the story (2 of 5)" or "during Ch 3"; the digest ends with the timeline in order, with places, and lists what isn't placed.
 - **Settings → World:** the time scrubber can be turned off (the world as it stands now), and trails and animations separately.
 
+### As built in 4e
+
+- **Skins are data.** A skin is a JSON file in `skins/` (its words, and art tokens set as `--skin-*` properties) plus a CSS file of art scoped to `[data-skin="<id>"]`. A theme names its skin (`"skin": "fantasy"`). Layout and data are the same in every skin; a new skin is new art and words.
+- **Three themes with full skins**, added now because the skins need them: **Fantasy** (parchment, inked double borders, engraved Cinzel capitals, sepia map with inked region borders, pages unfurl in), **Cyberpunk** (near-black and navy, hot pink and acid green, Share Tech Mono in caps, neon wireframe regions with glow, a grid with scanlines, a glitch as views change), **Arcade** (black cabinet with deep reds, Press Start 2P lettering, pixel borders with hard shadows, a pixel-grid background and pixelated map, a blinking cursor). Every other theme uses the clean default skin in its own colours. Fonts are bundled (OFL) so they work offline.
+- **Words:** Where / Who / When / How / Inbox / World / Now become Atlas / Folk / Chronicle / Lore / Scribe’s tray / Realm / This day (Fantasy); Grid / NETDB / Logs / Protocols / Buffer / Net / Live (Cyberpunk); Stages / Players / Replays / Unlocked / Loot / Game / Continue (Arcade). The plain word stays as a tooltip, and the command palette shows both ("Atlas (Where)"). Template names and settings stay plain.
+- **Settings → World:** World skin **Full** (art, frames, fonts, map styling, transitions), **Plain** (the skin's fonts and map styling, no art or transitions) or **Minimal** (the clean default layout in the theme's colours); **Themed words** on or off.
+- **The writing page is never skinned:** skin styles apply inside World mode only, and the page keeps the theme's readable writing font. (The theme's colours and UI font still apply to the app around it.)
+- **Lighter mode** drops skin textures, glows, shadows and filters; it and the system's reduced-motion setting stop skin animations.
+- **Contrast is tested** for every theme: body text, the page and button text at least 4.5:1 (the page 7:1), muted text at least 3:1.
+
 World skins are described under Themes; the AI side of the world (readable by AI, "Update the worldbuilding", AI questions) under AI layer. Build order: milestones 4a–4e.
 
 - **Ownership rule:** World mode edits world files; Write mode edits chapter files. Each file has one writer, so the two modes never fight over a file.
@@ -674,7 +684,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
 12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
-13. **Themes:** Cyberpunk, '90s Desktop, Arcade, high contrast, and the starter set.
+13. **Themes:** '90s Desktop, high contrast, and the starter set (Fantasy, Cyberpunk and Arcade came with their world skins in 4e).
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
 ## Open items

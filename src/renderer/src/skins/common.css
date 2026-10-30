@@ -1,0 +1,19 @@
+/* Shared by every skin: lighter mode and reduced motion keep skins cheap and still. */
+
+:root[data-lighter][data-skin] .world-view .world-main {
+  background: var(--bg) !important;
+}
+:root[data-lighter][data-skin] .world-view :is(.map-region, .map-svg image) {
+  filter: none !important;
+}
+:root[data-lighter][data-skin] .world-view * {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin] .world-view *,
+  :root[data-skin] .world-view *::before,
+  :root[data-skin] .world-view *::after {
+    animation: none !important;
+  }
+}

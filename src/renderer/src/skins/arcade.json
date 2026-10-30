@@ -1,0 +1,21 @@
+{
+  "id": "arcade",
+  "name": "Arcade",
+  "words": {
+    "world": "Game",
+    "where": "Stages",
+    "who": "Players",
+    "when": "Replays",
+    "how": "Unlocked",
+    "inbox": "Loot",
+    "now": "Continue"
+  },
+  "tokens": {
+    "pixel": "4px",
+    "heading-font": "'Press Start 2P', monospace",
+    "gold": "#ffd23f",
+    "map-filter": "saturate(1.2) contrast(1.1)",
+    "region-stroke": "#ffd23f",
+    "region-hover": "rgb(224 50 42 / 0.3)"
+  }
+}

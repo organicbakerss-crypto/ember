@@ -3221,3 +3221,15 @@ kbd {
 .map-person {
   cursor: grab;
 }
+
+.plain-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+.plain-fieldset legend {
+  padding: 0;
+  margin-bottom: 0.25rem;
+}

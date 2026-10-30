@@ -25,6 +25,7 @@ import { RelationshipsTable } from './board/RelationshipsTable'
 import { worldMapOf } from './map/mapModel'
 import { useSettings } from '../useTheme'
 import { TimeContext, type TimeState } from './time/TimeContext'
+import { useWords } from '../skins/useWords'
 import { TimelineView } from './time/TimelineView'
 
 type Place =
@@ -56,6 +57,12 @@ export function WorldView(props: {
   const { data: loaded, error } = useWorld(worldId)
   const record = useUndo()
   const { settings } = useSettings()
+  const word = useWords()
+  /** A skin's word with the plain one after it, for places that are searched ("Atlas (Where)"). */
+  const both = (key: Lens | 'inbox', plain: string) => {
+    const w = word(key, plain)
+    return w === plain ? plain : `${w} (${plain})`
+  }
   // The time scrubber's moment, shared by every view in World mode.
   const [stopId, setStopId] = useState<string | null>(null)
   const timeOn = settings.world.timeScrubber
@@ -172,10 +179,14 @@ export function WorldView(props: {
           },
           ...LENSES.map((lens) => ({
             id: `world-lens-${lens}`,
-            title: `World: ${LENS_LABELS[lens]}`,
+            title: `World: ${both(lens, LENS_LABELS[lens])}`,
             run: () => go({ kind: 'lens', lens }),
           })),
-          { id: 'world-inbox', title: 'World: Inbox', run: () => go({ kind: 'inbox' }) },
+          {
+            id: 'world-inbox',
+            title: `World: ${both('inbox', 'Inbox')}`,
+            run: () => go({ kind: 'inbox' }),
+          },
           { id: 'world-templates', title: 'Edit templates', run: () => setTemplatesOpen(true) },
           { id: 'world-digest', title: 'View the world as text', run: showDigest },
           { id: 'world-back', title: 'Back', shortcut: 'Alt+←', run: back },
@@ -280,7 +291,7 @@ export function WorldView(props: {
               <>
                 <span className="muted">/</span>
                 <button className="link" onClick={() => go({ kind: 'lens', lens: currentLens })}>
-                  {LENS_LABELS[currentLens]}
+                  {word(currentLens, LENS_LABELS[currentLens])}
                 </button>
               </>
             )}
@@ -320,7 +331,7 @@ export function WorldView(props: {
                 Write
               </button>
               <button role="radio" aria-checked className="active">
-                World
+                {word('world', 'World')}
               </button>
             </div>
           )}
@@ -335,7 +346,9 @@ export function WorldView(props: {
                 aria-current={currentLens === lens && place.kind === 'lens' ? 'page' : undefined}
                 onClick={() => go({ kind: 'lens', lens })}
               >
-                <span className="world-nav-label">{LENS_LABELS[lens]}</span>
+                <span className="world-nav-label" title={LENS_LABELS[lens]}>
+                  {word(lens, LENS_LABELS[lens])}
+                </span>
                 <span className="muted small">
                   {view.entries.filter((e) => lensOf(world, e) === lens).length}
                 </span>
@@ -345,7 +358,9 @@ export function WorldView(props: {
               className={`world-nav-item ${place.kind === 'inbox' ? 'active' : ''}`}
               onClick={() => go({ kind: 'inbox' })}
             >
-              <span className="world-nav-label">Inbox</span>
+              <span className="world-nav-label" title="Inbox">
+                {word('inbox', 'Inbox')}
+              </span>
               {view.inboxCount > 0 && <span className="muted small">{view.inboxCount}</span>}
             </button>
           </nav>

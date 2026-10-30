@@ -9,12 +9,15 @@ import {
 } from 'react'
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '@shared/settings'
 import { api, useIpcEvent } from './api'
-import { applyTheme, resolveTheme, SYSTEM_THEME } from './themes'
+import { applyTheme, resolveTheme, SYSTEM_THEME, type Theme } from './themes'
+import { applySkin, skinFor } from './skins'
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
 interface SettingsContextValue {
   settings: AppSettings
+  /** The theme in use (the chosen one, or the system's light or dark). */
+  theme: Theme
   /**
    * Applies a change straight away and saves it. Pass a function to build the
    * change from the latest settings (for several quick changes in a row).
@@ -24,6 +27,7 @@ interface SettingsContextValue {
 
 const SettingsContext = createContext<SettingsContextValue>({
   settings: DEFAULT_APP_SETTINGS,
+  theme: resolveTheme(SYSTEM_THEME, false),
   update: () => {},
 })
 
@@ -60,21 +64,24 @@ export function SettingsProvider(props: { children: ReactNode }) {
   )
 
   const { rhythmColors } = settings.analysis
+  const theme = resolveTheme(settings.theme, prefersDark)
+  const skinLevel = settings.world.skin
   useEffect(() => {
     const root = document.documentElement
-    applyTheme(resolveTheme(settings.theme, prefersDark), root)
+    applyTheme(theme, root)
+    applySkin(skinFor(theme), skinLevel, root)
     // A chosen Rhythm colour overrides the theme's.
     for (const band of ['short', 'medium', 'long'] as const) {
       const color = rhythmColors[band]
       if (color) root.style.setProperty(`--rhythm-${band}`, color)
     }
-  }, [settings.theme, prefersDark, rhythmColors])
+  }, [theme, skinLevel, rhythmColors])
   useEffect(() => {
     document.documentElement.style.setProperty('--text-width', `${settings.pageWidth}px`)
   }, [settings.pageWidth])
 
   return (
-    <SettingsContext.Provider value={{ settings, update }}>
+    <SettingsContext.Provider value={{ settings, theme, update }}>
       {props.children}
     </SettingsContext.Provider>
   )

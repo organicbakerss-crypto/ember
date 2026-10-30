@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { WorldData } from '../useWorld'
 import { useTime } from './TimeContext'
 import { nowLabel, stopLabel } from './timeModel'
+import { useWords } from '../../skins/useWords'
 
 /** How long playback rests on each stop. */
 const PLAY_MS = 1400
@@ -15,6 +16,7 @@ export function TimeScrubber(props: { world: WorldData }) {
   const { world } = props
   const { stop, setStop, enabled } = useTime()
   const [playing, setPlaying] = useState(false)
+  const word = useWords()
   const { stops, eras } = world.timeline
   // One slot per stop, and a last one for "now".
   const last = stops.length
@@ -36,7 +38,8 @@ export function TimeScrubber(props: { world: WorldData }) {
   // Nothing to scrub through yet (no chapters, eras or events): no scrubber.
   if (!enabled || !stops.length) return null
   const pct = (i: number) => (last === 0 ? 100 : (i / last) * 100)
-  const label = index === last ? nowLabel(world) : stopLabel(world, stops[index]!)
+  const label =
+    index === last ? nowLabel(world, word('now', 'Now')) : stopLabel(world, stops[index]!)
   const play = () => {
     if (playing) return setPlaying(false)
     // From now, play the story from its first chapter.

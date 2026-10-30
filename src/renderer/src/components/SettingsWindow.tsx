@@ -145,8 +145,9 @@ function AppearanceSettings() {
         </label>
       ))}
       <p className="muted small">
-        More themes (Cyberpunk, '90s Desktop, Arcade, high contrast and others) come in a later
-        milestone.
+        Fantasy, Cyberpunk and Arcade also dress World mode in a skin (its look and its words); the
+        writing page stays plain and readable. More themes (’90s Desktop, high contrast and others)
+        come in a later milestone.
       </p>
     </section>
   )
@@ -391,6 +392,36 @@ function WorldSettings() {
         />
         On the people board, show every relationship type along a line (otherwise one colour: the
         strongest)
+      </label>
+      <fieldset className="plain-fieldset">
+        <legend>World skin (Fantasy, Cyberpunk and Arcade themes)</legend>
+        {(
+          [
+            ['full', 'Full: art, frames, fonts, map styling and transitions'],
+            ['plain', 'Plain: the skin’s fonts and map styling, without art or transitions'],
+            ['minimal', 'Minimal: the clean default layout in the theme’s colours'],
+          ] as const
+        ).map(([level, label]) => (
+          <label key={level} className="radio">
+            <input
+              type="radio"
+              name="world-skin"
+              checked={settings.world.skin === level}
+              onChange={() => update(({ world }) => ({ world: { ...world, skin: level } }))}
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.vocabulary}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, vocabulary: e.target.checked } }))
+          }
+        />
+        Themed words in a skin (Atlas, Chronicle, Lore…; otherwise Where, When, How)
       </label>
       <label className="radio">
         <input

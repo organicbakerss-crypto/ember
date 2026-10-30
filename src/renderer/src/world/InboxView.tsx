@@ -1,3 +1,4 @@
+import { useWords } from '../skins/useWords'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EntrySummary, NameSuggestion, WorldInbox } from '@shared/ipc'
 import type { InboxItem } from '@shared/schema'
@@ -32,6 +33,7 @@ export function InboxView(props: {
   onOpenEntry: (entryId: string) => void
 }) {
   const { world, record } = props
+  const word = useWords()
   const worldId = world.view.world.id
   const { settings } = useSettings()
   const withNames = settings.world.nameCatcher
@@ -140,7 +142,7 @@ export function InboxView(props: {
   return (
     <div className="inbox lens-view">
       <header className="lens-head">
-        <h1>Inbox</h1>
+        <h1>{word('inbox', 'Inbox')}</h1>
       </header>
       {empty && (
         <p className="muted">

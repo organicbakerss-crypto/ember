@@ -1,0 +1,22 @@
+{
+  "id": "cyberpunk",
+  "name": "Cyberpunk",
+  "words": {
+    "world": "Net",
+    "where": "Grid",
+    "who": "NETDB",
+    "when": "Logs",
+    "how": "Protocols",
+    "inbox": "Buffer",
+    "now": "Live"
+  },
+  "tokens": {
+    "neon": "#2ef2ff",
+    "acid": "#b6ff3b",
+    "glow": "0 0 6px rgb(46 242 255 / 0.55), 0 0 18px rgb(255 46 136 / 0.25)",
+    "heading-font": "'Share Tech Mono', Consolas, monospace",
+    "map-filter": "saturate(0.55) brightness(0.62) contrast(1.15) hue-rotate(-12deg)",
+    "region-stroke": "#2ef2ff",
+    "region-hover": "rgb(255 46 136 / 0.25)"
+  }
+}
