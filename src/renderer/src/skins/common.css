@@ -1,4 +1,37 @@
-/* Shared by every skin: lighter mode and reduced motion keep skins cheap and still. */
+/*
+ * Shared by every skin. The defaults below use :where() so they have no
+ * weight: a skin's own rules always win. Lighter mode and reduced motion
+ * keep every skin cheap and still.
+ */
+
+:where(:root[data-skin])
+  .world-view
+  :is(
+    h1,
+    h2,
+    .entry-name,
+    .world-lenses .world-nav-label,
+    .panel-heading,
+    .entry-section h3,
+    .breadcrumb-current,
+    .scrubber-label
+  ) {
+  font-family: var(--skin-heading-font);
+}
+:where(:root[data-skin]) .world-view .map-svg image {
+  filter: var(--skin-map-filter);
+}
+:where(:root[data-skin]) .world-view .map-svg:not(.editing) .map-region.linked {
+  stroke: var(--skin-region-stroke);
+  stroke-opacity: 0.6;
+  stroke-width: 1.5px;
+}
+:where(:root[data-skin]) .world-view .map-svg:not(.editing) .map-region.hover {
+  fill: var(--skin-region-hover);
+  fill-opacity: 1;
+  stroke: var(--skin-region-stroke);
+  stroke-opacity: 1;
+}
 
 :root[data-lighter][data-skin] .world-view .world-main {
   background: var(--bg) !important;

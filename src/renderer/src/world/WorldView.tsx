@@ -10,7 +10,7 @@ import { loadLocal, saveLocal } from '../storage'
 import { EntryPage } from './EntryPage'
 import { InboxView } from './InboxView'
 import { LensView } from './LensView'
-import { lensOf, loadRecent, pushRecent, templateName } from './model'
+import { lensOf, loadRecent, pushRecent, shownTemplates, templateName } from './model'
 import { Portrait } from './Portrait'
 import { QuickAddDialog } from './QuickAddDialog'
 import { TemplateDialog } from './TemplateDialog'
@@ -497,7 +497,7 @@ export function WorldView(props: {
 
         {quickAdd && (
           <QuickAddDialog
-            templates={view.templates}
+            templates={shownTemplates(world)}
             existing={view.entries.flatMap((e) => [e.name, ...e.aliases])}
             lens={quickAdd.lens}
             template={quickAdd.template}

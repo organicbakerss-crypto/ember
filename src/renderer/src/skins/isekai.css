@@ -1,0 +1,106 @@
+/*
+ * Isekai: the game system of another world. Glowing blue status windows,
+ * entry pages that open like a character's status screen (quick facts as
+ * stats), and notices that pop up as [System] messages. Fonts and map
+ * styling at "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='isekai'] .world-view :is(h1, .entry-name, .world-lenses .world-nav-label) {
+  letter-spacing: 0.05em;
+}
+/* Quick facts read as stats: name on the left, value on the right. */
+:root[data-skin='isekai'] .world-view .quick-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.2rem 1.5rem;
+}
+:root[data-skin='isekai'] .world-view .quick-fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: none;
+  border: none;
+  border-bottom: 1px dashed rgb(79 195 255 / 0.4);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.25rem 0.1rem;
+}
+:root[data-skin='isekai'] .world-view .quick-fact-label {
+  color: var(--accent);
+}
+:root[data-skin='isekai'] .world-view .quick-fact-value {
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ----- art ----- */
+
+:root[data-skin='isekai'][data-skin-art] .world-view .world-main {
+  background:
+    radial-gradient(1.5px 1.5px at 30% 40%, rgb(79 195 255 / 0.5), transparent),
+    radial-gradient(1px 1px at 70% 20%, rgb(255 255 255 / 0.5), transparent),
+    radial-gradient(ellipse at 50% 120%, rgb(79 195 255 / 0.18), transparent 60%),
+    linear-gradient(180deg, #0a1430, #0c1f4a);
+  background-size:
+    300px 300px,
+    300px 300px,
+    100% 100%,
+    100% 100%;
+}
+:root[data-skin='isekai'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  background-color: var(--skin-window);
+  border: 1px solid rgb(79 195 255 / 0.6);
+  border-radius: 6px;
+  box-shadow: var(--skin-glow);
+  backdrop-filter: blur(6px);
+}
+/* The entry page is a status screen. */
+:root[data-skin='isekai'][data-skin-art] .world-view .entry-page::before {
+  content: 'STATUS';
+  font-family: var(--skin-heading-font);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  color: var(--accent);
+  border-bottom: 1px solid rgb(79 195 255 / 0.4);
+  padding-bottom: 0.3rem;
+}
+:root[data-skin='isekai'][data-skin-art] .world-view .world-nav-item.active {
+  background: rgb(79 195 255 / 0.15);
+  box-shadow: inset 2px 0 0 var(--accent);
+  border-radius: 2px;
+}
+/* Notices are [System] messages. */
+:root[data-skin='isekai'][data-skin-art] .toast {
+  background: var(--skin-window);
+  color: var(--text);
+  border: 1px solid rgb(79 195 255 / 0.7);
+  box-shadow: var(--skin-glow);
+}
+:root[data-skin='isekai'][data-skin-art] .toast::before {
+  content: '◆ System';
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+:root[data-skin='isekai'][data-skin-art] .toast .link {
+  color: var(--accent);
+}
+:root[data-skin='isekai'][data-skin-art] .world-view .page-scroll > * {
+  transform-origin: top center;
+  animation: isekai-window 0.35s ease-out both;
+}
+@keyframes isekai-window {
+  from {
+    opacity: 0;
+    transform: scaleY(0.9);
+    filter: brightness(1.8);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}

@@ -10,6 +10,31 @@
     "inbox": "Buffer",
     "now": "Live"
   },
+  "kinds": {
+    "continent": "Sector",
+    "kingdom": "Zone",
+    "city": "Sprawl",
+    "district": "Block",
+    "landmark": "Hotspot",
+    "wilds": "Badlands",
+    "person": "Runner",
+    "faction": "Corp",
+    "family": "Clan",
+    "creature": "Bioform",
+    "era": "Cycle",
+    "event": "Incident",
+    "magic": "Netrunning",
+    "religion": "Cult",
+    "law": "Policy",
+    "technology": "Chrome",
+    "custom": "Street code"
+  },
+  "cast": {
+    "story": "Online",
+    "waiting": "Queued",
+    "quiet": "Ghosted",
+    "left": "Flatlined"
+  },
   "tokens": {
     "neon": "#2ef2ff",
     "acid": "#b6ff3b",

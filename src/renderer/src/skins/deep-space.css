@@ -1,0 +1,100 @@
+/*
+ * Deep Space: a starship's bridge. A starfield behind everything, HUD
+ * corner brackets on every panel, the map as a navigation display with a
+ * grid, and the scrubber as a mission clock. Fonts and map styling at
+ * "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='deep-space']
+  .world-view
+  :is(
+    h1,
+    h2,
+    .entry-name,
+    .world-lenses .world-nav-label,
+    .panel-heading,
+    .breadcrumb-current,
+    .scrubber-label
+  ) {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+:root[data-skin='deep-space'] .world-view :is(h1, .entry-name) {
+  font-size: 1.6rem;
+}
+:root[data-skin='deep-space'] .world-view .world-lenses .world-nav-label {
+  font-size: 0.8rem;
+}
+:root[data-skin='deep-space'] .world-view .scrubber-label::before {
+  content: 'T+ ';
+  color: var(--skin-hud);
+}
+
+/* ----- art ----- */
+
+:root[data-skin='deep-space'][data-skin-art] .world-view .world-main {
+  background:
+    radial-gradient(1px 1px at 10% 20%, #fff, transparent),
+    radial-gradient(1px 1px at 40% 70%, rgb(255 255 255 / 0.8), transparent),
+    radial-gradient(1.5px 1.5px at 75% 35%, rgb(200 220 255 / 0.9), transparent),
+    radial-gradient(1px 1px at 90% 85%, rgb(255 255 255 / 0.6), transparent),
+    radial-gradient(1px 1px at 55% 10%, rgb(255 255 255 / 0.7), transparent),
+    radial-gradient(ellipse at 80% 90%, rgb(90 60 160 / 0.18), transparent 50%), var(--bg);
+  background-size:
+    230px 230px,
+    310px 310px,
+    410px 410px,
+    190px 190px,
+    270px 270px,
+    100% 100%,
+    auto;
+}
+/* HUD corner brackets. */
+:root[data-skin='deep-space'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: 1px solid rgb(138 180 255 / 0.18);
+  border-radius: 2px;
+  background:
+    linear-gradient(var(--skin-hud), var(--skin-hud)) top left / 16px 2px no-repeat,
+    linear-gradient(var(--skin-hud), var(--skin-hud)) top left / 2px 16px no-repeat,
+    linear-gradient(var(--skin-hud), var(--skin-hud)) top right / 16px 2px no-repeat,
+    linear-gradient(var(--skin-hud), var(--skin-hud)) top right / 2px 16px no-repeat,
+    linear-gradient(var(--skin-hud), var(--skin-hud)) bottom left / 16px 2px no-repeat,
+    linear-gradient(var(--skin-hud), var(--skin-hud)) bottom left / 2px 16px no-repeat,
+    linear-gradient(var(--skin-hud), var(--skin-hud)) bottom right / 16px 2px no-repeat,
+    linear-gradient(var(--skin-hud), var(--skin-hud)) bottom right / 2px 16px no-repeat,
+    rgb(11 16 32 / 0.85);
+  box-shadow: none;
+}
+/* The map is a navigation display. */
+:root[data-skin='deep-space'][data-skin-art] .world-view .map-scroll {
+  background:
+    linear-gradient(var(--skin-grid) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, var(--skin-grid) 1px, transparent 1px) 0 0 / 40px 40px,
+    rgb(5 7 15 / 0.9);
+}
+:root[data-skin='deep-space'][data-skin-art] .world-view .map-svg:not(.editing) .map-region.linked {
+  filter: drop-shadow(0 0 2px var(--skin-hud));
+}
+:root[data-skin='deep-space'][data-skin-art] .world-view .world-nav-item.active {
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--skin-hud);
+  color: var(--skin-hud);
+  border-radius: 0;
+}
+:root[data-skin='deep-space'][data-skin-art] .world-view .page-scroll > * {
+  animation: space-warp 0.45s ease-out both;
+}
+@keyframes space-warp {
+  from {
+    opacity: 0;
+    transform: scale(1.03);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}

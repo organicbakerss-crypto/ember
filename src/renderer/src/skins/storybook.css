@@ -1,0 +1,56 @@
+/*
+ * Storybook: a watercolour picture book. Rounded friendly lettering, soft
+ * washes of colour, a drop capital at the start of every page, and pages
+ * that turn in. Fonts and map styling at "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='storybook'] .world-view :is(h1, .entry-name) {
+  font-weight: 600;
+  color: var(--accent);
+}
+:root[data-skin='storybook'] .world-view .map-svg:not(.editing) .map-region.linked {
+  stroke-dasharray: 4 3;
+  stroke-linecap: round;
+}
+
+/* ----- art ----- */
+
+:root[data-skin='storybook'][data-skin-art] .world-view .world-main {
+  background:
+    radial-gradient(circle at 12% 18%, var(--skin-wash-1), transparent 38%),
+    radial-gradient(circle at 88% 28%, var(--skin-wash-2), transparent 40%),
+    radial-gradient(circle at 55% 92%, var(--skin-wash-3), transparent 42%), var(--bg);
+}
+:root[data-skin='storybook'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: 2px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 20px;
+  box-shadow: 0 6px 18px rgb(120 70 90 / 0.12);
+}
+:root[data-skin='storybook'][data-skin-art] .world-view .world-nav-item {
+  border-radius: 999px;
+}
+/* A drop capital opens every page. */
+:root[data-skin='storybook'][data-skin-art] .world-view .entry-text > p:first-child::first-letter {
+  float: left;
+  font-family: var(--skin-heading-font);
+  font-size: 3.2em;
+  line-height: 0.85;
+  margin: 0.08em 0.12em 0 0;
+  color: var(--accent);
+}
+:root[data-skin='storybook'][data-skin-art] .world-view .page-scroll > * {
+  transform-origin: left center;
+  animation: storybook-turn 0.5s ease-out both;
+}
+@keyframes storybook-turn {
+  from {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-14deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

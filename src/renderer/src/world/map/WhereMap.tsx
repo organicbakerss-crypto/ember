@@ -11,6 +11,7 @@ import { useOverlays } from '../../components/overlays'
 import { loadLocal, saveLocal } from '../../storage'
 import { useSettings } from '../../useTheme'
 import { QuickAddDialog } from '../QuickAddDialog'
+import { shownTemplates } from '../model'
 import type { UndoStep } from '../useUndo'
 import type { WorldData } from '../useWorld'
 import type { WorldActions } from '../useWorldActions'
@@ -496,7 +497,7 @@ export function WhereMap(props: {
 
       {creating && map && (
         <QuickAddDialog
-          templates={world.view.templates}
+          templates={shownTemplates(world)}
           existing={world.view.entries.flatMap((e) => [e.name, ...e.aliases])}
           lens="where"
           name={creating.name}

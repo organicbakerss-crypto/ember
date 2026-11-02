@@ -1,0 +1,46 @@
+{
+  "id": "blueprint",
+  "name": "Blueprint",
+  "words": {
+    "world": "Project",
+    "where": "Site Plans",
+    "who": "Personnel",
+    "when": "Revisions",
+    "how": "Specs",
+    "inbox": "Drafts",
+    "now": "Current Rev"
+  },
+  "kinds": {
+    "continent": "Region",
+    "kingdom": "Territory",
+    "city": "Site",
+    "district": "Sector",
+    "landmark": "Structure",
+    "wilds": "Undeveloped land",
+    "person": "Staff",
+    "faction": "Department",
+    "family": "Household",
+    "creature": "Specimen",
+    "era": "Phase",
+    "event": "Milestone",
+    "magic": "Process",
+    "religion": "Doctrine",
+    "law": "Regulation",
+    "technology": "Component",
+    "custom": "Standard"
+  },
+  "cast": {
+    "story": "Active",
+    "waiting": "Pending",
+    "quiet": "Inactive",
+    "left": "Decommissioned"
+  },
+  "tokens": {
+    "heading-font": "'Architects Daughter', 'Comic Sans MS', cursive",
+    "map-filter": "grayscale(1) invert(1) sepia(1) hue-rotate(170deg) saturate(2.4) brightness(0.85)",
+    "region-stroke": "#f2f7ff",
+    "region-hover": "rgb(242 247 255 / 0.16)",
+    "line": "rgb(242 247 255 / 0.13)",
+    "line-major": "rgb(242 247 255 / 0.24)"
+  }
+}

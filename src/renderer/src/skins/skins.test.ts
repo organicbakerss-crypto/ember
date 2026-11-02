@@ -1,10 +1,25 @@
 import { describe, expect, it } from 'vitest'
+import { BUILT_IN_TEMPLATES } from '@shared/world/templates'
 import { themes } from '../themes'
 import { applySkin, SKIN_WORDS, skinFor, skins } from './index'
 
 describe('world skins', () => {
-  it('are the three full skins, each named by a theme', () => {
-    expect(skins.map((s) => s.id).sort()).toEqual(['arcade', 'cyberpunk', 'fantasy'])
+  it('are the twelve full skins, each named by a theme', () => {
+    expect(skins.map((s) => s.id).sort()).toEqual([
+      'arcade',
+      'blueprint',
+      'comic-book',
+      'cyberpunk',
+      'deep-space',
+      'fantasy',
+      'isekai',
+      'lofi-study',
+      'magic-academy',
+      'nineties-desktop',
+      'noir',
+      'storybook',
+    ])
+    expect(new Set(themes.filter((t) => t.skin).map((t) => t.skin)).size).toBe(skins.length)
     for (const theme of themes.filter((t) => t.skin)) expect(skinFor(theme)).not.toBeNull()
     expect(skinFor(themes.find((t) => t.id === 'light')!)).toBeNull()
   })
@@ -13,6 +28,11 @@ describe('world skins', () => {
     it(`${skin.id} has every word and its art tokens`, () => {
       expect(Object.keys(skin.words).sort()).toEqual([...SKIN_WORDS].sort())
       for (const w of Object.values(skin.words)) expect(w.trim()).toBeTruthy()
+      // A name for every built-in kind of thing, and every Cast group.
+      expect(Object.keys(skin.kinds).sort()).toEqual(BUILT_IN_TEMPLATES.map((t) => t.id).sort())
+      expect(Object.keys(skin.cast).sort()).toEqual(['left', 'quiet', 'story', 'waiting'])
+      for (const w of [...Object.values(skin.kinds), ...Object.values(skin.cast)])
+        expect(w.trim()).toBeTruthy()
       for (const token of ['heading-font', 'map-filter', 'region-stroke', 'region-hover'])
         expect(skin.tokens[token]).toBeTruthy()
     })

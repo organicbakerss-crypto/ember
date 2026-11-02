@@ -1,0 +1,46 @@
+{
+  "id": "noir",
+  "name": "Noir",
+  "words": {
+    "world": "The City",
+    "where": "Scenes",
+    "who": "Suspects",
+    "when": "Case Log",
+    "how": "Methods",
+    "inbox": "Leads",
+    "now": "Tonight"
+  },
+  "kinds": {
+    "continent": "Coast",
+    "kingdom": "State",
+    "city": "City",
+    "district": "Precinct",
+    "landmark": "Joint",
+    "wilds": "Outskirts",
+    "person": "Person of interest",
+    "faction": "Mob",
+    "family": "Family",
+    "creature": "Stray",
+    "era": "Years",
+    "event": "Case",
+    "magic": "Racket",
+    "religion": "Church",
+    "law": "Law",
+    "technology": "Gear",
+    "custom": "Code"
+  },
+  "cast": {
+    "story": "On the case",
+    "waiting": "Unknown",
+    "quiet": "Gone cold",
+    "left": "Off the books"
+  },
+  "tokens": {
+    "heading-font": "'Special Elite', 'Courier New', monospace",
+    "map-filter": "grayscale(1) contrast(1.25) brightness(0.85)",
+    "region-stroke": "#e6e6e6",
+    "region-hover": "rgb(200 16 46 / 0.22)",
+    "cork": "#9a7650",
+    "string": "#c8102e"
+  }
+}

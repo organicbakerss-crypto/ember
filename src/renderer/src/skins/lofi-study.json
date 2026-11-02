@@ -1,0 +1,46 @@
+{
+  "id": "lofi-study",
+  "name": "Lo-fi Study",
+  "words": {
+    "world": "Notebook",
+    "where": "Wanderings",
+    "who": "Friends",
+    "when": "Diary",
+    "how": "Notes",
+    "inbox": "Sticky Notes",
+    "now": "Tonight"
+  },
+  "kinds": {
+    "continent": "Somewhere far",
+    "kingdom": "Country",
+    "city": "Town",
+    "district": "Neighbourhood",
+    "landmark": "Favourite spot",
+    "wilds": "Outdoors",
+    "person": "Friend",
+    "faction": "Crowd",
+    "family": "Family",
+    "creature": "Pet",
+    "era": "Season",
+    "event": "Memory",
+    "magic": "Little magic",
+    "religion": "Belief",
+    "law": "House rule",
+    "technology": "Gadget",
+    "custom": "Habit"
+  },
+  "cast": {
+    "story": "Around",
+    "waiting": "Haven’t met yet",
+    "quiet": "Haven’t heard from",
+    "left": "Moved away"
+  },
+  "tokens": {
+    "heading-font": "'Caveat', 'Bradley Hand', cursive",
+    "map-filter": "sepia(0.25) saturate(0.85) brightness(0.85)",
+    "region-stroke": "#f2a65a",
+    "region-hover": "rgb(242 166 90 / 0.2)",
+    "lamp": "rgb(242 166 90 / 0.16)",
+    "note": "#f7e08a"
+  }
+}

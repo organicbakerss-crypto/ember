@@ -1,0 +1,47 @@
+{
+  "id": "storybook",
+  "name": "Storybook",
+  "words": {
+    "world": "Storyland",
+    "where": "Kingdoms",
+    "who": "Characters",
+    "when": "Once Upon a Time",
+    "how": "Enchantments",
+    "inbox": "Bookmarks",
+    "now": "This page"
+  },
+  "kinds": {
+    "continent": "Faraway land",
+    "kingdom": "Kingdom",
+    "city": "Village",
+    "district": "Lane",
+    "landmark": "Enchanted place",
+    "wilds": "Dark wood",
+    "person": "Character",
+    "faction": "Company",
+    "family": "Family",
+    "creature": "Talking beast",
+    "era": "Long ago",
+    "event": "Happening",
+    "magic": "Spell",
+    "religion": "Belief",
+    "law": "Royal rule",
+    "technology": "Contraption",
+    "custom": "Tradition"
+  },
+  "cast": {
+    "story": "On the page",
+    "waiting": "Not yet in the tale",
+    "quiet": "Fallen asleep",
+    "left": "Happily ever after"
+  },
+  "tokens": {
+    "heading-font": "'Fredoka', 'Trebuchet MS', sans-serif",
+    "map-filter": "saturate(1.15) brightness(1.05) contrast(0.95)",
+    "region-stroke": "#7a5a8a",
+    "region-hover": "rgb(178 58 98 / 0.18)",
+    "wash-1": "rgb(255 196 214 / 0.45)",
+    "wash-2": "rgb(190 222 255 / 0.45)",
+    "wash-3": "rgb(208 240 200 / 0.4)"
+  }
+}

@@ -1,0 +1,73 @@
+/*
+ * Blueprint: a drafting sheet. A blue grid, white hand-lettered labels with
+ * dimension lines, maps turned into cyanotype plans, and a title block in
+ * the corner of every page. Fonts and map styling at "plain" and "full";
+ * art at "full".
+ */
+
+:root[data-skin='blueprint']
+  .world-view
+  :is(h1, h2, .entry-name, .world-lenses .world-nav-label, .breadcrumb-current, .scrubber-label) {
+  letter-spacing: 0.06em;
+}
+:root[data-skin='blueprint'] .world-view .map-svg:not(.editing) .map-region.linked {
+  stroke-dasharray: 8 3 2 3;
+  stroke-opacity: 0.85;
+}
+
+/* ----- art ----- */
+
+:root[data-skin='blueprint'][data-skin-art] .world-view .world-main {
+  background:
+    linear-gradient(var(--skin-line-major) 1px, transparent 1px) 0 0 / 100px 100px,
+    linear-gradient(90deg, var(--skin-line-major) 1px, transparent 1px) 0 0 / 100px 100px,
+    linear-gradient(var(--skin-line) 1px, transparent 1px) 0 0 / 20px 20px,
+    linear-gradient(90deg, var(--skin-line) 1px, transparent 1px) 0 0 / 20px 20px,
+    var(--bg);
+}
+:root[data-skin='blueprint'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: 1.5px dashed rgb(242 247 255 / 0.55);
+  border-radius: 0;
+  box-shadow: none;
+}
+/* A dimension line under each title. */
+:root[data-skin='blueprint'][data-skin-art] .world-view :is(.lens-head h1, .entry-name)::after {
+  content: '';
+  display: block;
+  height: 7px;
+  margin-top: 0.2rem;
+  border: 1px solid rgb(242 247 255 / 0.6);
+  border-top: none;
+}
+/* The drafting title block. */
+:root[data-skin='blueprint'][data-skin-art] .world-view .entry-page {
+  position: relative;
+  padding-bottom: 3.5rem;
+}
+:root[data-skin='blueprint'][data-skin-art] .world-view .entry-page::after {
+  content: 'DWG · ' attr(aria-label) ' · SHEET 1 OF 1';
+  position: absolute;
+  right: 1rem;
+  bottom: 0.8rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid rgb(242 247 255 / 0.6);
+  font-family: 'Share Tech Mono', Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  pointer-events: none;
+}
+:root[data-skin='blueprint'][data-skin-art] .world-view .page-scroll > * {
+  animation: blueprint-draw 0.45s ease-out both;
+}
+@keyframes blueprint-draw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}

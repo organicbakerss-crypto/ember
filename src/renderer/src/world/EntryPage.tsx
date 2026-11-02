@@ -21,7 +21,14 @@ import { EntryPicker } from './EntryPicker'
 import { FactEditor } from './FactEditor'
 import { MomentNote } from './time/TimeScrubber'
 import { WhenSection } from './time/WhenSection'
-import { backlinks, MAX_QUICK_FACTS, shownFacts, templateOf, valueLabel } from './model'
+import {
+  backlinks,
+  MAX_QUICK_FACTS,
+  shownFacts,
+  templateName,
+  templateOf,
+  valueLabel,
+} from './model'
 import { Portrait } from './Portrait'
 import { mapOfPlace } from './map/mapModel'
 import { RelationshipEditor } from './board/RelationshipEditor'
@@ -208,7 +215,7 @@ function EntryView(
       submenu: world.view.templates
         .filter((t) => t.lens === lens)
         .map((t) => ({
-          label: t.name,
+          label: templateName(world, t.id),
           checked: t.id === entry.template,
           onSelect: () => changeType(t.id),
         })),
@@ -428,7 +435,7 @@ function EntryView(
           )}
           <div className="entry-subtitle small">
             <button className="chip-button" onClick={typeMenu} title="Change type">
-              {template.name}
+              {templateName(world, entry.template)}
             </button>
             {entry.aliases.length > 0 && <span className="muted">Also called</span>}
             {entry.aliases.map((a) => (

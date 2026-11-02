@@ -10,6 +10,21 @@ import '@fontsource/cinzel/500.css'
 import '@fontsource/cinzel/700.css'
 import '@fontsource/share-tech-mono/400.css'
 import '@fontsource/press-start-2p/400.css'
+import '@fontsource/fredoka/400.css'
+import '@fontsource/fredoka/600.css'
+import '@fontsource/im-fell-english/400.css'
+import '@fontsource/special-elite/400.css'
+import '@fontsource/exo-2/400.css'
+import '@fontsource/exo-2/700.css'
+import '@fontsource/bangers/400.css'
+import '@fontsource/comic-neue/400.css'
+import '@fontsource/comic-neue/700.css'
+import '@fontsource/architects-daughter/400.css'
+import '@fontsource/caveat/500.css'
+import '@fontsource/caveat/700.css'
+import '@fontsource/orbitron/500.css'
+import '@fontsource/orbitron/700.css'
+import type { Presence } from '@shared/world/story'
 import type { Theme } from '../themes'
 
 /** Words a skin can replace (its vocabulary); each falls back to the plain word. */
@@ -20,6 +35,10 @@ export interface Skin {
   id: string
   name: string
   words: Partial<Record<SkinWord, string>>
+  /** Names for the built-in kinds of things, by template id ("person": "Player"). */
+  kinds: Record<string, string>
+  /** Names for the Cast view's groups ("left": "Game over"). */
+  cast: Partial<Record<Presence, string>>
   /** Art tokens, set as `--skin-<name>` on the document. */
   tokens: Record<string, string>
 }

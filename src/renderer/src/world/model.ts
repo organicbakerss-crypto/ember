@@ -14,8 +14,13 @@ export function lensOf(world: WorldData, entry: Pick<EntrySummary, 'template'>):
   return (world.templates.get(entry.template) ?? FALLBACK_TEMPLATE).lens
 }
 
+/** Templates with their names as shown (a skin's names for built-in kinds), for pickers. */
+export function shownTemplates(world: WorldData): Template[] {
+  return world.view.templates.map((t) => ({ ...t, name: templateName(world, t.id) }))
+}
+
 export function templateName(world: WorldData, templateId: string): string {
-  return world.templates.get(templateId)?.name ?? 'Note'
+  return world.kindNames.get(templateId) ?? world.templates.get(templateId)?.name ?? 'Note'
 }
 
 /** A value as words: text, or the linked entry's name. */

@@ -32,7 +32,7 @@ import type { NameIndex } from '../editor/NameCards'
 import { useWorld } from '../world/useWorld'
 import { useUndo } from '../world/useUndo'
 import { useWorldActions } from '../world/useWorldActions'
-import { templateOf } from '../world/model'
+import { shownTemplates, templateOf } from '../world/model'
 import { WorldPanel, type ChapterMention } from '../world/WorldPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { SearchPanel } from './SearchPanel'
@@ -729,7 +729,7 @@ export function WritingView(props: {
       />
       {quickAdd !== null && (
         <QuickAddDialog
-          templates={world?.view.templates ?? []}
+          templates={world ? shownTemplates(world) : []}
           existing={world?.view.entries.flatMap((e) => [e.name, ...e.aliases]) ?? []}
           name={quickAdd.name}
           template={quickAdd.guess}

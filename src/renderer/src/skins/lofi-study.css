@@ -1,0 +1,90 @@
+/*
+ * Lo-fi Study: a rainy night in a lamp-lit room. Handwritten headings,
+ * lined notebook pages, quick facts on sticky notes, and everything fading
+ * in slowly. Fonts and map styling at "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='lofi-study']
+  .world-view
+  :is(h1, h2, .entry-name, .world-lenses .world-nav-label, .breadcrumb-current, .scrubber-label) {
+  font-weight: 700;
+}
+:root[data-skin='lofi-study'] .world-view :is(h1, .entry-name) {
+  font-size: 2.4rem;
+}
+:root[data-skin='lofi-study'] .world-view .world-lenses .world-nav-label {
+  font-size: 1.3rem;
+}
+
+/* ----- art ----- */
+
+:root[data-skin='lofi-study'][data-skin-art] .world-view .world-main {
+  background:
+    radial-gradient(circle at 8% 6%, var(--skin-lamp), transparent 45%),
+    repeating-linear-gradient(95deg, rgb(255 255 255 / 0.018) 0 1px, transparent 1px 14px),
+    radial-gradient(ellipse at 50% 50%, transparent 55%, rgb(0 0 0 / 0.35) 100%), var(--bg);
+}
+:root[data-skin='lofi-study'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .time-scrubber, .card) {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+/* Lined notebook paper, with a margin line. */
+:root[data-skin='lofi-study'][data-skin-art] .world-view .entry-page {
+  border-radius: 6px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 2.6rem,
+      rgb(255 138 122 / 0.35) 2.6rem 2.7rem,
+      transparent 2.7rem
+    ),
+    repeating-linear-gradient(transparent 0 1.95rem, rgb(242 166 90 / 0.12) 1.95rem 2rem),
+    var(--page);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+/* Quick facts on sticky notes. */
+:root[data-skin='lofi-study'][data-skin-art] .world-view .quick-fact {
+  background: var(--skin-note);
+  color: #3a2a1a;
+  border: none;
+  border-radius: 2px;
+  box-shadow: 2px 4px 8px rgb(0 0 0 / 0.35);
+  transform: rotate(-1.5deg);
+}
+:root[data-skin='lofi-study'][data-skin-art] .world-view .quick-fact:nth-child(even) {
+  transform: rotate(1.2deg);
+  background: #f9c6a8;
+}
+:root[data-skin='lofi-study'][data-skin-art] .world-view .quick-fact-label {
+  color: #6b5236;
+}
+:root[data-skin='lofi-study'][data-skin-art] .toast {
+  background: var(--skin-note);
+  color: #3a2a1a;
+  border-radius: 2px;
+  transform: rotate(-1deg);
+}
+:root[data-skin='lofi-study'][data-skin-art] .toast .link {
+  color: #8a3b12;
+}
+:root[data-skin='lofi-study'][data-skin-art] .world-view .page-scroll > * {
+  animation: lofi-fade 0.8s ease both;
+}
+@keyframes lofi-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Sticky notes are paper: everything on them is dark ink. */
+:root[data-skin='lofi-study'][data-skin-art]
+  .world-view
+  .quick-fact
+  :is(.quick-fact-value, .quick-fact-value *) {
+  color: #3a2a1a;
+}

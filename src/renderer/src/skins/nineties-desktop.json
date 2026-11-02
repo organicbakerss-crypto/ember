@@ -1,0 +1,49 @@
+{
+  "id": "nineties-desktop",
+  "name": "’90s Desktop",
+  "words": {
+    "world": "My Computer",
+    "where": "Explorer",
+    "who": "Contacts",
+    "when": "History",
+    "how": "Control Panel",
+    "inbox": "Clipboard",
+    "now": "Today"
+  },
+  "kinds": {
+    "continent": "Drive",
+    "kingdom": "Folder",
+    "city": "Subfolder",
+    "district": "Directory",
+    "landmark": "Shortcut",
+    "wilds": "Unsorted",
+    "person": "User",
+    "faction": "Workgroup",
+    "family": "User group",
+    "creature": "Virus",
+    "era": "Version",
+    "event": "System event",
+    "magic": "Program",
+    "religion": "Protocol",
+    "law": "Policy",
+    "technology": "Hardware",
+    "custom": "Preference"
+  },
+  "cast": {
+    "story": "Online",
+    "waiting": "Not installed",
+    "quiet": "Idle",
+    "left": "In the Recycle Bin"
+  },
+  "tokens": {
+    "heading-font": "Tahoma, Verdana, sans-serif",
+    "map-filter": "saturate(0.9)",
+    "region-stroke": "#000080",
+    "region-hover": "rgb(0 0 128 / 0.2)",
+    "bevel-light": "#ffffff",
+    "bevel-dark": "#808080",
+    "bevel-darker": "#000000",
+    "title-a": "#000080",
+    "title-b": "#1084d0"
+  }
+}

@@ -3,7 +3,7 @@ import type { EntrySummary } from '@shared/ipc'
 import { currentValue, valuesAt } from '@shared/world/facts'
 import { lastSeen, presence, PRESENCE_LABELS, type Presence } from '@shared/world/story'
 import { LENS_LABELS, type Lens } from '@shared/world/templates'
-import { useWords } from '../skins/useWords'
+import { useCastWords, useWords } from '../skins/useWords'
 import { loadLocal, saveLocal } from '../storage'
 import { useSettings } from '../useTheme'
 import { lensOf, shownFacts, templateName, valueLabel } from './model'
@@ -183,6 +183,7 @@ function CastView(props: {
   onOpenEntry: (entryId: string) => void
 }) {
   const { world } = props
+  const castWord = useCastWords()
   const presenceOf = usePresence(world)
   const [kind, setKind] = useState<CastKind>('people')
   const [query, setQuery] = useState('')
@@ -283,9 +284,16 @@ function CastView(props: {
       </div>
       {groups.length === 0 && <p className="muted">Nobody matches.</p>}
       {groups.map((g) => (
-        <section key={g.presence} className="cast-group" aria-label={PRESENCE_LABELS[g.presence]}>
+        <section
+          key={g.presence}
+          className="cast-group"
+          aria-label={castWord(g.presence, PRESENCE_LABELS[g.presence])}
+        >
           <h2>
-            {PRESENCE_LABELS[g.presence]} <span className="muted small">{g.entries.length}</span>
+            <span title={PRESENCE_LABELS[g.presence]}>
+              {castWord(g.presence, PRESENCE_LABELS[g.presence])}
+            </span>{' '}
+            <span className="muted small">{g.entries.length}</span>
           </h2>
           <div className="cast-cards">
             {g.entries.map((e) => {
@@ -487,6 +495,7 @@ function EntryTable(props: {
   onOpenEntry: (entryId: string) => void
 }) {
   const { world } = props
+  const castWord = useCastWords()
   const presenceOf = usePresence(world)
   const [sort, setSort] = useState<{ by: Column; desc: boolean }>({ by: 'name', desc: false })
   const mentions = world.index?.mentions ?? {}
@@ -557,7 +566,7 @@ function EntryTable(props: {
             </td>
             <td>{r.type}</td>
             <td>{r.facts}</td>
-            <td>{PRESENCE_LABELS[r.presence]}</td>
+            <td>{castWord(r.presence, PRESENCE_LABELS[r.presence])}</td>
             <td>{r.mentions}</td>
             <td>{r.last === null ? '—' : chapters[r.last]?.label}</td>
           </tr>

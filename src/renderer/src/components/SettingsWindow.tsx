@@ -129,25 +129,37 @@ export function SettingsWindow(props: { onClose: () => void }) {
 
 function AppearanceSettings() {
   const { settings, update } = useSettings()
-  const options = [{ id: SYSTEM_THEME, name: 'Match system (light or dark)' }, ...themes]
+  const plain = [
+    { id: SYSTEM_THEME, name: 'Match system (light or dark)' },
+    ...themes.filter((t) => !t.skin),
+  ]
+  const skinned = themes.filter((t) => t.skin).sort((a, b) => a.name.localeCompare(b.name))
+  const option = (theme: { id: string; name: string }) => (
+    <label key={theme.id} className="radio">
+      <input
+        type="radio"
+        name="theme"
+        checked={settings.theme === theme.id}
+        onChange={() => update({ theme: theme.id })}
+      />
+      {theme.name}
+    </label>
+  )
   return (
     <section className="settings-section">
       <h3>Theme</h3>
-      {options.map((theme) => (
-        <label key={theme.id} className="radio">
-          <input
-            type="radio"
-            name="theme"
-            checked={settings.theme === theme.id}
-            onChange={() => update({ theme: theme.id })}
-          />
-          {theme.name}
-        </label>
-      ))}
+      <fieldset className="plain-fieldset">
+        <legend className="small muted">Everyday</legend>
+        {plain.map(option)}
+      </fieldset>
+      <fieldset className="plain-fieldset">
+        <legend className="small muted">With a world skin</legend>
+        <div className="theme-grid">{skinned.map(option)}</div>
+      </fieldset>
       <p className="muted small">
-        Fantasy, Cyberpunk and Arcade also dress World mode in a skin (its look and its words); the
-        writing page stays plain and readable. More themes (’90s Desktop, high contrast and others)
-        come in a later milestone.
+        Themes with a world skin also dress World mode: its look, map styling and its own words
+        (Settings → World chooses how much). The writing page stays plain and readable in every
+        theme.
       </p>
     </section>
   )

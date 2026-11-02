@@ -1,0 +1,77 @@
+/*
+ * Noir: black and white with rain at the window. Typewritten headings,
+ * pictures in greyscale, and the people board pinned to a corkboard with
+ * string (the strings keep their relationship colours, so the board still
+ * reads). Fonts and map styling at "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='noir'] .world-view :is(h1, .entry-name) {
+  text-decoration: underline 2px var(--accent);
+  text-underline-offset: 0.25em;
+}
+:root[data-skin='noir'] .world-view :is(.portrait img, .board-svg image, .map-people image) {
+  filter: grayscale(1) contrast(1.1);
+}
+
+/* ----- art ----- */
+
+:root[data-skin='noir'][data-skin-art] .world-view .world-main {
+  background:
+    repeating-linear-gradient(100deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 11px),
+    radial-gradient(ellipse at 50% 0%, rgb(255 255 255 / 0.06), transparent 60%), var(--bg);
+  animation: noir-rain 0.7s linear infinite;
+}
+@keyframes noir-rain {
+  to {
+    background-position:
+      -40px 140px,
+      0 0,
+      0 0;
+  }
+}
+:root[data-skin='noir'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: 1px solid #444;
+  border-radius: 0;
+  box-shadow: 6px 6px 0 rgb(0 0 0 / 0.55);
+}
+/* The corkboard. */
+:root[data-skin='noir'][data-skin-art] .world-view .board-scroll {
+  border: 10px solid #3a2a1c;
+  border-radius: 2px;
+  background:
+    radial-gradient(circle at 20% 30%, rgb(0 0 0 / 0.18) 1px, transparent 2px) 0 0 / 9px 9px,
+    radial-gradient(circle at 70% 60%, rgb(255 255 255 / 0.1) 1px, transparent 2px) 0 0 / 13px 13px,
+    var(--skin-cork);
+  box-shadow: inset 0 0 40px rgb(0 0 0 / 0.5);
+}
+:root[data-skin='noir'][data-skin-art] .world-view .board-svg {
+  background: transparent;
+}
+:root[data-skin='noir'][data-skin-art] .world-view .board-line-stroke {
+  stroke-width: 2.5px;
+  filter: drop-shadow(1px 3px 1px rgb(0 0 0 / 0.45));
+}
+/* Each portrait is pinned with a red pin. */
+:root[data-skin='noir'][data-skin-art] .world-view .board-portrait-ring {
+  stroke: var(--skin-string);
+  stroke-width: 3px;
+}
+:root[data-skin='noir'][data-skin-art] .world-view :is(.board-name, .board-frame-label) {
+  fill: #111;
+  font-family: var(--skin-heading-font);
+}
+:root[data-skin='noir'][data-skin-art] .world-view .page-scroll > * {
+  animation: noir-fade 0.6s ease-out both;
+}
+@keyframes noir-fade {
+  from {
+    opacity: 0;
+    filter: brightness(0);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}

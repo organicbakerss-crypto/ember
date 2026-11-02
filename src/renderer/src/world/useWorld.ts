@@ -5,6 +5,8 @@ import { entryTerms } from '@shared/names'
 import type { ChapterPositions, Moment } from '@shared/world/facts'
 import { buildTimeline, type Timeline } from '@shared/world/timeline'
 import { api, describeError, useIpcEvent } from '../api'
+import { skinFor } from '../skins'
+import { useSettings } from '../useTheme'
 
 export interface WorldData {
   view: WorldView
@@ -20,6 +22,8 @@ export interface WorldData {
   /** The moment views show: the time scrubber's, or null for now. */
   at: Moment
   terms: ReturnType<typeof entryTerms>
+  /** A skin's names for built-in kinds of things, by template id (not for customised ones). */
+  kindNames: ReadonlyMap<string, string>
 }
 
 const INDEX_DELAY_MS = 1500
@@ -30,6 +34,8 @@ const INDEX_DELAY_MS = 1500
  */
 export function useWorld(worldId: string | null): { data: WorldData | null; error: string | null } {
   const [view, setView] = useState<WorldView | null>(null)
+  const { settings, theme } = useSettings()
+  const skin = settings.world.vocabulary ? skinFor(theme) : null
   const [index, setIndex] = useState<WorldIndex | null>(null)
   const [error, setError] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -89,8 +95,12 @@ export function useWorld(worldId: string | null): { data: WorldData | null; erro
       positions: timeline.positions,
       at: null,
       terms: entryTerms(view.entries),
+      // A template you have renamed or changed keeps your name.
+      kindNames: new Map(
+        Object.entries(skin?.kinds ?? {}).filter(([id]) => !view.customTemplates.includes(id)),
+      ),
     }
-  }, [view, index, worldId])
+  }, [view, index, worldId, skin])
 
   return { data, error }
 }

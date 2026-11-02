@@ -1,0 +1,46 @@
+{
+  "id": "deep-space",
+  "name": "Deep Space",
+  "words": {
+    "world": "Starship",
+    "where": "Star Charts",
+    "who": "Crew",
+    "when": "Mission Log",
+    "how": "Tech",
+    "inbox": "Transmissions",
+    "now": "Stardate"
+  },
+  "kinds": {
+    "continent": "Sector",
+    "kingdom": "System",
+    "city": "Station",
+    "district": "Deck",
+    "landmark": "Outpost",
+    "wilds": "Uncharted space",
+    "person": "Crew member",
+    "faction": "Fleet",
+    "family": "Lineage",
+    "creature": "Lifeform",
+    "era": "Epoch",
+    "event": "Mission",
+    "magic": "Psionics",
+    "religion": "Creed",
+    "law": "Directive",
+    "technology": "Tech",
+    "custom": "Protocol"
+  },
+  "cast": {
+    "story": "On board",
+    "waiting": "In transit",
+    "quiet": "Lost signal",
+    "left": "Lost in space"
+  },
+  "tokens": {
+    "heading-font": "'Orbitron', 'Exo 2', sans-serif",
+    "map-filter": "saturate(0.6) brightness(0.7) contrast(1.15)",
+    "region-stroke": "#8ab4ff",
+    "region-hover": "rgb(138 180 255 / 0.2)",
+    "hud": "#8ab4ff",
+    "grid": "rgb(138 180 255 / 0.08)"
+  }
+}

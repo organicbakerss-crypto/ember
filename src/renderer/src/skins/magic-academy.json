@@ -1,0 +1,46 @@
+{
+  "id": "magic-academy",
+  "name": "Magic Academy",
+  "words": {
+    "world": "Academy",
+    "where": "Grounds",
+    "who": "Roster",
+    "when": "Terms",
+    "how": "Spells",
+    "inbox": "Owl post",
+    "now": "This term"
+  },
+  "kinds": {
+    "continent": "Realm",
+    "kingdom": "Province",
+    "city": "Town",
+    "district": "Wing",
+    "landmark": "Tower",
+    "wilds": "Forbidden forest",
+    "person": "Mage",
+    "faction": "House",
+    "family": "Bloodline",
+    "creature": "Familiar",
+    "era": "Age",
+    "event": "Occurrence",
+    "magic": "Spell",
+    "religion": "Order",
+    "law": "School rule",
+    "technology": "Artifact",
+    "custom": "Tradition"
+  },
+  "cast": {
+    "story": "In class",
+    "waiting": "Not yet enrolled",
+    "quiet": "Absent",
+    "left": "Departed"
+  },
+  "tokens": {
+    "heading-font": "'Cinzel', 'IM Fell English', Georgia, serif",
+    "map-filter": "saturate(0.8) brightness(0.85) sepia(0.15)",
+    "region-stroke": "#d4a93c",
+    "region-hover": "rgb(212 169 60 / 0.22)",
+    "gold": "#d4a93c",
+    "seal": "#8e1b24"
+  }
+}

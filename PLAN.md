@@ -633,20 +633,51 @@ appearance: capri
 
 Themes are data files (colours, fonts, page style), so adding one is a new file, not new code. Every theme covers both the app chrome and the page. The page itself always uses a readable writing font; stylised fonts are for the UI only.
 
-- **Light** and **Dark** (defaults)
-- **High contrast**
-- **Cyberpunk:** near-black and deep navy, hot pink and acid-green accents, faint glow on the active line, techy UI font.
-- **'90s Desktop:** grey windows, bevelled buttons, classic title bars.
-- **Arcade:** black cabinet with deep reds, pixel-art icons and borders, pixel UI font.
-- **Fantasy:** a new theme with a full world skin (parchment, inked borders; Atlas / Chronicle / Lore).
-- **Starter set:** about 15 more (for example sepia paper, forest, ocean, solarized), generated to fill out roughly 20 total.
+A theme is an identity, not a colour scheme. Most carry a **world skin** (see below) that dresses World mode and gives it the theme's own words. Built so far (milestone 13 was brought forward):
 
-**World skins.** World mode should feel like the story. Each theme can carry a **world skin**:
+- **Everyday:** Light, Dark (defaults) and High Contrast (pure black and white, yellow accents, thick focus outlines). No skin.
+- **With a world skin (12):**
 
-- Frames, typography, map styling (parchment and inked borders; neon wireframe glow; pixel grid), transitions, and a **vocabulary file** (fantasy: Atlas / Chronicle / Lore; cyberpunk: NETDB / Logs / Protocols; arcade: Stages / Players / Unlocked).
+| Theme | The feel | Signature touch |
+| --- | --- | --- |
+| Fantasy | Parchment, inked borders, engraved capitals | Sepia map with inked region borders; pages unfurl in |
+| Cyberpunk | Near-black and navy, hot pink and acid green, techy mono | Neon wireframe regions with glow; glitch transitions |
+| Arcade | Black cabinet, deep reds, pixel lettering | Pixel borders, pixel-grid map, blinking cursor |
+| Storybook | Watercolour picture book, rounded lettering | Drop capital on every page; pages turn in |
+| Magic Academy | A school spellbook at night, gold leaf | Lenses as house banners; a wax seal on every page |
+| Noir | Black and white, typewriter, rain | The people board as a corkboard with string and pins; greyscale pictures |
+| Isekai | The game system of another world | Entry pages as status windows (quick facts as stats); [System] notices |
+| Comic Book | Halftone dots, thick ink, hard shadows | Titles in caption boxes; notices in speech bubbles; WHAM! |
+| Blueprint | A drafting sheet, hand-lettered | Cyanotype maps; dimension lines; a title block on every page |
+| ’90s Desktop | Grey windows on a teal desktop | Bevelled buttons; every lens and entry is a window with a title bar |
+| Lo-fi Study | A rainy night in a lamp-lit room | Lined notebook pages; quick facts on sticky notes |
+| Deep Space | A starship's bridge | HUD corner brackets; the map as a nav display; a T+ mission clock |
+
+- **Later:** more can be added as files. ('90s Desktop and High Contrast from the original list are done; the "starter set" of colour themes was replaced by the identity themes above.)
+
+**World skins.** World mode should feel like the story. Each skinned theme carries:
+
+- Frames, typography, map styling, transitions (the art: a CSS file scoped to the skin) and a **vocabulary** (a JSON file).
 - Same layout and data underneath; a new skin is new art and words, not new code.
-- **Full skins for three themes only:** a new **Fantasy** theme, **Cyberpunk** and **Arcade**. All other themes use the clean default skin in their own colours.
 - **The writing page stays readable in every skin.** Immersion lives in World mode and the surrounding app.
+- The vocabulary renames the sections, the built-in kinds of things and the Cast groups. Hovering a themed word shows the plain one; settings stay plain; a template you rename yourself keeps your name. Themed words can be turned off (Settings → World), and the skin can be Full, Plain or Minimal.
+
+**Vocabulary** (in order: Where · Who · When · How · Inbox, then World and Now; Continent · Kingdom · City · District · Landmark · Wilds; Person · Faction · Family · Creature; Era · Event; Magic · Religion · Law · Technology · Custom; Cast groups: In the story · Waiting in the wings · Gone quiet · Left the story):
+
+- **Fantasy:** Atlas · Folk · Chronicle · Lore · Scribe’s tray; Realm, This day. Land · Kingdom · City · Quarter · Wonder · Wilds; Hero · Order · House · Beast; Age · Legend; Arcana · Faith · Decree · Craft · Tradition. In the tale · Yet to arrive · Lost to the road · Fallen.
+- **Cyberpunk:** Grid · NETDB · Logs · Protocols · Buffer; Net, Live. Sector · Zone · Sprawl · Block · Hotspot · Badlands; Runner · Corp · Clan · Bioform; Cycle · Incident; Netrunning · Cult · Policy · Chrome · Street code. Online · Queued · Ghosted · Flatlined.
+- **Arcade:** Stages · Players · Replays · Unlocked · Loot; Game, Continue. World · Zone · Town · Area · Checkpoint · Bonus stage; Player · Guild · Team · Monster; Level · Cutscene; Power-up · Shrine · Rules · Gadget · Easter egg. Playing · Insert coin · Idle · Game over.
+- **Storybook:** Kingdoms · Characters · Once Upon a Time · Enchantments · Bookmarks; Storyland, This page. Faraway land · Kingdom · Village · Lane · Enchanted place · Dark wood; Character · Company · Family · Talking beast; Long ago · Happening; Spell · Belief · Royal rule · Contraption · Tradition. On the page · Not yet in the tale · Fallen asleep · Happily ever after.
+- **Magic Academy:** Grounds · Roster · Terms · Spells · Owl post; Academy, This term. Realm · Province · Town · Wing · Tower · Forbidden forest; Mage · House · Bloodline · Familiar; Age · Occurrence; Spell · Order · School rule · Artifact · Tradition. In class · Not yet enrolled · Absent · Departed.
+- **Noir:** Scenes · Suspects · Case Log · Methods · Leads; The City, Tonight. Coast · State · City · Precinct · Joint · Outskirts; Person of interest · Mob · Family · Stray; Years · Case; Racket · Church · Law · Gear · Code. On the case · Unknown · Gone cold · Off the books.
+- **Isekai:** Map · Party · Quest Log · Skills · Notifications; Other World, Current Quest. Continent · Kingdom · Town · Ward · Dungeon · Field; Adventurer · Guild · Clan · Monster; Age · Quest; Skill · Faith · System rule · Item · Custom. Active · Not yet met · Inactive · Fallen.
+- **Comic Book:** Locations · Heroes & Villains · Issues · Powers · Fan Mail; Universe, This Issue. Dimension · Nation · City · Block · Hideout · Badlands; Character · Team · Dynasty · Monster; Age · Showdown; Power · Cult · Code · Gadget · Tradition. In this issue · Not yet introduced · On hiatus · Killed off.
+- **Blueprint:** Site Plans · Personnel · Revisions · Specs · Drafts; Project, Current Rev. Region · Territory · Site · Sector · Structure · Undeveloped land; Staff · Department · Household · Specimen; Phase · Milestone; Process · Doctrine · Regulation · Component · Standard. Active · Pending · Inactive · Decommissioned.
+- **’90s Desktop:** Explorer · Contacts · History · Control Panel · Clipboard; My Computer, Today. Drive · Folder · Subfolder · Directory · Shortcut · Unsorted; User · Workgroup · User group · Virus; Version · System event; Program · Protocol · Policy · Hardware · Preference. Online · Not installed · Idle · In the Recycle Bin.
+- **Lo-fi Study:** Wanderings · Friends · Diary · Notes · Sticky Notes; Notebook, Tonight. Somewhere far · Country · Town · Neighbourhood · Favourite spot · Outdoors; Friend · Crowd · Family · Pet; Season · Memory; Little magic · Belief · House rule · Gadget · Habit. Around · Haven’t met yet · Haven’t heard from · Moved away.
+- **Deep Space:** Star Charts · Crew · Mission Log · Tech · Transmissions; Starship, Stardate. Sector · System · Station · Deck · Outpost · Uncharted space; Crew member · Fleet · Lineage · Lifeform; Epoch · Mission; Psionics · Creed · Directive · Tech · Protocol. On board · In transit · Lost signal · Lost in space.
+
+All fonts are bundled (OFL or Apache licensed), so themes work offline. Every theme's contrast is tested (text and buttons at least 4.5:1, the page 7:1, muted text 3:1). Settings lists themes in two groups: Everyday, and With a world skin.
 
 Optional: picking a theme can suggest a matching companion (Cyberpunk suggests Capri), as a suggestion only. Themes and characters mix freely.
 
@@ -684,7 +715,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
 12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
-13. **Themes:** '90s Desktop, high contrast, and the starter set (Fantasy, Cyberpunk and Arcade came with their world skins in 4e).
+13. **Themes:** done early (after 4e): High Contrast and nine more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
 ## Open items

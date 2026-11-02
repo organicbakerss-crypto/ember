@@ -1,0 +1,111 @@
+/*
+ * ’90s Desktop: grey windows on a teal desktop. Bevelled buttons, each lens
+ * a window with a blue title bar, entries open as windows titled with their
+ * name. Fonts and map styling at "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='nineties-desktop'] .world-view :is(h1, .entry-name) {
+  font-weight: 700;
+}
+:root[data-skin='nineties-desktop'] .world-view :is(button, .segmented, input, select) {
+  border-radius: 0;
+}
+
+/* ----- art ----- */
+
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .world-main {
+  background: var(--desk);
+}
+/* Raised (outset) and sunken (inset) edges. */
+:root[data-skin='nineties-desktop'][data-skin-art]
+  .world-view
+  :is(.lens-view, .entry-page, .time-scrubber, .card, button:not(.link):not(.world-nav-item)) {
+  border: 2px solid;
+  border-color: var(--skin-bevel-light) var(--skin-bevel-darker) var(--skin-bevel-darker)
+    var(--skin-bevel-light);
+  box-shadow: inset -1px -1px 0 var(--skin-bevel-dark);
+  border-radius: 0;
+  background-color: var(--surface);
+}
+:root[data-skin='nineties-desktop'][data-skin-art]
+  .world-view
+  button:not(.link):not(.world-nav-item):active {
+  border-color: var(--skin-bevel-darker) var(--skin-bevel-light) var(--skin-bevel-light)
+    var(--skin-bevel-darker);
+}
+:root[data-skin='nineties-desktop'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, input, select) {
+  border: 2px solid;
+  border-color: var(--skin-bevel-dark) var(--skin-bevel-light) var(--skin-bevel-light)
+    var(--skin-bevel-dark);
+  border-radius: 0;
+}
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .lens-view {
+  margin: 1rem auto;
+  padding-top: 0;
+}
+/* Title bars. */
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .lens-head {
+  margin: 0 -2rem;
+  padding: 0.3rem 0.6rem;
+  background: linear-gradient(90deg, var(--skin-title-a), var(--skin-title-b));
+  color: #fff;
+}
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .lens-head h1 {
+  font-size: 1rem;
+  color: #fff;
+}
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .entry-page::before {
+  content: attr(aria-label);
+  display: flex;
+  justify-content: space-between;
+  margin: calc(-1 * var(--page-padding-block)) calc(-1 * var(--page-padding-inline)) 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: linear-gradient(90deg, var(--skin-title-a), var(--skin-title-b));
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .entry-page {
+  position: relative;
+}
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .entry-page::after {
+  content: '_  □  ✕';
+  position: absolute;
+  top: 0.2rem;
+  right: 0.5rem;
+  color: #fff;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .world-nav-item.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 0;
+}
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .page-scroll > * {
+  animation: nineties-open 0.18s steps(3) both;
+}
+@keyframes nineties-open {
+  from {
+    transform: scale(0.94);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+/* Buttons in a title bar keep their own black text. */
+:root[data-skin='nineties-desktop'][data-skin-art]
+  .world-view
+  .lens-head
+  :is(button, .segmented button) {
+  color: var(--text);
+}
+:root[data-skin='nineties-desktop'][data-skin-art] .world-view .lens-head .segmented button.active {
+  color: var(--accent-text);
+  background: var(--accent);
+}

@@ -10,6 +10,31 @@
     "inbox": "Loot",
     "now": "Continue"
   },
+  "kinds": {
+    "continent": "World",
+    "kingdom": "Zone",
+    "city": "Town",
+    "district": "Area",
+    "landmark": "Checkpoint",
+    "wilds": "Bonus stage",
+    "person": "Player",
+    "faction": "Guild",
+    "family": "Team",
+    "creature": "Monster",
+    "era": "Level",
+    "event": "Cutscene",
+    "magic": "Power-up",
+    "religion": "Shrine",
+    "law": "Rules",
+    "technology": "Gadget",
+    "custom": "Easter egg"
+  },
+  "cast": {
+    "story": "Playing",
+    "waiting": "Insert coin",
+    "quiet": "Idle",
+    "left": "Game over"
+  },
   "tokens": {
     "pixel": "4px",
     "heading-font": "'Press Start 2P', monospace",

@@ -10,6 +10,31 @@
     "inbox": "Scribe’s tray",
     "now": "This day"
   },
+  "kinds": {
+    "continent": "Land",
+    "kingdom": "Kingdom",
+    "city": "City",
+    "district": "Quarter",
+    "landmark": "Wonder",
+    "wilds": "Wilds",
+    "person": "Hero",
+    "faction": "Order",
+    "family": "House",
+    "creature": "Beast",
+    "era": "Age",
+    "event": "Legend",
+    "magic": "Arcana",
+    "religion": "Faith",
+    "law": "Decree",
+    "technology": "Craft",
+    "custom": "Tradition"
+  },
+  "cast": {
+    "story": "In the tale",
+    "waiting": "Yet to arrive",
+    "quiet": "Lost to the road",
+    "left": "Fallen"
+  },
   "tokens": {
     "ink": "#3b2614",
     "ink-soft": "rgb(59 38 20 / 0.35)",
