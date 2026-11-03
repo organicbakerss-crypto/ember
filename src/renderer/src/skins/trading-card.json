@@ -1,0 +1,46 @@
+{
+  "id": "trading-card",
+  "name": "Trading Card",
+  "words": {
+    "world": "Collection",
+    "where": "Lands",
+    "who": "Champions",
+    "when": "Expansions",
+    "how": "Abilities",
+    "inbox": "Pulls",
+    "now": "Current set"
+  },
+  "kinds": {
+    "continent": "Realm",
+    "kingdom": "Kingdom",
+    "city": "Stronghold",
+    "district": "Outpost",
+    "landmark": "Shrine",
+    "wilds": "Wildlands",
+    "person": "Champion",
+    "faction": "Faction",
+    "family": "House",
+    "creature": "Creature",
+    "era": "Edition",
+    "event": "Event card",
+    "magic": "Spell",
+    "religion": "Order",
+    "law": "Ruling",
+    "technology": "Artifact",
+    "custom": "House rule"
+  },
+  "cast": {
+    "story": "In play",
+    "waiting": "In the deck",
+    "quiet": "Benched",
+    "left": "Graveyard"
+  },
+  "tokens": {
+    "heading-font": "'Bebas Neue', Impact, sans-serif",
+    "map-filter": "saturate(1.2) contrast(1.1) brightness(0.9)",
+    "region-stroke": "#f0b429",
+    "region-hover": "rgb(240 180 41 / 0.2)",
+    "holo": "linear-gradient(125deg, #f0b429, #fff3b0, #b8860b, #9fe8ff, #f0b429)",
+    "rare": "#f0b429"
+  }
+}

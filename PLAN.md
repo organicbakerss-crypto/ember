@@ -636,7 +636,7 @@ Themes are data files (colours, fonts, page style), so adding one is a new file,
 A theme is an identity, not a colour scheme. Most carry a **world skin** (see below) that dresses World mode and gives it the theme's own words. Built so far (milestone 13 was brought forward):
 
 - **Everyday:** Light, Dark (defaults) and High Contrast (pure black and white, yellow accents, thick focus outlines). No skin.
-- **With a world skin (16):**
+- **With a world skin (21):**
 
 | Theme | The feel | Signature touch |
 | --- | --- | --- |
@@ -656,6 +656,11 @@ A theme is an identity, not a colour scheme. Most carry a **world skin** (see be
 | Steampunk | Brass, riveted copper, Victorian display type | Riveted brass plates; the scrubber as a brass gauge whose gear turns during playback |
 | Wasteland | After the end: concrete, rust, stencil lettering | Hazard-stripe headers; a dusty, radiation-tinted map |
 | Y2K Aero | Early-2000s glass and aqua sky | Glossy glass panels and shiny pill buttons; views float up like bubbles |
+| Tarot | Gold on midnight among the stars | Entries as tarot cards with a name plate; chapters on the scrubber as moon phases; views turn like a drawn card |
+| Atomic Age | 1950s pulp sci-fi: cream, turquoise, atomic orange | Boomerang-cornered panels, starbursts on titles, an orbiting atom |
+| Trading Card | A collectible card game | Entries as cards with a shimmering holographic rarity border; quick facts as stat boxes; views are dealt in |
+| Wild West | Weathered wood, saloon type | Entries as WANTED posters; rope borders on the map and board |
+| Circus | Under the big top | Tent stripes, titles in blinking marquee bulbs, notices as ADMIT ONE ticket stubs, views bounce in |
 
 - **Later:** more can be added as files. ('90s Desktop and High Contrast from the original list are done; the "starter set" of colour themes was replaced by the identity themes above.)
 
@@ -684,6 +689,11 @@ A theme is an identity, not a colour scheme. Most carry a **world skin** (see be
 - **Steampunk:** Charts · Registry · Ledger · Mechanisms · Telegrams; Empire, Present hour. Territory · Nation · Metropolis · Borough · Monument · Frontier; Citizen · Guild · Household · Automaton; Epoch · Incident; Aether · Creed · Statute · Invention · Custom. In service · Expected · Unaccounted for · Retired.
 - **Wasteland:** Zones · Survivors · Before & After · Scrap · Radio; The Wastes, Today. Wasteland · Territory · Settlement · Sector · Ruin · Dead zone; Survivor · Gang · Clan · Mutant; Age · Incident; Anomaly · Cult · Code · Scrap tech · Ritual. Alive · Not yet found · Gone silent · Didn’t make it.
 - **Y2K Aero:** Explore · Buddies · Archive · Plugins · Messages; The Web, Online now. Region · Country · City · Neighborhood · Hotspot · Outdoors; Buddy · Network · Family · Digipet; Season · Update; Feature · Fandom · Terms · Gadget · Trend. Online · Pending invite · Away · Signed off.
+- **Tarot:** Realms · Figures · Readings · Arcana · Draws; The Arcana, The Present. Sphere · Dominion · City · House · Tower · Moonlit wilds; Figure · Court · Lineage · Beast; Cycle · Turning; Arcana · Faith · Decree · Instrument · Rite. In the spread · Yet to be drawn · Face down · Passed beyond.
+- **Atomic Age:** Destinations · Personalities · Newsreels · Science · Mailbag; The Future, This Week. Hemisphere · Nation · Metropolis · Sector · Launch site · Proving grounds; Personality · Agency · Family · Alien; Decade · Headline; Atomic power · Faith · Regulation · Gizmo · Etiquette. On the air · Coming soon · Off the air · Cancelled.
+- **Trading Card:** Lands · Champions · Expansions · Abilities · Pulls; Collection, Current set. Realm · Kingdom · Stronghold · Outpost · Shrine · Wildlands; Champion · Faction · House · Creature; Edition · Event card; Spell · Order · Ruling · Artifact · House rule. In play · In the deck · Benched · Graveyard.
+- **Wild West:** Territory · Wanted · Tall Tales · The Code · Saddlebag; The Frontier, High noon. The West · Territory · Town · Side of town · Watering hole · Open range; Drifter · Gang · Family · Critter; Days · Shootout; Folk magic · Faith · The Law · Iron · Frontier way. In town · Riding in · Rode off · Boot Hill.
+- **Circus:** Fairgrounds · Performers · Programme · Acts · Ticket booth; The Big Top, Showtime. Circuit · Country · Tour stop · Midway · Attraction · Back lot; Performer · Troupe · Family · Beast; Season · Show; Illusion · Superstition · Ringmaster’s rule · Rigging · Tradition. In the ring · Backstage · Off the bill · Final bow.
 
 All fonts are bundled (OFL or Apache licensed), so themes work offline. Every theme's contrast is tested (text and buttons at least 4.5:1, the page 7:1, muted text 3:1). Settings lists themes in two groups: Everyday, and With a world skin.
 
@@ -723,7 +733,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
 12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
-13. **Themes:** done early (after 4e): High Contrast and thirteen more skinned themes (see Themes); four more slots are open for themes still to be chosen. Left for later: the faint glow on the active line in Cyberpunk.
+13. **Themes:** done early (after 4e): High Contrast and eighteen more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
 ## Open items

@@ -51,3 +51,9 @@
     animation: none !important;
   }
 }
+
+/* Counts on a highlighted menu item take its text colour, so they show on any fill. */
+:where(:root[data-skin]) .world-view .world-nav-item.active .muted {
+  color: inherit;
+  opacity: 0.8;
+}

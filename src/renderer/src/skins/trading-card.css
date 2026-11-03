@@ -1,0 +1,100 @@
+/*
+ * Trading Card: a collectible card game. Every entry is a card with a
+ * holographic rarity border, its quick facts are stat boxes, and views are
+ * dealt onto the table. Fonts and map styling at "plain" and "full"; art at
+ * "full".
+ */
+
+:root[data-skin='trading-card']
+  .world-view
+  :is(h1, h2, .entry-name, .world-lenses .world-nav-label, .breadcrumb-current, .scrubber-label) {
+  letter-spacing: 0.06em;
+}
+:root[data-skin='trading-card'] .world-view :is(h1, .entry-name) {
+  font-size: 2.4rem;
+  color: var(--skin-rare);
+}
+:root[data-skin='trading-card'] .world-view .world-lenses .world-nav-label {
+  font-size: 1.2rem;
+}
+/* Quick facts are stat boxes. */
+:root[data-skin='trading-card'] .world-view .quick-fact {
+  border: 2px solid var(--skin-rare);
+  border-radius: 6px;
+  background: var(--surface-2);
+  text-align: center;
+  min-width: 7rem;
+}
+:root[data-skin='trading-card'] .world-view .quick-fact-label {
+  color: var(--skin-rare);
+}
+:root[data-skin='trading-card'] .world-view .quick-fact-value {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+/* ----- art ----- */
+
+:root[data-skin='trading-card'][data-skin-art] .world-view .world-main {
+  background:
+    radial-gradient(ellipse at 50% 30%, rgb(40 70 60 / 0.45), transparent 70%),
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 0.015) 0 2px, transparent 2px 6px), var(--bg);
+}
+:root[data-skin='trading-card'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .time-scrubber, .card) {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.5);
+}
+/* The entry is a card with a holographic rarity border. */
+:root[data-skin='trading-card'][data-skin-art] .world-view .entry-page {
+  border: 6px solid transparent;
+  border-radius: 18px;
+  background:
+    linear-gradient(var(--page), var(--page)) padding-box,
+    var(--skin-holo) border-box;
+  background-size:
+    100% 100%,
+    300% 300%;
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.55);
+  animation: card-holo 6s linear infinite;
+}
+@keyframes card-holo {
+  to {
+    background-position:
+      0 0,
+      300% 0;
+  }
+}
+:root[data-skin='trading-card'][data-skin-art] .world-view .entry-page::before {
+  content: '★ RARE';
+  justify-self: end;
+  font-family: var(--skin-heading-font);
+  font-size: 1rem;
+  letter-spacing: 0.15em;
+  color: var(--skin-rare);
+}
+:root[data-skin='trading-card'][data-skin-art] .world-view .world-nav-item.active {
+  background: rgb(240 180 41 / 0.16);
+  box-shadow: inset 3px 0 0 var(--skin-rare);
+  border-radius: 4px;
+}
+:root[data-skin='trading-card'][data-skin-art] .world-view .page-scroll > * {
+  animation: card-deal 0.4s ease-out both;
+}
+:root[data-skin='trading-card'][data-skin-art] .world-view .page-scroll > .entry-page {
+  animation:
+    card-deal 0.4s ease-out both,
+    card-holo 6s linear infinite;
+}
+@keyframes card-deal {
+  from {
+    opacity: 0;
+    transform: translateX(40px) rotate(4deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

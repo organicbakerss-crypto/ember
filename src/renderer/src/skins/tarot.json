@@ -1,0 +1,46 @@
+{
+  "id": "tarot",
+  "name": "Tarot",
+  "words": {
+    "world": "The Arcana",
+    "where": "Realms",
+    "who": "Figures",
+    "when": "Readings",
+    "how": "Arcana",
+    "inbox": "Draws",
+    "now": "The Present"
+  },
+  "kinds": {
+    "continent": "Sphere",
+    "kingdom": "Dominion",
+    "city": "City",
+    "district": "House",
+    "landmark": "Tower",
+    "wilds": "Moonlit wilds",
+    "person": "Figure",
+    "faction": "Court",
+    "family": "Lineage",
+    "creature": "Beast",
+    "era": "Cycle",
+    "event": "Turning",
+    "magic": "Arcana",
+    "religion": "Faith",
+    "law": "Decree",
+    "technology": "Instrument",
+    "custom": "Rite"
+  },
+  "cast": {
+    "story": "In the spread",
+    "waiting": "Yet to be drawn",
+    "quiet": "Face down",
+    "left": "Passed beyond"
+  },
+  "tokens": {
+    "heading-font": "'Cinzel Decorative', 'Cinzel', Georgia, serif",
+    "map-filter": "saturate(0.7) brightness(0.75) sepia(0.2) hue-rotate(-10deg)",
+    "region-stroke": "#d9b45a",
+    "region-hover": "rgb(217 180 90 / 0.2)",
+    "gold": "#d9b45a",
+    "night": "#2a1f52"
+  }
+}

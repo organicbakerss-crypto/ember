@@ -1,0 +1,66 @@
+/*
+ * Atomic Age: 1950s pulp sci-fi. Cream, turquoise and atomic orange,
+ * rounded boomerang panels, starbursts on titles and orbiting atoms in the
+ * background. Fonts and map styling at "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='atomic-age'] .world-view :is(h1, .entry-name) {
+  color: var(--skin-orange);
+}
+:root[data-skin='atomic-age'] .world-view :is(button, .segmented, input, select) {
+  border-radius: 999px;
+}
+
+/* ----- art ----- */
+
+:root[data-skin='atomic-age'][data-skin-art] .world-view .world-main {
+  background:
+    radial-gradient(
+      ellipse 160px 50px at calc(100% - 110px) calc(100% - 90px),
+      transparent 47%,
+      rgb(42 143 138 / 0.25) 48% 50%,
+      transparent 51%
+    ),
+    radial-gradient(
+      ellipse 50px 160px at calc(100% - 110px) calc(100% - 90px),
+      transparent 47%,
+      rgb(196 71 28 / 0.22) 48% 50%,
+      transparent 51%
+    ),
+    radial-gradient(
+      circle at calc(100% - 110px) calc(100% - 90px),
+      rgb(224 168 43 / 0.7) 0 9px,
+      transparent 10px
+    ),
+    radial-gradient(circle at 10% 90%, rgb(42 143 138 / 0.12), transparent 30%), var(--bg);
+}
+:root[data-skin='atomic-age'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: 3px solid var(--skin-teal);
+  border-radius: 28px 8px 28px 8px;
+  box-shadow: 6px 6px 0 rgb(196 71 28 / 0.25);
+}
+/* A starburst on every title. */
+:root[data-skin='atomic-age'][data-skin-art] .world-view :is(.lens-head h1, .entry-name)::before {
+  content: '✷ ';
+  color: var(--skin-mustard);
+}
+:root[data-skin='atomic-age'][data-skin-art] .world-view .world-nav-item.active {
+  background: var(--skin-teal);
+  color: #fff;
+  border-radius: 999px;
+}
+:root[data-skin='atomic-age'][data-skin-art] .world-view .page-scroll > * {
+  animation: atomic-zoom 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+@keyframes atomic-zoom {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

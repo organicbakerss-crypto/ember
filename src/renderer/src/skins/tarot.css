@@ -1,0 +1,110 @@
+/*
+ * Tarot: gold on midnight among the stars. Every entry is a tarot card
+ * with its name on a plate at the foot, chapters on the scrubber are moon
+ * phases, and views turn over like a drawn card. Fonts and map styling at
+ * "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='tarot'] .world-view :is(h1, .entry-name) {
+  color: var(--skin-gold);
+  font-weight: 700;
+}
+:root[data-skin='tarot']
+  .world-view
+  :is(.world-lenses .world-nav-label, .panel-heading, .scrubber-label, .entry-section h3) {
+  font-family: 'Marcellus', Georgia, serif;
+  letter-spacing: 0.06em;
+}
+/* Chapters are moon phases; eras and events are full moons. */
+:root[data-skin='tarot'] .world-view .scrubber-tick.chapter {
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset -3px 0 0 var(--skin-gold);
+  opacity: 0.9;
+}
+:root[data-skin='tarot'] .world-view :is(.scrubber-tick.event, .scrubber-tick.era) {
+  border-radius: 50%;
+  transform: none;
+  background: var(--skin-gold);
+}
+
+/* ----- art ----- */
+
+:root[data-skin='tarot'][data-skin-art] .world-view .world-main {
+  background:
+    radial-gradient(1px 1px at 12% 22%, rgb(217 180 90 / 0.8), transparent),
+    radial-gradient(1px 1px at 47% 66%, rgb(255 255 255 / 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 81% 31%, rgb(217 180 90 / 0.7), transparent),
+    radial-gradient(1px 1px at 66% 88%, rgb(255 255 255 / 0.5), transparent),
+    radial-gradient(ellipse at 50% 40%, var(--skin-night), transparent 70%), var(--bg);
+  background-size:
+    240px 240px,
+    300px 300px,
+    360px 360px,
+    200px 200px,
+    100% 100%,
+    auto;
+}
+:root[data-skin='tarot'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .time-scrubber, .card) {
+  border: 1px solid var(--skin-gold);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 0 0 3px var(--surface),
+    inset 0 0 0 4px rgb(217 180 90 / 0.35);
+}
+/* The entry is a tarot card. */
+:root[data-skin='tarot'][data-skin-art] .world-view .entry-page {
+  position: relative;
+  border: 2px solid var(--skin-gold);
+  border-radius: 16px;
+  padding-bottom: 4.5rem;
+  box-shadow:
+    inset 0 0 0 6px var(--page),
+    inset 0 0 0 7px rgb(217 180 90 / 0.5),
+    0 12px 32px rgb(0 0 0 / 0.5);
+}
+:root[data-skin='tarot'][data-skin-art] .world-view .entry-page::before {
+  content: '✦ ☾ ✦';
+  text-align: center;
+  color: var(--skin-gold);
+  letter-spacing: 0.6em;
+}
+:root[data-skin='tarot'][data-skin-art] .world-view .entry-page::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: 50%;
+  bottom: 1.2rem;
+  transform: translateX(-50%);
+  padding: 0.25rem 1.4rem;
+  border: 1px solid var(--skin-gold);
+  border-radius: 3px;
+  font-family: var(--skin-heading-font);
+  color: var(--skin-gold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+:root[data-skin='tarot'][data-skin-art] .world-view .world-nav-item.active {
+  background: rgb(217 180 90 / 0.14);
+  box-shadow: inset 2px 0 0 var(--skin-gold);
+  border-radius: 0;
+}
+:root[data-skin='tarot'][data-skin-art] .world-view .page-scroll > * {
+  animation: tarot-turn 0.55s ease-out both;
+}
+@keyframes tarot-turn {
+  from {
+    opacity: 0;
+    transform: perspective(1200px) rotateY(80deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

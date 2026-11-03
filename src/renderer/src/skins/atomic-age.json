@@ -1,0 +1,47 @@
+{
+  "id": "atomic-age",
+  "name": "Atomic Age",
+  "words": {
+    "world": "The Future",
+    "where": "Destinations",
+    "who": "Personalities",
+    "when": "Newsreels",
+    "how": "Science",
+    "inbox": "Mailbag",
+    "now": "This Week"
+  },
+  "kinds": {
+    "continent": "Hemisphere",
+    "kingdom": "Nation",
+    "city": "Metropolis",
+    "district": "Sector",
+    "landmark": "Launch site",
+    "wilds": "Proving grounds",
+    "person": "Personality",
+    "faction": "Agency",
+    "family": "Family",
+    "creature": "Alien",
+    "era": "Decade",
+    "event": "Headline",
+    "magic": "Atomic power",
+    "religion": "Faith",
+    "law": "Regulation",
+    "technology": "Gizmo",
+    "custom": "Etiquette"
+  },
+  "cast": {
+    "story": "On the air",
+    "waiting": "Coming soon",
+    "quiet": "Off the air",
+    "left": "Cancelled"
+  },
+  "tokens": {
+    "heading-font": "'Righteous', 'Trebuchet MS', sans-serif",
+    "map-filter": "saturate(1.1) sepia(0.15) contrast(1.05)",
+    "region-stroke": "#2a8f8a",
+    "region-hover": "rgb(196 71 28 / 0.18)",
+    "teal": "#2a8f8a",
+    "orange": "#c4471c",
+    "mustard": "#e0a82b"
+  }
+}

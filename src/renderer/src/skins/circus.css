@@ -1,0 +1,99 @@
+/*
+ * Circus: under the big top. Red and white tent stripes, titles lit by
+ * marquee bulbs, notices on ticket stubs, and views that bounce into the
+ * ring. Fonts and map styling at "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='circus'] .world-view :is(h1, .entry-name) {
+  color: var(--skin-red);
+  font-weight: 400;
+}
+:root[data-skin='circus']
+  .world-view
+  :is(.world-lenses .world-nav-label, .panel-heading, .scrubber-label) {
+  font-family: 'Trebuchet MS', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* ----- art ----- */
+
+/* Tent stripes along the top, then the sawdust floor. */
+:root[data-skin='circus'][data-skin-art] .world-view .world-main {
+  background:
+    repeating-linear-gradient(90deg, var(--skin-red) 0 40px, #fff 40px 80px) top / 100% 46px
+      no-repeat,
+    radial-gradient(ellipse at 50% 100%, rgb(224 160 32 / 0.18), transparent 60%),
+    var(--bg);
+}
+:root[data-skin='circus'][data-skin-art] .world-view .lens-view,
+:root[data-skin='circus'][data-skin-art] .world-view .page-scroll > .entry-page {
+  margin-top: 3.5rem;
+}
+/* Marquee bulbs around the title. */
+:root[data-skin='circus'][data-skin-art] .world-view .lens-head h1 {
+  padding: 0.15em 0.6em;
+  background: var(--skin-red);
+  color: #fff;
+  border: 6px dotted var(--skin-bulb);
+  border-radius: 10px;
+  box-shadow: 0 0 14px rgb(255 210 63 / 0.6);
+  animation: circus-bulbs 1.2s steps(2) infinite;
+}
+@keyframes circus-bulbs {
+  50% {
+    border-color: #fff4c0;
+    box-shadow: 0 0 6px rgb(255 210 63 / 0.3);
+  }
+}
+:root[data-skin='circus'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: 3px solid var(--skin-red);
+  border-radius: 14px;
+  box-shadow: 0 6px 0 rgb(200 16 46 / 0.2);
+}
+/* Notices are ticket stubs. */
+:root[data-skin='circus'][data-skin-art] .toast {
+  background:
+    radial-gradient(circle at 0 50%, transparent 9px, var(--skin-ticket) 10px) left / 51% 100%
+      no-repeat,
+    radial-gradient(circle at 100% 50%, transparent 9px, var(--skin-ticket) 10px) right / 51% 100%
+      no-repeat;
+  color: #3a1420;
+  border-radius: 4px;
+  border-left: 0;
+  padding-left: 1.4rem;
+  padding-right: 1.4rem;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.25);
+}
+:root[data-skin='circus'][data-skin-art] .toast::before {
+  content: 'ADMIT ONE';
+  font-family: var(--skin-heading-font);
+  font-size: 0.7rem;
+  color: var(--skin-red);
+  padding-right: 0.8rem;
+  border-right: 2px dashed rgb(200 16 46 / 0.5);
+  white-space: nowrap;
+}
+:root[data-skin='circus'][data-skin-art] .toast .link {
+  color: var(--skin-red);
+}
+:root[data-skin='circus'][data-skin-art] .world-view .world-nav-item.active {
+  background: var(--skin-red);
+  color: #fff;
+  border-radius: 999px;
+}
+:root[data-skin='circus'][data-skin-art] .world-view .page-scroll > * {
+  animation: circus-bounce 0.55s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes circus-bounce {
+  from {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

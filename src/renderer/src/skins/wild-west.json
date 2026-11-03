@@ -1,0 +1,48 @@
+{
+  "id": "wild-west",
+  "name": "Wild West",
+  "words": {
+    "world": "The Frontier",
+    "where": "Territory",
+    "who": "Wanted",
+    "when": "Tall Tales",
+    "how": "The Code",
+    "inbox": "Saddlebag",
+    "now": "High noon"
+  },
+  "kinds": {
+    "continent": "The West",
+    "kingdom": "Territory",
+    "city": "Town",
+    "district": "Side of town",
+    "landmark": "Watering hole",
+    "wilds": "Open range",
+    "person": "Drifter",
+    "faction": "Gang",
+    "family": "Family",
+    "creature": "Critter",
+    "era": "Days",
+    "event": "Shootout",
+    "magic": "Folk magic",
+    "religion": "Faith",
+    "law": "The Law",
+    "technology": "Iron",
+    "custom": "Frontier way"
+  },
+  "cast": {
+    "story": "In town",
+    "waiting": "Riding in",
+    "quiet": "Rode off",
+    "left": "Boot Hill"
+  },
+  "tokens": {
+    "heading-font": "'Rye', Georgia, serif",
+    "map-filter": "sepia(0.55) saturate(0.85) contrast(1.05)",
+    "region-stroke": "#6a3a1a",
+    "region-hover": "rgb(154 52 18 / 0.18)",
+    "wood": "#c9a873",
+    "wood-dark": "#a8834e",
+    "rope": "#b08850",
+    "ink": "#2e1f12"
+  }
+}

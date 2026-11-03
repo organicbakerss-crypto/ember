@@ -1,0 +1,83 @@
+/*
+ * Wild West: weathered wood and wanted posters. Each entry is a WANTED
+ * poster on sun-baked paper, maps and boards are lashed with rope, and the
+ * titles are cut in saloon type. Fonts and map styling at "plain" and
+ * "full"; art at "full".
+ */
+
+:root[data-skin='wild-west'] .world-view :is(h1, .entry-name) {
+  color: var(--skin-ink);
+  letter-spacing: 0.02em;
+}
+:root[data-skin='wild-west']
+  .world-view
+  :is(.world-lenses .world-nav-label, .panel-heading, .scrubber-label) {
+  font-family: Georgia, serif;
+  font-weight: 700;
+}
+
+/* ----- art ----- */
+
+/* Weathered wooden planks. */
+:root[data-skin='wild-west'][data-skin-art] .world-view .world-main {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 118px, rgb(60 35 15 / 0.35) 118px 120px),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.05) 0 3px, transparent 3px 11px),
+    linear-gradient(180deg, var(--skin-wood), var(--skin-wood-dark));
+}
+/* Rope borders. */
+:root[data-skin='wild-west'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .time-scrubber) {
+  border: 7px solid;
+  border-image: repeating-linear-gradient(45deg, var(--skin-rope) 0 5px, #7a5a30 5px 8px) 7;
+  border-radius: 0;
+}
+/* Each entry is a WANTED poster. */
+:root[data-skin='wild-west'][data-skin-art] .world-view .entry-page {
+  border-radius: 2px;
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 60%, rgb(120 70 20 / 0.25) 100%), var(--page);
+  box-shadow:
+    inset 0 0 30px rgb(140 90 30 / 0.35),
+    4px 6px 14px rgb(40 20 5 / 0.45);
+}
+:root[data-skin='wild-west'][data-skin-art] .world-view .entry-page::before {
+  content: 'WANTED';
+  text-align: center;
+  font-family: var(--skin-heading-font);
+  font-size: 2.6rem;
+  letter-spacing: 0.15em;
+  color: var(--skin-ink);
+  border-bottom: 3px double var(--skin-ink);
+  padding-bottom: 0.3rem;
+}
+:root[data-skin='wild-west'][data-skin-art] .world-view .lens-view {
+  background: rgb(246 234 210 / 0.88);
+  border-radius: 2px;
+  box-shadow: 4px 6px 14px rgb(40 20 5 / 0.35);
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+:root[data-skin='wild-west'][data-skin-art] .world-view .world-nav-item.active {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0;
+}
+:root[data-skin='wild-west'][data-skin-art] .world-view .page-scroll > * {
+  animation: west-swing 0.45s ease-out both;
+  transform-origin: top center;
+}
+@keyframes west-swing {
+  0% {
+    opacity: 0;
+    transform: rotate(-3deg);
+  }
+  60% {
+    opacity: 1;
+    transform: rotate(1deg);
+  }
+  100% {
+    transform: none;
+  }
+}

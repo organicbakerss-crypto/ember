@@ -1,0 +1,47 @@
+{
+  "id": "circus",
+  "name": "Circus",
+  "words": {
+    "world": "The Big Top",
+    "where": "Fairgrounds",
+    "who": "Performers",
+    "when": "Programme",
+    "how": "Acts",
+    "inbox": "Ticket booth",
+    "now": "Showtime"
+  },
+  "kinds": {
+    "continent": "Circuit",
+    "kingdom": "Country",
+    "city": "Tour stop",
+    "district": "Midway",
+    "landmark": "Attraction",
+    "wilds": "Back lot",
+    "person": "Performer",
+    "faction": "Troupe",
+    "family": "Family",
+    "creature": "Beast",
+    "era": "Season",
+    "event": "Show",
+    "magic": "Illusion",
+    "religion": "Superstition",
+    "law": "Ringmaster’s rule",
+    "technology": "Rigging",
+    "custom": "Tradition"
+  },
+  "cast": {
+    "story": "In the ring",
+    "waiting": "Backstage",
+    "quiet": "Off the bill",
+    "left": "Final bow"
+  },
+  "tokens": {
+    "heading-font": "'Bungee', Impact, sans-serif",
+    "map-filter": "saturate(1.25) contrast(1.05)",
+    "region-stroke": "#c8102e",
+    "region-hover": "rgb(255 210 63 / 0.3)",
+    "red": "#c8102e",
+    "bulb": "#ffd23f",
+    "ticket": "#ffe9a8"
+  }
+}
