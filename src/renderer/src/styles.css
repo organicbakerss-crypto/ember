@@ -3693,9 +3693,22 @@ kbd {
 }
 
 .dialog.grammar-dialog {
-  max-width: min(52rem, 94vw);
-  width: min(52rem, 94vw);
-  max-height: 88vh;
+  max-width: min(72rem, 94vw);
+  width: min(72rem, 94vw);
+  height: min(56rem, 90vh);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.dialog.grammar-dialog .grammar-preview {
+  flex: 1;
+  max-height: none;
+  min-height: 0;
+  padding: 1rem 2rem;
+}
+.grammar-preview .grammar-paragraph {
+  max-width: 42rem;
+  margin-inline: auto;
 }
 .grammar-dialog progress {
   width: 100%;
@@ -3798,4 +3811,202 @@ kbd {
 .ai-message .ai-read {
   margin-top: 0.25rem;
   font-size: 0.75rem;
+}
+
+/* ---------- the AI pane ---------- */
+
+.ai-view {
+  container-type: inline-size;
+  container-name: aiview;
+  position: relative;
+  width: 100%;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+.ai-history {
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 0.75rem 0.5rem;
+  background: var(--surface);
+  min-width: 0;
+}
+.ai-history ul {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+.ai-history li {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+.ai-history li.current {
+  background: var(--accent-soft);
+}
+.ai-history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 0.25rem;
+}
+.ai-history-toggle {
+  display: none;
+}
+.ai-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.ai-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.ai-head .ai-modes {
+  width: auto;
+}
+.ai-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 1rem 1.25rem;
+}
+.ai-column {
+  max-width: 46rem;
+  margin: 0 auto;
+  width: 100%;
+}
+.ai-scroll .ai-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.ai-view .ai-message {
+  white-space: normal;
+  line-height: 1.6;
+  padding: 0.7rem 0.95rem;
+  border-radius: 10px;
+  font-size: 0.98rem;
+}
+.ai-view .ai-message.user {
+  align-self: flex-end;
+  max-width: 85%;
+}
+.ai-text > :first-child {
+  margin-top: 0;
+}
+.ai-text > :last-child {
+  margin-bottom: 0;
+}
+.ai-text p,
+.ai-text ul,
+.ai-text ol,
+.ai-text blockquote,
+.ai-text pre {
+  margin: 0 0 0.6rem;
+}
+.ai-text h3,
+.ai-text h4 {
+  margin: 0.8rem 0 0.4rem;
+  font-size: 1.02rem;
+}
+.ai-text ul,
+.ai-text ol {
+  padding-left: 1.3rem;
+}
+.ai-text li + li {
+  margin-top: 0.25rem;
+}
+.ai-text blockquote,
+.ai-quote blockquote {
+  border-left: 3px solid var(--accent);
+  margin-left: 0;
+  padding-left: 0.7rem;
+  color: var(--muted);
+}
+.ai-text pre {
+  white-space: pre-wrap;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.88rem;
+}
+.ai-text code {
+  font-size: 0.9em;
+}
+.ai-actions {
+  display: flex;
+  gap: 0.9rem;
+  margin-top: 0.45rem;
+  opacity: 0.75;
+}
+.ai-message:hover .ai-actions {
+  opacity: 1;
+}
+.ai-reply-pop {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 6px));
+  z-index: 5;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.25);
+}
+.ai-view .ai-input {
+  padding: 0.6rem 1.25rem 0.8rem;
+  display: grid;
+  gap: 0.45rem;
+  border-top: 1px solid var(--border);
+  max-width: none;
+}
+.ai-view .ai-input > * {
+  max-width: 46rem;
+  width: 100%;
+  margin-inline: auto;
+}
+.ai-quote {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+.ai-quote blockquote {
+  flex: 1;
+  margin: 0;
+  max-height: 5.5rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.ai-empty {
+  padding: 2rem 0;
+}
+
+/* Narrow: the conversation list slides in from the side. */
+@container aiview (max-width: 720px) {
+  .ai-main {
+    grid-column: 1 / -1;
+  }
+  .ai-history {
+    display: none;
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: min(18rem, 85%);
+    z-index: 6;
+    box-shadow: 4px 0 16px rgb(0 0 0 / 0.2);
+  }
+  .ai-history.open {
+    display: block;
+  }
+  .ai-history-toggle {
+    display: inline-flex;
+  }
+  .ai-head {
+    flex-wrap: wrap;
+  }
 }

@@ -19,6 +19,12 @@ export const paneRouteSchema = z.discriminatedUnion('kind', [
     worldId: id('world'),
     entryId: id('entry').optional(),
   }),
+  /** The AI, for a story (it reads from that story's writing view). */
+  z.object({
+    kind: z.literal('ai'),
+    seriesId: id('series'),
+    volumeId: id('volume'),
+  }),
 ])
 export type PaneRoute = z.infer<typeof paneRouteSchema>
 

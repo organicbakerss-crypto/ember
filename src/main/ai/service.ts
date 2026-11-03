@@ -53,6 +53,9 @@ export interface AskInput {
 
 /** Whoever answers: Ollama or ChatGPT. */
 interface Provider {
+  /** How many requests to run at once, and how much text per grammar request. */
+  parallel: number
+  grammarBatch: number
   chat(input: {
     messages: ChatMessage[]
     json?: boolean
@@ -94,7 +97,11 @@ export class AiService {
       }
       const model =
         settings.chatgptModel || (await this.chatgpt.models())[0] || DEFAULT_CHATGPT_MODEL
-      return { chat: (i) => this.chatgpt.chat({ ...i, model }) }
+      return {
+        parallel: 4,
+        grammarBatch: GRAMMAR_BATCH_CHARS * 3,
+        chat: (i) => this.chatgpt.chat({ ...i, model }),
+      }
     }
     const ollama = new Ollama(settings.host, this.options.fetchImpl)
     let model = settings.model
@@ -108,7 +115,11 @@ export class AiService {
       }
       model = models[0]!
     }
-    return { chat: (i) => ollama.chat({ ...i, model }) }
+    return {
+      parallel: 1,
+      grammarBatch: GRAMMAR_BATCH_CHARS,
+      chat: (i) => ollama.chat({ ...i, model }),
+    }
   }
 
   /** ChatGPT: sign in (opens OpenAI's page in the browser and waits for it). */
@@ -294,7 +305,7 @@ export class AiService {
       const batches: number[][] = [[]]
       let size = 0
       for (const i of todo) {
-        if (size > 0 && size + input.paragraphs[i]!.length > GRAMMAR_BATCH_CHARS) {
+        if (size > 0 && size + input.paragraphs[i]!.length > provider.grammarBatch) {
           batches.push([])
           size = 0
         }
@@ -321,8 +332,7 @@ export class AiService {
       }
       let lastReply = ''
       let unread = 0
-      for (const batch of batches) {
-        if (!batch.length) continue
+      const run = async (batch: number[]) => {
         if (!(await fix(batch))) {
           if (batch.length > 1) {
             // The model lost count: one paragraph at a time instead.
@@ -332,6 +342,13 @@ export class AiService {
         done += batch.length
         onProgress(done, todo.length)
       }
+      // A few batches at once where the model runs elsewhere (ChatGPT); one by one on this computer.
+      const queue = batches.filter((b) => b.length)
+      await Promise.all(
+        Array.from({ length: Math.min(provider.parallel, queue.length) }, async () => {
+          for (let b = queue.shift(); b; b = queue.shift()) await run(b)
+        }),
+      )
       // Nothing usable came back at all: say so, rather than "no changes".
       if (todo.length && unread === todo.length) {
         throw new AppError(

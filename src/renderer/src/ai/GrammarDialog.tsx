@@ -110,8 +110,8 @@ export function GrammarDialog(props: {
         ) : !items ? (
           <div className="stack">
             <p className="muted">
-              Checking{progress ? ` ${progress.done} of ${progress.total} paragraphs` : ''}… This
-              runs on your computer and can take a while for a long chapter.
+              Checking{progress ? ` ${progress.done} of ${progress.total} paragraphs` : ''}… A long
+              chapter can take a minute or two.
             </p>
             <progress max={progress?.total || 1} value={progress?.done ?? 0} />
           </div>

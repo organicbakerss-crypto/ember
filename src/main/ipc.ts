@@ -39,7 +39,31 @@ export function registerIpc(
   ai: AiService,
 ): void {
   const { manager, leases } = windows
+  // Asking the other windows what they show (for a torn-off AI window).
+  const scopeAsks = new Map<string, (scope: IpcResult<'ai:scope'>) => void>()
+  let scopeAskId = 0
   const handlers: Handlers = {
+    'ai:scope': (input, event) =>
+      new Promise((resolve) => {
+        const requestId = `scope-${++scopeAskId}`
+        const done = (scope: IpcResult<'ai:scope'>) => {
+          scopeAsks.delete(requestId)
+          resolve(scope)
+        }
+        scopeAsks.set(requestId, (scope) => scope && done(scope))
+        for (const w of BrowserWindow.getAllWindows()) {
+          if (w.isDestroyed() || w.webContents === event.sender) continue
+          w.webContents.send(`${IPC_EVENT_PREFIX}ai:scopeRequest`, {
+            requestId,
+            seriesId: input.seriesId,
+          })
+        }
+        setTimeout(() => scopeAsks.has(requestId) && done(null), 1000)
+      }),
+    'ai:scopeReply': (input) => {
+      scopeAsks.get(input.requestId)?.(input.scope)
+      return null
+    },
     'export:volume': async (input, event) =>
       exportVolume(host.current, BrowserWindow.fromWebContents(event.sender), {
         ...input,

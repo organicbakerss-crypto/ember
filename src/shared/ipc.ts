@@ -656,6 +656,20 @@ export const ipcInputs = {
     worldId: id('world').nullable().optional(),
   }),
   'ai:cancel': z.object({ requestId: z.string().min(1).max(80) }),
+  /** What another window's writing view shows for a story (for a torn-off AI window). */
+  'ai:scope': z.object({ seriesId: id('series') }),
+  'ai:scopeReply': z.object({
+    requestId: z.string().min(1).max(80),
+    scope: z
+      .object({
+        volumeId: id('volume'),
+        chapterId: id('chapter').nullable(),
+        chapterTitle: z.string().max(300),
+        selection: z.string().max(200000).nullable(),
+        screen: z.string().max(200000),
+      })
+      .nullable(),
+  }),
   /** A story's saved AI conversations (newest first, without messages). */
   'ai:conversations': z.object({ seriesId: id('series') }),
   'ai:conversation': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
@@ -809,6 +823,14 @@ export interface IpcResults {
   'ai:ask': { text: string }
   'ai:grammar': { paragraphs: string[] }
   'ai:cancel': null
+  'ai:scope': {
+    volumeId: string
+    chapterId: string | null
+    chapterTitle: string
+    selection: string | null
+    screen: string
+  } | null
+  'ai:scopeReply': null
   'ai:conversations': ConversationSummary[]
   'ai:conversation': ConversationFile
   'ai:saveConversation': null
@@ -864,6 +886,8 @@ export interface IpcEvents {
   /** Sync has written the other computer's version: reload this document and carry on editing. */
   'doc:returned': { key: string; pane: string }
   'sync:status': SyncStatus
+  /** Another window asks what this one's writing view shows (reply with `ai:scopeReply`). */
+  'ai:scopeRequest': { requestId: string; seriesId: string }
   /** More of an AI answer. */
   'ai:token': { requestId: string; text: string }
   /** How far a spelling and grammar check has got (paragraphs). */

@@ -14,6 +14,7 @@ import { TrashPage } from './TrashPage'
 import { WorldView } from '../world/WorldView'
 import { WritingView, type ChapterTarget } from './WritingView'
 import { isBook } from './worldLink'
+import { AiView } from '../ai/AiView'
 
 interface WriteSide {
   seriesId: string
@@ -42,6 +43,10 @@ type Route =
     } & WorldSide)
   /** Split screen: writing on the left, the world beside it. */
   | { view: 'split'; write: WriteSide; world: WorldSide }
+  /** Writing on the left, the AI beside it. */
+  | { view: 'splitAi'; write: WriteSide }
+  /** The AI alone (a torn-off window). */
+  | { view: 'ai'; seriesId: string; volumeId: string }
 
 const writeSide = (r: Extract<PaneRoute, { kind: 'write' }>): WriteSide => ({
   seriesId: r.seriesId,
@@ -53,15 +58,29 @@ const writeSide = (r: Extract<PaneRoute, { kind: 'write' }>): WriteSide => ({
 function startRoute(detached: PaneRoute | null): Route {
   if (!detached) return { view: 'shelf' }
   if (detached.kind === 'write') return { view: 'volume', ...writeSide(detached) }
+  if (detached.kind === 'ai') {
+    return { view: 'ai', seriesId: detached.seriesId, volumeId: detached.volumeId }
+  }
   return { view: 'world', worldId: detached.worldId, entryId: detached.entryId, token: 1 }
 }
 
 /** A pane docked back (or sent here) from a torn-off window: beside the current view, or instead. */
 function withDocked(current: Route, route: PaneRoute): Route {
+  if (route.kind === 'ai') {
+    if (current.view === 'volume') return { view: 'splitAi', write: current }
+    if (current.view === 'split' || current.view === 'splitAi') {
+      return { view: 'splitAi', write: current.write }
+    }
+    return {
+      view: 'splitAi',
+      write: { seriesId: route.seriesId, volumeId: route.volumeId },
+    }
+  }
   if (route.kind === 'world') {
     const world = { worldId: route.worldId, entryId: route.entryId, token: Date.now() }
     if (current.view === 'volume') return { view: 'split', write: current, world }
     if (current.view === 'split') return { ...current, world }
+    if (current.view === 'splitAi') return { view: 'split', write: current.write, world }
     return { view: 'world', ...world }
   }
   const write = writeSide(route)
@@ -72,7 +91,7 @@ function withDocked(current: Route, route: PaneRoute): Route {
       world: { worldId: current.worldId, entryId: current.entryId, token: current.token },
     }
   }
-  if (current.view === 'split') return { ...current, write }
+  if (current.view === 'split' || current.view === 'splitAi') return { ...current, write }
   return { view: 'volume', ...write }
 }
 
@@ -90,7 +109,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
   // Which side of the split is being worked in (it answers keyboard shortcuts).
   const [activeSide, setActiveSide] = useState<'write' | 'world'>('write')
   // Where each pane is now, as it reports it (for popping out, and for a torn-off window).
-  const at = useRef<{ write?: PaneRoute; world?: PaneRoute }>({})
+  const at = useRef<{ write?: PaneRoute; world?: PaneRoute; ai?: PaneRoute }>({})
   const word = useWords()
 
   const refresh = useCallback(() => {
@@ -98,7 +117,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
   }, [])
   // Loads at once (a torn-off window can start in the writing view), and again on leaving
   // the writing view, to pick up word counts skipped below.
-  const writing = route.view === 'volume' || route.view === 'split'
+  const writing = route.view === 'volume' || route.view === 'split' || route.view === 'splitAi'
   const loaded = useRef(false)
   useEffect(() => {
     if (writing && loaded.current) return
@@ -126,6 +145,13 @@ export function Home(props: { detached?: PaneRoute | null }) {
   const reportWrite = useCallback(
     (r: PaneRoute) => {
       at.current.write = r
+      if (detached) void api.invoke('window:route', { route: r })
+    },
+    [detached],
+  )
+  const reportAi = useCallback(
+    (r: PaneRoute) => {
+      at.current.ai = r
       if (detached) void api.invoke('window:route', { route: r })
     },
     [detached],
@@ -324,6 +350,65 @@ export function Home(props: { detached?: PaneRoute | null }) {
     />
   )
 
+  /** Opens (or closes) the AI beside the writing view; from a torn-off writing window, in its own. */
+  const toggleAi = (write: WriteSide, place: 'alone' | 'split' | 'detached') => {
+    if (place === 'detached') {
+      void api.invoke('window:open', {
+        route: { kind: 'ai', seriesId: write.seriesId, volumeId: write.volumeId },
+      })
+      return
+    }
+    setRoute((current) => {
+      if (current.view === 'splitAi') return { view: 'volume', ...current.write }
+      if (current.view === 'volume') return { view: 'splitAi', write: current }
+      if (current.view === 'split') return { view: 'splitAi', write: current.write }
+      return current
+    })
+    setActiveSide('world')
+  }
+
+  /** The AI for one side (beside the writing view, or torn off). */
+  const aiPane = (side: { seriesId: string; volumeId: string }, place: 'split' | 'detached') => {
+    const series = seriesOf(side.seriesId)
+    if (!series) return null
+    const route: PaneRoute = { kind: 'ai', seriesId: side.seriesId, volumeId: side.volumeId }
+    return (
+      <PaneFrame
+        id="ai"
+        title={`AI · ${series.name}`}
+        active={place === 'detached' || activeSide === 'world'}
+        split={place === 'split'}
+        detached={place === 'detached'}
+        onActivate={() => setActiveSide('world')}
+        onRoute={reportAi}
+        onPopOut={
+          place === 'split' && route
+            ? (atCursor) => {
+                void api.invoke('window:open', { route, atCursor })
+                setRoute((current) =>
+                  current.view === 'splitAi' ? { view: 'volume', ...current.write } : current,
+                )
+              }
+            : undefined
+        }
+        onClose={
+          place === 'split'
+            ? () =>
+                setRoute((current) =>
+                  current.view === 'splitAi' ? { view: 'volume', ...current.write } : current,
+                )
+            : undefined
+        }
+        onDock={place === 'detached' ? () => void api.invoke('window:dock', { route }) : undefined}
+        onDropOutside={
+          place === 'detached' ? () => void api.invoke('window:dropped', { route }) : undefined
+        }
+      >
+        <AiView seriesId={side.seriesId} volumeId={side.volumeId} onRoute={reportAi} />
+      </PaneFrame>
+    )
+  }
+
   /** The writing view for one side (alone, split, or torn off). */
   const writingPane = (write: WriteSide, place: 'alone' | 'split' | 'detached') => {
     const series = seriesOf(write.seriesId)
@@ -340,6 +425,8 @@ export function Home(props: { detached?: PaneRoute | null }) {
         onOpenSeries={() => setRoute({ view: 'series', seriesId: series.id })}
         onOpenWorld={series.worldId ? openWorldFrom(series, write) : undefined}
         onOpenWorldBeside={place === 'alone' && series.worldId ? splitCurrent : undefined}
+        onToggleAi={() => toggleAi(write, place)}
+        aiBeside={route.view === 'splitAi'}
         hideModeSwitch={place !== 'alone'}
       />
     )
@@ -359,7 +446,11 @@ export function Home(props: { detached?: PaneRoute | null }) {
         detached={place === 'detached'}
         onActivate={() => setActiveSide('write')}
         onRoute={reportWrite}
-        onPopOut={place === 'split' ? (atCursor) => popOut('write', atCursor) : undefined}
+        onPopOut={
+          place === 'split' && route.view === 'split'
+            ? (atCursor) => popOut('write', atCursor)
+            : undefined
+        }
         onClose={
           place === 'split' && route.view === 'split'
             ? () => setRoute({ view: 'world', ...route.world, from: route.write })
@@ -456,7 +547,9 @@ export function Home(props: { detached?: PaneRoute | null }) {
         ? writingPane(route, 'detached')
         : route.view === 'world'
           ? worldPane(route, 'detached')
-          : null
+          : route.view === 'ai'
+            ? aiPane(route, 'detached')
+            : null
     return (
       pane ?? (
         <p className="muted page-message">
@@ -471,6 +564,12 @@ export function Home(props: { detached?: PaneRoute | null }) {
     const left = writingPane(route.write, 'split')
     const right = worldPane(route.world, 'split')
     if (!left || !right) return left ?? right ?? shelf
+    return <SplitView left={left} right={right} />
+  }
+  if (route.view === 'splitAi') {
+    const left = writingPane(route.write, 'split')
+    const right = aiPane(route.write, 'split')
+    if (!left || !right) return left ?? shelf
     return <SplitView left={left} right={right} />
   }
   if (route.view === 'world') return worldPane(route, 'alone') ?? shelf

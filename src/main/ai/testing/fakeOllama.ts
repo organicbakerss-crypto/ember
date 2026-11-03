@@ -3,6 +3,8 @@ import { createServer } from 'node:http'
 
 export interface FakeOllama {
   url: string
+  /** The next answer, streamed slowly (for testing scrolling while it types). */
+  next: string | null
   /** Every chat request received. */
   requests: { model: string; messages: { role: string; content: string }[]; format?: string }[]
   close(): Promise<void>
@@ -28,17 +30,26 @@ export async function startFakeOllama(
           return res.end(JSON.stringify({ error: `model '${request.model}' not found` }))
         }
         requests.push(request)
-        const text = answer(request)
+        const slow = fake.next
+        const text = slow ?? answer(request)
         res.writeHead(200, { 'content-type': 'application/x-ndjson' })
-        for (let i = 0; i < text.length; i += 7) {
-          res.write(
-            JSON.stringify({
-              message: { role: 'assistant', content: text.slice(i, i + 7) },
-              done: false,
-            }) + '\n',
-          )
+        const piece = (i: number) =>
+          JSON.stringify({
+            message: { role: 'assistant', content: text.slice(i, i + 7) },
+            done: false,
+          }) + '\n'
+        if (!slow) {
+          for (let i = 0; i < text.length; i += 7) res.write(piece(i))
+          return res.end(JSON.stringify({ done: true }) + '\n')
         }
-        return res.end(JSON.stringify({ done: true }) + '\n')
+        let i = 0
+        const step = () => {
+          if (i >= text.length) return res.end(JSON.stringify({ done: true }) + '\n')
+          res.write(piece(i))
+          i += 7
+          setTimeout(step, 2)
+        }
+        return step()
       }
       res.writeHead(404)
       res.end()
@@ -47,9 +58,11 @@ export async function startFakeOllama(
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   const address = server.address()
   const port = typeof address === 'object' && address ? address.port : 0
-  return {
+  const fake: FakeOllama = {
     url: `http://127.0.0.1:${port}`,
     requests,
+    next: null,
     close: () => new Promise<void>((r) => server.close(() => r())),
   }
+  return fake
 }

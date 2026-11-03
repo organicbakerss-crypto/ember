@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isBook, worldLinkMenu } from './worldLink'
-import { AiPanel } from '../ai/AiPanel'
+import { offerScope, useScopeAnswers } from '../ai/scope'
 import { GrammarDialog } from '../ai/GrammarDialog'
 import type {
   WorldSummary,
@@ -72,6 +72,10 @@ export function WritingView(props: {
   onOpenWorld?: (entryId?: string, how?: 'window') => void
   /** Opens the world beside this view (split screen); unset when it already is. */
   onOpenWorldBeside?: () => void
+  /** Opens or closes the AI beside the page. */
+  onToggleAi?: () => void
+  /** The AI is open beside the page. */
+  aiBeside?: boolean
   /** Beside the world already: no Write/World switch. */
   hideModeSwitch?: boolean
   onOpenSeries: () => void
@@ -116,6 +120,8 @@ export function WritingView(props: {
   const { choose, openMenu } = useOverlays()
   // Export and import dialogs (export can start with one chapter chosen).
   const aiOn = settings.ai.enabled
+  // Offer the AI what this view shows (it reads it when asked).
+  useScopeAnswers()
   const [checking, setChecking] = useState(false)
   const [exporting, setExporting] = useState<{ chapterId: string | null; only?: boolean } | null>(
     null,
@@ -398,6 +404,18 @@ export function WritingView(props: {
   }, [view, liveMeta, world])
 
   const current = selectedId ? (liveMeta[selectedId] ?? view?.chapters[selectedId]) : undefined
+  const currentTitle = current?.title ?? ''
+  const selectedText = selectionParagraphs?.join('\n\n') || null
+  useEffect(() => {
+    offerScope(series.id, {
+      volumeId: volume.id,
+      chapterId: selectedId,
+      chapterTitle: currentTitle,
+      selection: selectedText,
+      screen: () => editor.current?.visibleText() ?? '',
+    })
+  }, [series.id, volume.id, selectedId, currentTitle, selectedText])
+  useEffect(() => () => offerScope(series.id, null), [series.id])
 
   // The world as of this chapter: hover cards and the side panel show facts at this point.
   const at = (selectedId ? world?.positions.get(selectedId) : undefined) ?? null
@@ -512,7 +530,7 @@ export function WritingView(props: {
           {
             id: 'ai',
             title: 'Ask the AI (chat, brainstorm, ask the story)',
-            run: () => openPanel('ai'),
+            run: () => props.onToggleAi?.(),
           },
           ...(selectedId
             ? [
@@ -733,7 +751,11 @@ export function WritingView(props: {
           <path d="M12 7.5V12l3 2" />
         </RailButton>
         {aiOn && (
-          <RailButton label="AI" active={panel === 'ai'} onClick={() => togglePanel('ai')}>
+          <RailButton
+            label={props.aiBeside ? 'Close the AI' : 'AI beside the page'}
+            active={!!props.aiBeside}
+            onClick={() => props.onToggleAi?.()}
+          >
             <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" />
             <path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" />
           </RailButton>
@@ -816,17 +838,6 @@ export function WritingView(props: {
                   : null
               }
               onRestored={() => setReloadToken((t) => t + 1)}
-            />
-          )}
-          {panel === 'ai' && aiOn && (
-            <AiPanel
-              seriesId={series.id}
-              volumeId={volume.id}
-              chapterId={selectedId}
-              chapterTitle={current?.title ?? ''}
-              selection={selectionParagraphs?.join('\n\n') || null}
-              screenText={() => editor.current?.visibleText() ?? ''}
-              provider={settings.ai.provider}
             />
           )}
           {panel === 'diagnostics' && (
