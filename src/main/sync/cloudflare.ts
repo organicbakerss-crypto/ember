@@ -114,7 +114,15 @@ export async function setupFromToken(
       if (names.has(bucket)) {
         // Only use it if it holds nothing but this app's library.
         const cloud = options.makeCloud?.(setup) ?? new S3Cloud(setup)
-        const objects = await cloud.list('')
+        let objects
+        try {
+          objects = await cloud.list('')
+        } catch (err) {
+          throw new AppError(
+            'invalid-input',
+            `Found the storage bucket “${bucket}” in “${account.name}”, but couldn’t open it: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
         if (objects.every((o) => o.key.startsWith('library/'))) return setup
         continue
       }

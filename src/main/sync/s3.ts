@@ -179,6 +179,15 @@ export class S3Cloud implements CloudStore {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       })
     } catch (err) {
+      const code = String(((err as { cause?: { code?: string } }).cause ?? {}).code ?? '')
+      if (code.startsWith('ERR_SSL')) {
+        // Cloudflare refuses the connection itself for an address it doesn't know.
+        throw new CloudError(
+          'other',
+          `Cloudflare refused the secure connection to ${base.host} (${code}). The storage address doesn’t match an account with R2.`,
+          { cause: err },
+        )
+      }
       throw new CloudError('offline', 'Couldn’t reach the cloud.', { cause: err })
     }
     if (res.status === 401 || res.status === 403) {
