@@ -52,7 +52,10 @@ function createWindow(
   attachTextMenu(
     window,
     settings,
-    (next) => broadcast('settings:changed', next),
+    (next) => {
+      broadcast('settings:changed', next)
+      sync?.noteChange()
+    },
     (params) =>
       params.isEditable ? captureMenuItems(window.webContents, params.selectionText, host) : [],
   )
@@ -90,6 +93,7 @@ void app.whenReady().then(async () => {
   setAppMenu()
   const settings = new DeviceSettingsStore(app.getPath('userData'))
   const defaultPath = join(app.getPath('documents'), `${appConfig.name} Library`)
+  const appSettings = new AppSettingsStore(app.getPath('userData'))
   sync = new SyncService({
     userData: app.getPath('userData'),
     leases,
@@ -101,6 +105,15 @@ void app.whenReady().then(async () => {
     onStatus: (status) => broadcast('sync:status', status),
     onNotice: (message) => broadcast('app:notice', message),
     fetchImpl: ((input: string, init?: RequestInit) => net.fetch(input, init)) as typeof fetch,
+    dictionary: {
+      read: async () => (await appSettings.read()).dictionary,
+      write: async (dictionary) => {
+        const previous = await appSettings.read()
+        const next = await appSettings.update({ dictionary })
+        applySpelling(session.defaultSession, next, previous)
+        broadcast('settings:changed', next)
+      },
+    },
     // End-to-end tests point setup at a stand-in for Cloudflare (never in a packaged app).
     ...(!app.isPackaged && process.env['SYNC_TEST_API'] && process.env['SYNC_TEST_S3']
       ? {
@@ -122,7 +135,6 @@ void app.whenReady().then(async () => {
     (library) => void syncService.attach(library),
   )
   await host.restore()
-  const appSettings = new AppSettingsStore(app.getPath('userData'))
   applySpelling(session.defaultSession, await appSettings.read())
   const manager = new WindowManager((options) => createWindow(appSettings, host, options), settings)
   windows = manager

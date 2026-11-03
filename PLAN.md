@@ -470,7 +470,7 @@ Sync is per file and local-first: the local copy is the truth, the cloud is a ma
 | --- | --- | --- |
 | Device-only | Window layout, split sizes, recent files, trash, doodles, sign-in tokens | Never synced |
 | Derived | Search index, AI summaries, caches | Never synced; rebuilt locally |
-| Settings | Themes, character presets, AI settings, dictionary, ElevenLabs key | Manual only (see Settings sync) |
+| Settings | Themes, page, AI settings, keys | Never synced, except the personal dictionary (see Settings sync) |
 | Content | Chapters, outlines, world entries, maps | Automatic, per file |
 | History | Snapshots | Upload-only; pulled only on restore |
 
@@ -540,16 +540,7 @@ Rules:
 
 ## Settings sync
 
-Settings never sync automatically. In Settings, two buttons move them between devices on demand, and the user always chooses the direction.
-
-- **Upload to cloud:** saves this device's settings as the cloud copy.
-- **Download to this device:** replaces this device's settings with the cloud copy.
-
-Checkboxes choose what is included (remembered for next time): themes, character presets and sprite packs, AI settings, personal dictionary, keyboard shortcuts and editor preferences, and the ElevenLabs API key.
-
-Before applying, show a summary (for example "3 themes, 2 characters, API key, uploaded from Mac on Oct 27") and ask to confirm.
-
-**Secrets are encrypted on the device** with a user passphrase before upload, so Cloudflare only stores unreadable data. The passphrase is entered once on each new device. The ChatGPT sign-in is never synced; each device signs in itself.
+**As built (8, Nov 2026): only the personal dictionary syncs.** Settings stay on each computer (theme, page width, paper, status bar, analysis, world display, export style): they aren't writing, and screens differ. A word added to (or removed from) the dictionary on one computer is added (or removed) on the others at the next sync; `library/dictionary.json` in the cloud holds each word with when it last changed, and the latest change wins. When keys arrive (AI, ElevenLabs), each computer is set up on its own; nothing secret goes to the cloud.
 
 ## AI layer
 
@@ -778,7 +769,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export. (Done.)
 7. **Sync engine:** Cloudflare R2 with step-by-step setup instructions; manifests, pull rule, conditional uploads, conflict copies, and the failure test harness. Ship only when the harness passes. (Done, lean: no Worker, no D1, no SQLite.)
 7b. **Story types:** single books, short stories and collections, worlds optional and unlinkable, smaller worlds. (Done; see Story types.)
-8. **Settings sync.** (Smart Storage dropped: not needed; see Smart Storage.)
+8. **Settings sync:** only the personal dictionary syncs; everything else stays per computer. (Done. Smart Storage dropped: not needed.)
 9. **World extras:** nothing left here; maps moved to 4b and time (the timeline) to 4d.
 10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.

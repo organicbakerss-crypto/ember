@@ -21,6 +21,7 @@ import { CloudError, PreconditionFailed, type CloudStore } from './cloud'
 import { SyncEngine, UNITS_PREFIX, type SyncHooks } from './engine'
 import { fetchHistory, uploadHistory } from './history'
 import { cleanUpCloud } from './cleanup'
+import { syncDictionary } from './dictionary'
 import { parseBucketUrl, S3Cloud } from './s3'
 import { setupFromToken } from './cloudflare'
 import { localUnits } from './units'
@@ -66,6 +67,8 @@ export interface SyncServiceOptions {
    * from Node's built-in one.
    */
   fetchImpl?: typeof fetch
+  /** The personal dictionary (the one setting that syncs). */
+  dictionary?: { read(): Promise<string[]>; write(words: string[]): Promise<void> }
   /** For tests: where the Cloudflare API is. */
   tokenSetup?: Parameters<typeof setupFromToken>[1]
 }
@@ -245,6 +248,14 @@ export class SyncService {
         ).catch((err: unknown) => {
           if (err instanceof CloudError) throw err
         })
+        if (this.options.dictionary) {
+          const words = await syncDictionary(
+            this.cloud!,
+            join(this.library!.paths.localDir, 'sync'),
+            await this.options.dictionary.read(),
+          )
+          if (words) await this.options.dictionary.write(words)
+        }
         await this.weeklyCleanUp()
         this.failures = 0
         this.setStatus({

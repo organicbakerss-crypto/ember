@@ -246,6 +246,8 @@ export function registerIpc(
       const next = await settings.update(input)
       applySpelling(session.defaultSession, next, previous)
       broadcast('settings:changed', next)
+      // The personal dictionary syncs (nothing else in settings does).
+      if (input.dictionary) sync.noteChange()
       return next
     },
     'window:flushed': (_input, event) => {
