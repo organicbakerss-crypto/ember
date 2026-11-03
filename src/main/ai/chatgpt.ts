@@ -322,18 +322,8 @@ export class ChatGpt {
       parallel_tool_calls: false,
       store: false,
       stream: true,
-      ...(input.json
-        ? {
-            text: {
-              format: {
-                type: 'json_schema',
-                name: 'paragraphs',
-                schema: GRAMMAR_SCHEMA,
-                strict: true,
-              },
-            },
-          }
-        : {}),
+      // JSON answers (grammar) are asked for in the instructions and read leniently:
+      // the plan's service doesn't take every structured-output option the API does.
     }
     let res: Response
     try {
@@ -422,12 +412,4 @@ export class ChatGpt {
   cancelSignIn(): void {
     this.waiting?.close()
   }
-}
-
-/** The one JSON answer asked for: corrected paragraphs. */
-const GRAMMAR_SCHEMA = {
-  type: 'object',
-  properties: { paragraphs: { type: 'array', items: { type: 'string' } } },
-  required: ['paragraphs'],
-  additionalProperties: false,
 }

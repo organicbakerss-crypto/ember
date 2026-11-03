@@ -145,4 +145,11 @@ describe('the AI service', () => {
     )
     await expect(asking).rejects.toThrow(/Stopped/)
   })
+
+  it('grammar says so when the replies can’t be read, instead of “no changes”', async () => {
+    fake = await startFakeOllama(() => 'Sorry, I can only chat.')
+    await expect(
+      service({}).grammar({ requestId: 'u', paragraphs: ['teh one.', 'teh two.'] }, () => {}),
+    ).rejects.toThrow(/couldn’t be read as corrections/)
+  })
 })

@@ -823,6 +823,7 @@ export function WritingView(props: {
               seriesId={series.id}
               volumeId={volume.id}
               chapterId={selectedId}
+              chapterTitle={current?.title ?? ''}
               selection={selectionParagraphs?.join('\n\n') || null}
               screenText={() => editor.current?.visibleText() ?? ''}
               provider={settings.ai.provider}

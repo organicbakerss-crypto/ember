@@ -65,6 +65,17 @@ export function registerIpc(
           })
         }
       }),
+    'ai:conversations': (input) => host.current.listConversations(input.seriesId),
+    'ai:conversation': (input) =>
+      host.current.readConversation(input.seriesId, input.conversationId),
+    'ai:saveConversation': async (input) => {
+      await host.current.saveConversation(input.seriesId, input.conversation)
+      return null
+    },
+    'ai:deleteConversation': async (input) => {
+      await host.current.deleteConversation(input.seriesId, input.conversationId)
+      return null
+    },
     'ai:chatgptSignIn': async () => {
       await ai.chatgptSignIn((url) => shell.openExternal(url))
       return null

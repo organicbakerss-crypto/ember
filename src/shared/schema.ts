@@ -413,6 +413,28 @@ export const mapFileSchema = z.looseObject({
 })
 export type MapFile = z.infer<typeof mapFileSchema>
 
+/* ---------- AI conversations (kept with their story) ---------- */
+
+export const conversationMessageSchema = z.looseObject({
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+  at: timestamp,
+  /** What the AI read with this message, in words ("your selection in “Arrival”, ~40 words"). */
+  read: z.string().nullable().catch(null).default(null),
+})
+export type ConversationMessage = z.infer<typeof conversationMessageSchema>
+
+export const conversationFileSchema = z.looseObject({
+  formatVersion,
+  id: id('conversation'),
+  mode: z.enum(['chat', 'brainstorm', 'ask']),
+  title: z.string().max(200),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  messages: z.array(conversationMessageSchema),
+})
+export type ConversationFile = z.infer<typeof conversationFileSchema>
+
 /* ---------- manifest (per sync unit: a volume or a world) ---------- */
 
 export const manifestFileEntrySchema = z.looseObject({

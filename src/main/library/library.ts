@@ -23,6 +23,8 @@ import {
   volumeFileSchema,
   worldEntryFileSchema,
   worldFileSchema,
+  conversationFileSchema,
+  type ConversationFile,
   type ChapterFile,
   type ChapterType,
   type LibraryFile,
@@ -34,6 +36,7 @@ import {
 } from '@shared/schema'
 import { idPattern, newId } from '@shared/ids'
 import type {
+  ConversationSummary,
   LibraryChange,
   LibraryProblem,
   LibrarySnapshot,
@@ -1729,6 +1732,77 @@ export class Library {
       )
       if (target.unit) await this.recordInManifest(target.unit, name, null)
     }
+  }
+
+  /* ---------- AI conversations ---------- */
+
+  private conversationsDir(seriesId: string): string {
+    return join(this.paths.seriesDir(seriesId), 'ai')
+  }
+
+  /** A story's saved AI conversations, newest first (without their messages). */
+  async listConversations(seriesId: string): Promise<ConversationSummary[]> {
+    let names: string[]
+    try {
+      names = await fs.promises.readdir(this.conversationsDir(seriesId))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw err
+    }
+    const out: ConversationSummary[] = []
+    for (const name of names) {
+      if (!name.endsWith('.json') || isTempFileName(name)) continue
+      try {
+        const c = await readJsonFile(
+          join(this.conversationsDir(seriesId), name),
+          conversationFileSchema,
+        )
+        out.push({
+          id: c.id,
+          mode: c.mode,
+          title: c.title,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          count: c.messages.length,
+        })
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+      }
+    }
+    return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
+  async readConversation(seriesId: string, conversationId: string): Promise<ConversationFile> {
+    return readJsonFile(
+      join(this.conversationsDir(seriesId), `${conversationId}.json`),
+      conversationFileSchema,
+    )
+  }
+
+  /** Saves a whole conversation (it's small; written after each answer). */
+  async saveConversation(seriesId: string, conversation: ConversationFile): Promise<void> {
+    await this.getSeries(seriesId)
+    await this.lock.run(`series:${seriesId}`, async () => {
+      await fs.promises.mkdir(this.conversationsDir(seriesId), { recursive: true })
+      await writeJsonFile(join(this.conversationsDir(seriesId), `${conversation.id}.json`), {
+        ...conversation,
+        formatVersion: FORMAT_VERSION,
+      })
+    })
+    this.onChange({ kind: 'series', seriesId })
+  }
+
+  /** Deleting a conversation moves it to this computer's trash folder (not shown in Trash). */
+  async deleteConversation(seriesId: string, conversationId: string): Promise<void> {
+    await this.lock.run(`series:${seriesId}`, async () => {
+      const from = join(this.conversationsDir(seriesId), `${conversationId}.json`)
+      const dest = join(this.paths.localDir, 'trash', 'ai', `${seriesId}-${conversationId}.json`)
+      await fs.promises.mkdir(join(dest, '..'), { recursive: true })
+      await fs.promises.rename(from, dest).catch((err: NodeJS.ErrnoException) => {
+        if (err.code !== 'ENOENT') throw err
+      })
+    })
+    this.onChange({ kind: 'series', seriesId })
   }
 
   /* ---------- sync ---------- */

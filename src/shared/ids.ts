@@ -26,6 +26,7 @@ export const ID_KINDS = {
   region: 'rgn',
   pin: 'pin',
   relationship: 'rel',
+  conversation: 'cnv',
 } as const
 
 export type IdKind = keyof typeof ID_KINDS

@@ -161,4 +161,37 @@ describe('sync with real libraries', () => {
       Object.values((await mac.lib.getOutline(series.id, one.id)).chapters).map((c) => c.title),
     ).toEqual(['Doomed'])
   })
+
+  it('AI conversations are kept with the story and come along to the other computer', async () => {
+    const cloud = new MemoryCloud()
+    const mac = await computer('Mac', cloud)
+    const series = await mac.lib.createSeries({
+      name: 'Saga',
+      world: { mode: 'none' },
+      kind: 'book',
+    })
+    const at = new Date().toISOString()
+    await mac.lib.saveConversation(series.id, {
+      formatVersion: 1,
+      id: 'cnv_aaaaaaaaaaaaaaaa',
+      mode: 'brainstorm',
+      title: 'What could happen next?',
+      createdAt: at,
+      updatedAt: at,
+      messages: [
+        { role: 'user', content: 'What could happen next?', at, read: 'your selection, ~5 words' },
+        { role: 'assistant', content: '1. A storm.', at, read: null },
+      ],
+    })
+    await mac.sync()
+    const linux = await computer('Linux', cloud)
+    await linux.sync()
+    const list = await linux.lib.listConversations(series.id)
+    expect(list).toMatchObject([{ id: 'cnv_aaaaaaaaaaaaaaaa', mode: 'brainstorm', count: 2 }])
+    const c = await linux.lib.readConversation(series.id, 'cnv_aaaaaaaaaaaaaaaa')
+    expect(c.messages[1]!.content).toBe('1. A storm.')
+
+    await linux.lib.deleteConversation(series.id, 'cnv_aaaaaaaaaaaaaaaa')
+    expect(await linux.lib.listConversations(series.id)).toEqual([])
+  })
 })

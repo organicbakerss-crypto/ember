@@ -3749,3 +3749,53 @@ kbd {
 .chatgpt-button {
   padding: 0.55rem 1.1rem;
 }
+.ai-past-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.ai-past-bar > * {
+  white-space: nowrap;
+  text-align: left;
+}
+.ai-past {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.ai-past li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.ai-past li:last-child {
+  border-bottom: none;
+}
+.ai-past-open {
+  all: unset;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.35rem 0.5rem;
+}
+.ai-past-open:hover,
+.ai-past-open:focus-visible {
+  background: var(--accent-soft);
+}
+.ai-past-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-message .ai-read {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+}

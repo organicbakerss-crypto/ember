@@ -70,15 +70,18 @@ export async function startFakeChatGpt(): Promise<FakeChatGpt> {
       if (url.pathname === '/responses') {
         const input = (body['input'] as { content: { text: string }[] }[]) ?? []
         const last = input[input.length - 1]?.content[0]?.text ?? ''
-        const format = (body['text'] as { format?: { type?: string } } | undefined)?.format
-        const text =
-          format?.type === 'json_schema'
-            ? JSON.stringify({
-                paragraphs: (JSON.parse(last) as { paragraphs: string[] }).paragraphs.map((p) =>
-                  p.replace(/teh/g, 'the'),
-                ),
-              })
-            : `From ChatGPT: ${last.slice(-40)}`
+        // Grammar: asked for JSON in the instructions; answered in a code fence, as models do.
+        const grammar = String(body['instructions'] ?? '').includes('Reply with JSON only')
+        if (body['text']) return json(400, { detail: 'Unsupported parameter: text.format' })
+        const text = grammar
+          ? '```json\n' +
+            JSON.stringify({
+              paragraphs: (JSON.parse(last) as { paragraphs: string[] }).paragraphs.map((p) =>
+                p.replace(/teh/g, 'the'),
+              ),
+            }) +
+            '\n```'
+          : `From ChatGPT: ${last.slice(-40)}`
         res.writeHead(200, { 'content-type': 'text/event-stream' })
         for (let i = 0; i < text.length; i += 8) {
           res.write(

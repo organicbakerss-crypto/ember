@@ -25,6 +25,8 @@ import {
   boardFileSchema,
   pinSchema,
   relationshipFileSchema,
+  conversationFileSchema,
+  type ConversationFile,
   relationshipTypeSchema,
   regionSchema,
   sketchSchema,
@@ -654,6 +656,14 @@ export const ipcInputs = {
     worldId: id('world').nullable().optional(),
   }),
   'ai:cancel': z.object({ requestId: z.string().min(1).max(80) }),
+  /** A story's saved AI conversations (newest first, without messages). */
+  'ai:conversations': z.object({ seriesId: id('series') }),
+  'ai:conversation': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
+  'ai:saveConversation': z.object({ seriesId: id('series'), conversation: conversationFileSchema }),
+  'ai:deleteConversation': z.object({
+    seriesId: id('series'),
+    conversationId: id('conversation'),
+  }),
   /** Signs in with ChatGPT (opens OpenAI's page; resolves when done). */
   'ai:chatgptSignIn': z.void(),
   'ai:chatgptSignOut': z.void(),
@@ -799,6 +809,10 @@ export interface IpcResults {
   'ai:ask': { text: string }
   'ai:grammar': { paragraphs: string[] }
   'ai:cancel': null
+  'ai:conversations': ConversationSummary[]
+  'ai:conversation': ConversationFile
+  'ai:saveConversation': null
+  'ai:deleteConversation': null
   'ai:chatgptSignIn': null
   'ai:chatgptSignOut': null
   'sync:now': SyncStatus
@@ -854,6 +868,17 @@ export interface IpcEvents {
   'ai:token': { requestId: string; text: string }
   /** How far a spelling and grammar check has got (paragraphs). */
   'ai:progress': { requestId: string; done: number; total: number }
+}
+
+/** A saved AI conversation in lists. */
+export interface ConversationSummary {
+  id: string
+  mode: ConversationFile['mode']
+  title: string
+  createdAt: string
+  updatedAt: string
+  /** How many messages. */
+  count: number
 }
 
 export interface AiStatus {

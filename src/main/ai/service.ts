@@ -312,18 +312,32 @@ export class AiService {
           signal,
         })
         const fixed = parseGrammar(reply, texts.length)
-        if (!fixed) return false
+        if (!fixed) {
+          lastReply = reply
+          return false
+        }
         indexes.forEach((i, k) => (out[i] = fixed[k]!))
         return true
       }
+      let lastReply = ''
+      let unread = 0
       for (const batch of batches) {
         if (!batch.length) continue
-        if (!(await fix(batch)) && batch.length > 1) {
-          // The model lost count: one paragraph at a time instead.
-          for (const i of batch) await fix([i])
+        if (!(await fix(batch))) {
+          if (batch.length > 1) {
+            // The model lost count: one paragraph at a time instead.
+            for (const i of batch) if (!(await fix([i]))) unread++
+          } else unread++
         }
         done += batch.length
         onProgress(done, todo.length)
+      }
+      // Nothing usable came back at all: say so, rather than "no changes".
+      if (todo.length && unread === todo.length) {
+        throw new AppError(
+          'invalid-input',
+          `The AI’s replies couldn’t be read as corrections, so nothing was checked. It said: “${lastReply.trim().slice(0, 160)}”`,
+        )
       }
       return { paragraphs: out }
     })
