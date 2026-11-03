@@ -71,6 +71,8 @@ npm run build    # production build into out/
 npm start        # run the production build
 ```
 
+`npm run dev` (and `npm start`) first checks that every package is installed at the locked version, and runs `npm install` itself when one is missing or out of date (after a `git pull` that adds one). So after pulling, `npm run dev` is enough.
+
 ## Checks
 
 ```sh
