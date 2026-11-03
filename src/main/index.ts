@@ -4,6 +4,9 @@ import { appConfig } from '../../app.config'
 import { AppSettingsStore } from './appSettings'
 import { guardClose } from './closeGuard'
 import { DeviceSettingsStore } from './deviceSettings'
+import { DocLeases } from './docLeases'
+import { WindowManager, type WindowOptions } from './windows'
+import { IPC_EVENT_PREFIX } from '@shared/ipc'
 import { captureMenuItems } from './capture'
 import { attachScreenshotKey } from './screenshot'
 import { broadcast, registerIpc } from './ipc'
@@ -19,10 +22,15 @@ app.setPath('userData', join(app.getPath('appData'), appConfig.name))
 if (!app.requestSingleInstanceLock()) app.quit()
 registerMediaScheme()
 
-function createWindow(settings: AppSettingsStore, host: LibraryHost): BrowserWindow {
+function createWindow(
+  settings: AppSettingsStore,
+  host: LibraryHost,
+  options: WindowOptions = {},
+): BrowserWindow {
   const window = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: options.bounds?.width ?? 1200,
+    height: options.bounds?.height ?? 800,
+    ...(options.bounds ? { x: options.bounds.x, y: options.bounds.y } : {}),
     minWidth: 640,
     minHeight: 480,
     title: appConfig.name,
@@ -57,18 +65,19 @@ function createWindow(settings: AppSettingsStore, host: LibraryHost): BrowserWin
   })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
-  if (!app.isPackaged && devUrl) void window.loadURL(devUrl)
-  else void window.loadFile(join(__dirname, '../renderer/index.html'))
+  if (!app.isPackaged && devUrl) void window.loadURL(devUrl + (options.hash ?? ''))
+  else
+    void window.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: options.hash?.slice(1),
+    })
+  window.webContents.on('destroyed', () => leases.releaseAll(window.webContents))
   return window
 }
 
-app.on('second-instance', () => {
-  const [window] = BrowserWindow.getAllWindows()
-  if (window) {
-    if (window.isMinimized()) window.restore()
-    window.focus()
-  }
-})
+const leases = new DocLeases(`${IPC_EVENT_PREFIX}doc:yield`)
+let windows: WindowManager | null = null
+
+app.on('second-instance', () => windows?.focusMain())
 
 void app.whenReady().then(async () => {
   setAppMenu()
@@ -80,12 +89,14 @@ void app.whenReady().then(async () => {
   await host.restore()
   const appSettings = new AppSettingsStore(app.getPath('userData'))
   applySpelling(session.defaultSession, await appSettings.read())
-  registerIpc(host, appSettings)
+  const manager = new WindowManager((options) => createWindow(appSettings, host, options), settings)
+  windows = manager
+  registerIpc(host, appSettings, { manager, leases })
   handleMediaRequests(host)
-  createWindow(appSettings, host)
+  await manager.start()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(appSettings, host)
+    if (BrowserWindow.getAllWindows().length === 0) void manager.start()
   })
 })
 

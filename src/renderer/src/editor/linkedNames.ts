@@ -21,7 +21,8 @@ interface LinkedNamesStorage {
   matcher: NameMatcher
   enabled: boolean
   onHover: ((hover: LinkHover | null) => void) | null
-  onOpen: ((entryId: string) => void) | null
+  /** `window`: middle-click, to peek in a window of its own. */
+  onOpen: ((entryId: string, how?: 'window') => void) | null
 }
 
 declare module '@tiptap/core' {
@@ -103,8 +104,14 @@ export const LinkedNames = Extension.create<object, LinkedNamesStorage>({
               return false
             },
             mousedown(_view, event) {
-              // Ctrl/Cmd+click opens the entry; a plain click just places the cursor.
+              // Ctrl/Cmd+click opens the entry; middle-click peeks at it in a new window;
+              // a plain click just places the cursor.
               const link = linkAt(event.target)
+              if (link?.dataset['entryId'] && event.button === 1) {
+                event.preventDefault()
+                storage.onOpen?.(link.dataset['entryId'], 'window')
+                return true
+              }
               if (link?.dataset['entryId'] && (event.ctrlKey || event.metaKey)) {
                 event.preventDefault()
                 storage.onOpen?.(link.dataset['entryId'])

@@ -132,6 +132,14 @@ Layout of a writing window (there is no library sidebar; navigation goes through
 
 Window positions, split sizes and torn-off windows are device-only and never synced.
 
+**As built in 5:**
+
+- **Split screen** puts writing (left) and the world (right) side by side in one window: the ⫽ button by the Write/World switch, or Ctrl/Cmd+\ (again to close). Drag the divider to resize (double-click resets); the size is remembered on this device. Each side has a slim tab with its name, Pop out (⧉) and Close (✕). Beside the world, the writing pane starts with the binder closed so the page has room, and page margins shrink with a narrow sheet.
+- **Tear-off windows:** drag a pane's tab out of the window (or Pop out) to open it in a window of its own at the same place (`#pane=…` in the window's address). The torn-off window's tab has **Dock**, which puts it back beside the main window's view and closes the window; a torn-off tab dragged onto the main window docks too. Closing the main window closes its torn-off windows, and they reopen where they were on the next start. Window positions and sizes are remembered (device-only, in the app's data folder).
+- **Internal links:** Ctrl/Cmd+click a linked name (or "Open in World" on its card) shows the entry in a torn-off window of that world if one is open, otherwise beside the page (opening the split). Middle-click peeks at it in a new window. The Write/World switch still swaps the whole view.
+- **Shortcuts follow the pane being worked in** (the last one clicked or focused, marked by an accent line under its tab): F3, find, focus mode, quick add, undo, back/forward each act there only.
+- **Live across windows:** every window hears every change. A chapter (and an entry's page text) is edited in **one place at a time**: a second window or pane showing it gets it read-only, updating as the other place saves, with "This chapter is being edited in another window or pane… Edit here". Edit here asks the other place to save and stop first (it then shows the note), so no words are lost; a window that doesn't answer within 4 seconds loses the edit anyway. The main process keeps who-edits-what (`docLeases`); a closed window frees everything it held.
+
 ## Editor
 
 The writing surface is a **page**, not open empty space: a fixed-width sheet centred on a darker background, with real margins.
@@ -725,7 +733,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
    - **4c: The people board.** Drag-to-link, coloured relationship lines, blending, dashed for over, legend filters, family tree view.
    - **4d: Time.** The scrubber, facts as of the selected moment everywhere, moving people by dragging, trails and playback, map versions, event pins.
    - **4e: Skins.** The world-skin system and vocabulary files; Fantasy, Cyberpunk and Arcade skins; lighter mode.
-5. **Layout:** split screen, tear-off windows, live updates across windows.
+5. **Layout:** split screen, tear-off windows, live updates across windows. (Done.)
 6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export.
 7. **Sync engine:** Cloudflare Worker, R2 and D1 with step-by-step setup instructions; outbox, manifests, pull rule, conditional uploads, conflict copies, and the failure test harness. Ship only when the harness passes.
 8. **Smart Storage and settings sync.**

@@ -41,6 +41,7 @@ import { useOverlays } from './overlays'
 import { StatusBar } from './StatusBar'
 import { useLibraryActions } from './useLibraryActions'
 import { useWords } from '../skins/useWords'
+import { usePane } from '../panes/PaneContext'
 
 type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'world'
 
@@ -59,10 +60,16 @@ export function WritingView(props: {
   onBack: () => void
   open?: ChapterTarget
   /** Switch to World mode (the series' world), optionally at an entry. */
-  onOpenWorld?: (entryId?: string) => void
+  /** Opens the world (at an entry): beside, in its own window (`window`), or instead. */
+  onOpenWorld?: (entryId?: string, how?: 'window') => void
+  /** Opens the world beside this view (split screen); unset when it already is. */
+  onOpenWorldBeside?: () => void
+  /** Beside the world already: no Write/World switch. */
+  hideModeSwitch?: boolean
   onOpenSeries: () => void
 }) {
   const word = useWords()
+  const pane = usePane()
   const { series, volume } = props
   const ref = useMemo(() => ({ seriesId: series.id, volumeId: volume.id }), [series.id, volume.id])
   const lastChapterKey = `writing.lastChapter.${volume.id}`
@@ -78,8 +85,9 @@ export function WritingView(props: {
     state: 'saved',
     error: null,
   })
+  // Beside the world the pane is narrow: the page gets the room, the binder starts closed.
   const [panel, setPanel] = useState<Panel | null>(() =>
-    loadLocal('writing.panel') === 'closed' ? null : 'binder',
+    pane.split || loadLocal('writing.panel') === 'closed' ? null : 'binder',
   )
   const editor = useRef<EditorHandle>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -181,6 +189,16 @@ export function WritingView(props: {
     if (chosenId && chosenId in view.chapters) return chosenId
     return chapterOrder(toContainers(view.outline))[0] ?? null
   }, [view, chosenId])
+  // Where this pane is (a torn-off window reopens there; popping out starts there).
+  const { onRoute } = pane
+  useEffect(() => {
+    onRoute?.({
+      kind: 'write',
+      seriesId: series.id,
+      volumeId: volume.id,
+      chapterId: selectedId ?? undefined,
+    })
+  }, [onRoute, series.id, volume.id, selectedId])
 
   // Open a chapter asked for from elsewhere (an entry's appearances), at the first mention.
   const { open } = props
@@ -211,7 +229,8 @@ export function WritingView(props: {
 
   const openPanel = (next: Panel | null) => {
     setPanel(next)
-    saveLocal('writing.panel', next ? 'open' : 'closed')
+    // Remembered for the full-width view only; a split pane always starts with it closed.
+    if (!pane.split) saveLocal('writing.panel', next ? 'open' : 'closed')
   }
   const togglePanel = (which: Panel) => openPanel(panel === which ? null : which)
 
@@ -230,6 +249,8 @@ export function WritingView(props: {
   // Keyboard: F3 rename, Ctrl/Cmd+F find, Ctrl/Cmd+Shift+F focus mode, Esc leaves focus mode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Beside another pane, only the one being worked in answers shortcuts.
+      if (!pane.active) return
       const key = e.key.toLowerCase()
       if (e.key === 'F3') renameOpenChapter()
       else if (modKey(e) && e.shiftKey && key === 'f') setFocusMode((f) => !f)
@@ -529,7 +550,17 @@ export function WritingView(props: {
           )}
         </nav>
         <span className="status-spacer" />
-        {props.onOpenWorld && (
+        {props.onOpenWorldBeside && (
+          <button
+            className="icon side-by-side"
+            aria-label="Open the world beside"
+            title={`Open the world beside (${MOD}\\)`}
+            onClick={props.onOpenWorldBeside}
+          >
+            ⫽
+          </button>
+        )}
+        {props.onOpenWorld && !props.hideModeSwitch && (
           <div className="segmented mode-switch" role="radiogroup" aria-label="Mode">
             <button role="radio" aria-checked className="active">
               Write
@@ -698,7 +729,7 @@ export function WritingView(props: {
               nameIndex={nameIndex}
               linkNames={settings.linkNames}
               hoverCards={settings.world.hoverCards}
-              onOpenEntry={(entryId) => props.onOpenWorld?.(entryId)}
+              onOpenEntry={(entryId, how) => props.onOpenWorld?.(entryId, how)}
               onSelection={setSelectionParagraphs}
             />
           ) : (

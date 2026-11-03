@@ -686,6 +686,11 @@ button.new-card:hover {
   width: min(100%, calc(var(--text-width, 660px) + 2 * var(--page-padding-inline)));
   margin: 0 auto;
   cursor: text;
+  /* Side margins shrink with a narrow sheet (a split pane), so the text keeps its room. */
+  container-type: inline-size;
+}
+.page-stack :is(.page-content, .page) {
+  padding-inline: min(var(--page-padding-inline), 9cqw);
 }
 .page-stack.continuous .page {
   width: 100%;
@@ -3246,4 +3251,81 @@ kbd {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
   gap: 0.25rem 1rem;
+}
+
+/* ---------- panes: split screen and torn-off windows ---------- */
+
+.split-view {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+}
+.split-view.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.pane-body {
+  min-height: 0;
+  min-width: 0;
+}
+.pane-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.5rem;
+  background: var(--surface-2);
+  border-bottom: 2px solid var(--border);
+  color: var(--muted);
+  cursor: grab;
+  user-select: none;
+}
+.pane.active .pane-tab {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+.pane-grip {
+  letter-spacing: -0.1em;
+}
+.pane-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-tab .icon {
+  padding: 0 0.3rem;
+}
+.split-divider {
+  background: var(--border);
+  cursor: col-resize;
+  touch-action: none;
+}
+.split-divider:hover,
+.split-divider:focus-visible,
+.split-view.resizing .split-divider {
+  background: var(--accent);
+  outline: none;
+}
+.side-by-side {
+  font-size: 1.1rem;
+}
+.read-only-note {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem auto;
+  padding: 0.4rem 0.8rem;
+  max-width: var(--text-width);
+  border-radius: 6px;
+  background: var(--warning-bg);
+  color: var(--text);
+}
+.read-only-note .link {
+  white-space: nowrap;
 }

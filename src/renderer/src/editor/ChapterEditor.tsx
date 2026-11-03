@@ -1,8 +1,10 @@
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { EditorContent, useEditor, type JSONContent } from '@tiptap/react'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import type { ChapterFile, ChapterType } from '@shared/schema'
-import { api, describeError } from '../api'
+import { api, describeError, useIpcEvent } from '../api'
+import { ReadOnlyNote } from '../panes/ReadOnlyNote'
+import { useDocLease } from '../panes/useDocLease'
 import { RECALC_DELAY_MS, type ActiveEcho, type AnalysisOptions } from './analysisDecorations'
 import { PAPER_SIZES } from '@shared/settings'
 import { useSettings } from '../useTheme'
@@ -54,7 +56,8 @@ interface Props {
   linkNames: boolean
   /** Show the entry's card when a linked name is hovered. */
   hoverCards?: boolean
-  onOpenEntry: (entryId: string) => void
+  /** `window`: peek at it in a window of its own (middle-click). */
+  onOpenEntry: (entryId: string, how?: 'window') => void
   handle: Ref<EditorHandle>
   onMeta: (meta: ChapterMeta) => void
   onWords: (words: number) => void
@@ -73,21 +76,48 @@ interface Props {
   onSelection: (paragraphs: string[] | null) => void
 }
 
-/** Loads a chapter, then shows it as an editable page. */
+/**
+ * Loads a chapter, then shows it as an editable page. If another window or
+ * pane is editing it, it shows read-only and follows that one's saves, with
+ * a way to move editing here.
+ */
 export function ChapterEditor(props: Props) {
   const { seriesId, volumeId, chapterId } = props
   const [chapter, setChapter] = useState<ChapterFile | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const lease = useDocLease(`chapter:${chapterId}`)
 
+  const read = useCallback(
+    () => api.invoke('chapter:read', { seriesId, volumeId, chapterId }),
+    [seriesId, volumeId, chapterId],
+  )
   useEffect(() => {
-    api
-      .invoke('chapter:read', { seriesId, volumeId, chapterId })
-      .then(setChapter, (err) => setError(describeError(err).message))
-  }, [seriesId, volumeId, chapterId])
+    read().then(setChapter, (err) => setError(describeError(err).message))
+  }, [read])
+  // Read-only: follow the other place's saves.
+  useIpcEvent('library:changed', (c) => {
+    if (lease.editing !== false || c.kind !== 'chapter' || c.chapterId !== chapterId) return
+    read().then(setChapter, () => {})
+  })
 
   if (error) return <p className="error page-message">{error}</p>
-  if (!chapter) return null
-  return <EditorPage {...props} chapter={chapter} />
+  if (!chapter || lease.editing === null) return null
+  return (
+    <EditorPage
+      {...props}
+      key={lease.editing ? 'edit' : 'view'}
+      chapter={chapter}
+      readOnly={!lease.editing}
+      notice={
+        lease.editing ? null : (
+          <ReadOnlyNote
+            what="chapter"
+            onTake={() => void lease.take(async () => setChapter(await read()))}
+          />
+        )
+      }
+    />
+  )
 }
 
 /**
@@ -137,8 +167,16 @@ function textNodeRange(doc: PMNode, n: number, start: number, end: number) {
   return found
 }
 
-function EditorPage(props: Props & { chapter: ChapterFile }) {
+function EditorPage(
+  props: Props & {
+    chapter: ChapterFile
+    /** Shown, not edited: another window or pane is editing this chapter. */
+    readOnly?: boolean
+    notice?: React.ReactNode
+  },
+) {
   const { chapter, onMeta, onWords, onScenes, onSaveState } = props
+  const readOnly = !!props.readOnly
   const [meta, setMeta] = useState<ChapterMeta>({
     title: chapter.title,
     type: chapter.type,
@@ -173,7 +211,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
       setContentError(error.message)
     },
     onCreate: ({ editor: e }) => {
-      if (unreadable.current) e.setEditable(false)
+      if (unreadable.current || readOnly) e.setEditable(false)
       onWords(docWords(e.state.doc))
       onScenes(findScenes(e.state.doc))
       props.onParagraphs(editorParagraphs(e.state.doc))
@@ -187,7 +225,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
       }, SELECTION_DELAY_MS)
     },
     onUpdate: ({ editor: e }) => {
-      if (unreadable.current) return
+      if (unreadable.current || readOnly) return
       saver.changeContent()
       onWords(docWords(e.state.doc))
       onScenes(findScenes(e.state.doc))
@@ -278,7 +316,31 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
     if (range) editor.chain().focus().setTextSelection(range).scrollIntoView().run()
   }, [reveal, editor])
 
+  // Read-only: show the other place's latest save in place (keeping the scroll position).
+  const [shown, setShown] = useState(chapter)
+  if (readOnly && shown !== chapter) {
+    setShown(chapter)
+    const next = {
+      title: chapter.title,
+      type: chapter.type,
+      pov: chapter.pov,
+      povEntryId: chapter.povEntryId ?? null,
+    }
+    setMeta(next)
+    onMeta(next)
+  }
+  useEffect(() => {
+    if (!readOnly || editor.isDestroyed) return
+    editor.commands.setContent(editableContent(shown.content), { emitUpdate: false })
+    onWords(docWords(editor.state.doc))
+    onScenes(findScenes(editor.state.doc))
+    props.onParagraphs(editorParagraphs(editor.state.doc))
+    // Only when another save arrives; the callbacks are stable enough not to matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, readOnly, editor])
+
   const update = (patch: Partial<ChapterMeta>) => {
+    if (readOnly) return
     const next = { ...meta, ...patch }
     setMeta(next)
     onMeta(next)
@@ -286,6 +348,16 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
   }
   useImperativeHandle(props.handle, () => ({
     setTitle(title: string) {
+      if (readOnly) {
+        // Renamed from the binder while another place edits it: save just the title.
+        void api.invoke('chapter:save', {
+          seriesId: props.seriesId,
+          volumeId: props.volumeId,
+          chapterId: chapter.id,
+          patch: { title },
+        })
+        return
+      }
       update({ title })
       void saver.flush()
     },
@@ -295,6 +367,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
       editor.chain().focus().setTextSelection(range).scrollIntoView().run()
     },
     replaceSelection(replacement: string, query: string, matchCase: boolean) {
+      if (readOnly) return false
       const { from, to } = editor.state.selection
       const selected = editor.state.doc.textBetween(from, to)
       const same = matchCase ? selected === query : selected.toLowerCase() === query.toLowerCase()
@@ -311,6 +384,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
       return $from.parent.textBetween(Math.max(0, $from.parentOffset - 40), $from.parentOffset, ' ')
     },
     insertSceneBreak() {
+      if (readOnly) return
       editor.chain().focus().insertSceneBreak().run()
     },
     jumpTo(pos: number) {
@@ -377,6 +451,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
           </button>
         </div>
       )}
+      {props.notice}
       <div className="page-scroll">
         <div
           ref={stackRef}
@@ -405,6 +480,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
             <div className="chapter-meta small">
               <select
                 aria-label="Chapter type"
+                disabled={readOnly}
                 value={meta.type}
                 onChange={(e) => update({ type: e.target.value as ChapterType })}
               >
@@ -413,6 +489,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
               </select>
               <input
                 aria-label="Point of view"
+                disabled={readOnly}
                 placeholder="POV"
                 list="pov-options"
                 value={povLabel}
@@ -436,6 +513,7 @@ function EditorPage(props: Props & { chapter: ChapterFile }) {
               autoFocus={!chapter.title && !chapter.content.content?.length}
               className="chapter-title"
               aria-label="Chapter title"
+              readOnly={readOnly}
               value={meta.title}
               placeholder="Untitled chapter"
               onChange={(e) => update({ title: e.target.value })}

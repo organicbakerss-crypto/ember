@@ -26,6 +26,7 @@ import { worldMapOf } from './map/mapModel'
 import { useSettings } from '../useTheme'
 import { TimeContext, type TimeState } from './time/TimeContext'
 import { useWords } from '../skins/useWords'
+import { usePane } from '../panes/PaneContext'
 import { TimelineView } from './time/TimelineView'
 
 type Place =
@@ -46,6 +47,10 @@ export function WorldView(props: {
   worldId: string
   /** Entry to open (e.g. from a linked name in a chapter). */
   entryId?: string
+  /** Changes on each request to show `entryId`, so asking again for the same entry still shows it. */
+  entryToken?: number
+  /** Opens the writing view beside this one (split screen); unset when it already is. */
+  onWriteBeside?: () => void
   series: SeriesSummary[]
   /** When opened from a volume: its name, for the Write/World switch. */
   writeLabel?: string
@@ -58,6 +63,7 @@ export function WorldView(props: {
   const record = useUndo()
   const { settings } = useSettings()
   const word = useWords()
+  const pane = usePane()
   /** A skin's word with the plain one after it, for places that are searched ("Atlas (Where)"). */
   const both = (key: Lens | 'inbox', plain: string) => {
     const w = word(key, plain)
@@ -122,9 +128,10 @@ export function WorldView(props: {
   )
 
   // An entry asked for from outside (a linked name in a chapter).
-  const [wanted, setWanted] = useState(props.entryId)
-  if (props.entryId !== wanted) {
-    setWanted(props.entryId)
+  const request = `${props.entryId ?? ''}:${props.entryToken ?? 0}`
+  const [wanted, setWanted] = useState(request)
+  if (request !== wanted) {
+    setWanted(request)
     if (props.entryId) {
       const next: Place = { kind: 'entry', entryId: props.entryId }
       setNav((n) => {
@@ -138,10 +145,18 @@ export function WorldView(props: {
     setRecorded(place.entryId)
     setRecent(pushRecent(worldId, place.entryId))
   }
+  // Where this pane is (a torn-off window reopens there; popping out starts there).
+  const shownEntry = place.kind === 'entry' ? place.entryId : undefined
+  const { onRoute } = pane
+  useEffect(() => {
+    onRoute?.({ kind: 'world', worldId, entryId: shownEntry })
+  }, [onRoute, worldId, shownEntry])
 
   // Back and forward: Alt+arrows and the mouse's side buttons.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Beside another pane, only the one being worked in answers shortcuts.
+      if (!pane.active) return
       if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowLeft') back()
       else if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowRight') forward()
       else if (modKey(e) && e.altKey && e.code === 'KeyN') setQuickAdd({})
@@ -149,6 +164,7 @@ export function WorldView(props: {
       e.preventDefault()
     }
     const onMouse = (e: MouseEvent) => {
+      if (!pane.active) return
       if (e.button === 3) back()
       else if (e.button === 4) forward()
       else return
@@ -160,7 +176,7 @@ export function WorldView(props: {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('mouseup', onMouse)
     }
-  }, [back, forward])
+  }, [back, forward, pane.active])
 
   const showDigest = () =>
     void api
@@ -320,6 +336,16 @@ export function WorldView(props: {
           >
             ⋯
           </button>
+          {props.onWriteBeside && (
+            <button
+              className="icon side-by-side"
+              aria-label="Open writing beside"
+              title={`Open writing beside (${MOD}\\)`}
+              onClick={props.onWriteBeside}
+            >
+              ⫽
+            </button>
+          )}
           {props.onWrite && (
             <div className="segmented mode-switch" role="radiogroup" aria-label="Mode">
               <button

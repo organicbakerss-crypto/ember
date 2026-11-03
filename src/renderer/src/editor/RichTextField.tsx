@@ -22,12 +22,14 @@ export function RichTextField(props: {
   onChange: () => void
   extensions?: Extensions
   ariaLabel: string
+  /** False: shown, not edited (another window or pane is editing it). */
+  editable?: boolean
   /** Linked names inside this text (world entries). */
   names?: {
     index: NameIndex
     enabled: boolean
     hoverCards?: boolean
-    onOpen: (entryId: string) => void
+    onOpen: (entryId: string, how?: 'window') => void
   }
 }) {
   const editor = useEditor({
@@ -36,6 +38,7 @@ export function RichTextField(props: {
       ? props.content
       : { type: 'doc', content: [{ type: 'paragraph' }] }) as JSONContent,
     enableContentCheck: true,
+    editable: props.editable ?? true,
     onContentError: ({ editor: e }) => e.setEditable(false),
     onUpdate: () => props.onChange(),
     editorProps: {

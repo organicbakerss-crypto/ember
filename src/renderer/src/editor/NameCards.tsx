@@ -27,7 +27,7 @@ export function NameCards(props: {
   enabled: boolean
   /** Cards on hover (otherwise names only open on Ctrl/Cmd+click). */
   hoverCards?: boolean
-  onOpen: (entryId: string) => void
+  onOpen: (entryId: string, how?: 'window') => void
 }) {
   const { editor, index, enabled, onOpen } = props
   const [hover, setHover] = useState<LinkHover | null>(null)
@@ -52,9 +52,9 @@ export function NameCards(props: {
         if (h && cardsRef.current) showTimer.current = setTimeout(() => setHover(h), SHOW_DELAY_MS)
         else hideTimer.current = setTimeout(() => setHover(null), HIDE_DELAY_MS)
       },
-      onOpen: (id) => {
+      onOpen: (id, how) => {
         setHover(null)
-        openRef.current(id)
+        openRef.current(id, how)
       },
     })
     return () => {

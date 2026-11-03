@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { usePane } from '../panes/PaneContext'
 import { describeError } from '../api'
 import { useOverlays } from '../components/overlays'
 import { modKey } from '../components/commands'
@@ -26,6 +27,8 @@ function isTextField(target: EventTarget | null): boolean {
 export function useUndo() {
   const steps = useRef<UndoStep[]>([])
   const { toast } = useOverlays()
+  // Beside another pane, Ctrl/Cmd+Z undoes only in the one being worked in.
+  const { active } = usePane()
 
   const runUndo = useCallback(
     async (step: UndoStep) => {
@@ -50,7 +53,14 @@ export function useUndo() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!modKey(e) || e.shiftKey || e.key.toLowerCase() !== 'z' || isTextField(e.target)) return
+      if (
+        !active ||
+        !modKey(e) ||
+        e.shiftKey ||
+        e.key.toLowerCase() !== 'z' ||
+        isTextField(e.target)
+      )
+        return
       const step = steps.current.at(-1)
       if (!step) return
       e.preventDefault()
@@ -58,7 +68,7 @@ export function useUndo() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [runUndo])
+  }, [runUndo, active])
 
   return record
 }

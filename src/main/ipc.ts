@@ -1,5 +1,7 @@
 /** Registers every IPC request handler. Inputs are validated before they reach the library. */
 import { BrowserWindow, dialog, ipcMain, session, type IpcMainInvokeEvent } from 'electron'
+import type { DocLeases } from './docLeases'
+import type { WindowManager } from './windows'
 import {
   IPC_EVENT_PREFIX,
   IPC_INVOKE_PREFIX,
@@ -24,8 +26,35 @@ type Handlers = {
   ) => Promise<IpcResult<C>> | IpcResult<C>
 }
 
-export function registerIpc(host: LibraryHost, settings: AppSettingsStore): void {
+export function registerIpc(
+  host: LibraryHost,
+  settings: AppSettingsStore,
+  windows: { manager: WindowManager; leases: DocLeases },
+): void {
+  const { manager, leases } = windows
   const handlers: Handlers = {
+    'window:open': (input, event) => {
+      manager.openPane(input.route, null, BrowserWindow.fromWebContents(event.sender))
+      return null
+    },
+    'window:dock': (input, event) => {
+      manager.dock(BrowserWindow.fromWebContents(event.sender), input.route, input.keep ?? false)
+      return null
+    },
+    'window:route': (input, event) => {
+      manager.setRoute(BrowserWindow.fromWebContents(event.sender), input.route)
+      return null
+    },
+    'window:showEntry': (input) => manager.showEntry(input.worldId, input.entryId),
+    'doc:claim': (input, event) => leases.claim(input.key, event.sender, input.pane, input.take),
+    'doc:release': (input, event) => {
+      leases.release(input.key, event.sender, input.pane)
+      return null
+    },
+    'doc:yielded': (input, event) => {
+      leases.yielded(input.key, event.sender, input.pane)
+      return null
+    },
     'library:status': () => host.status(),
     'library:openDefault': () => host.open(host.defaultPath),
     'library:choose': async (_input, event) => {

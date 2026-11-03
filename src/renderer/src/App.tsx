@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { LibraryStatus } from '@shared/ipc'
+import { paneFromHash } from '@shared/panes'
 import { api, useIpcEvent } from './api'
 import { flushAll } from './saving'
 import { SettingsProvider, useSettings } from './useTheme'
@@ -8,6 +9,9 @@ import { CommandProvider, useCommands } from './components/commands'
 import { OverlayProvider, useOverlays } from './components/overlays'
 import { SYSTEM_THEME, themes } from './themes'
 import { Welcome } from './components/Welcome'
+
+// A torn-off window opens at its pane's route, carried in its address.
+const detached = paneFromHash(window.location.hash)
 
 export function App() {
   const [status, setStatus] = useState<LibraryStatus | null>(null)
@@ -33,7 +37,7 @@ export function App() {
           {status.state === 'none' ? (
             <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
           ) : (
-            <Home key={status.root} />
+            <Home key={status.root} detached={detached} />
           )}
         </CommandProvider>
       </OverlayProvider>

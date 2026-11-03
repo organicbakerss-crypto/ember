@@ -6,6 +6,7 @@
  */
 import { z } from 'zod'
 import { MAX_COVER_BYTES, MAX_MAP_BYTES, type CoverInfo, type CoverTarget } from './media'
+import { docKeySchema, paneRouteSchema, type PaneRoute } from './panes'
 import { PAGE_WIDTH, STATUS_ITEMS, type AppSettings } from './settings'
 
 export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
@@ -550,6 +551,22 @@ export const ipcInputs = {
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
   'window:flushed': z.void(),
+  /** Pops a pane out into a window of its own. */
+  'window:open': z.object({ route: paneRouteSchema }),
+  /**
+   * Puts this torn-off window's pane back beside the main window's view, and
+   * closes this window; with `keep`, just shows the route there (this window stays).
+   */
+  'window:dock': z.object({ route: paneRouteSchema, keep: z.boolean().optional() }),
+  /** This window's pane moved (remembered so it reopens there). */
+  'window:route': z.object({ route: paneRouteSchema }),
+  /** Shows an entry in a torn-off window of its world, if there is one. Returns whether it did. */
+  'window:showEntry': z.object({ worldId: id('world'), entryId: id('entry') }),
+  /** Asks to edit a document; `take` asks whoever is editing it to save and stop. */
+  'doc:claim': z.object({ key: docKeySchema, pane: z.string().min(1).max(80), take: z.boolean() }),
+  'doc:release': z.object({ key: docKeySchema, pane: z.string().min(1).max(80) }),
+  /** Reply to `doc:yield`: everything is saved and this pane stopped editing. */
+  'doc:yielded': z.object({ key: docKeySchema, pane: z.string().min(1).max(80) }),
   'world:create': z.object({ name: nameSchema }),
   'cover:set': z.object({
     target: coverTargetSchema,
@@ -628,6 +645,13 @@ export interface IpcResults {
   'settings:get': AppSettings
   'settings:update': AppSettings
   'window:flushed': null
+  'window:open': null
+  'window:dock': null
+  'window:route': null
+  'window:showEntry': boolean
+  'doc:claim': { editing: boolean }
+  'doc:release': null
+  'doc:yielded': null
   'cover:set': CoverInfo
   'cover:remove': null
 }
@@ -659,6 +683,12 @@ export interface IpcEvents {
   'app:notice': string
   /** The window is about to close: save everything, then invoke `window:flushed`. */
   'window:flush': null
+  /** A torn-off pane was docked back: open it beside the current view. */
+  'pane:dock': PaneRoute
+  /** Show this entry (in this torn-off world window). */
+  'pane:showEntry': { worldId: string; entryId: string }
+  /** Another place wants to edit this document: save, stop editing, invoke `doc:yielded`. */
+  'doc:yield': { key: string; pane: string }
 }
 
 /** Shape of `window.api`, exposed by the preload script. */

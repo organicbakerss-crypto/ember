@@ -55,6 +55,7 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - skins are data files; Settings → World: full, plain or minimal skin, themed words on or off
   - the writing page stays plain and readable in every skin; lighter mode keeps skins cheap
 - **Themes:** 24 in all. Light, Dark and High Contrast, plus 21 with a world skin and their own words: Fantasy, Cyberpunk, Arcade, Storybook, Magic Academy, Noir, Isekai, Comic Book, Blueprint, ’90s Desktop, Lo-fi Study, Deep Space, Gothic Horror, Steampunk, Wasteland, Y2K Aero, Tarot, Atomic Age, Trading Card, Wild West and Circus
+- **Layout:** writing and the world side by side (Ctrl/Cmd+\\), panes torn off into their own windows and docked back, live updates across windows, one place edits a chapter at a time
 
 ## Requirements
 

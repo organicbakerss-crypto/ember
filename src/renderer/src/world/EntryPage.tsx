@@ -20,6 +20,9 @@ import { useSettings } from '../useTheme'
 import { EntryPicker } from './EntryPicker'
 import { FactEditor } from './FactEditor'
 import { MomentNote } from './time/TimeScrubber'
+import { ReadOnlyNote } from '../panes/ReadOnlyNote'
+import { useDocLease } from '../panes/useDocLease'
+import { usePane } from '../panes/PaneContext'
 import { WhenSection } from './time/WhenSection'
 import {
   backlinks,
@@ -63,6 +66,8 @@ export function EntryPage(props: {
   const [error, setError] = useState<string | null>(null)
   // Bumped when the page text changed elsewhere (a merge, an undo), to reload the editor.
   const [bodyVersion, setBodyVersion] = useState(0)
+  // One place edits the page text at a time; elsewhere it shows read-only and kept live.
+  const lease = useDocLease(`entry:${entryId}`)
   const knownBody = useRef<string | null>(null)
 
   const load = useCallback(() => {
@@ -83,14 +88,28 @@ export function EntryPage(props: {
   })
 
   if (error) return <p className="error page-message">{error}</p>
-  if (!entry || entry.id !== entryId) return null
+  if (!entry || entry.id !== entryId || lease.editing === null) return null
   return (
     <EntryView
       {...props}
-      key={`${entry.id}:${bodyVersion}`}
+      key={`${entry.id}:${bodyVersion}:${lease.editing}`}
       entry={entry}
       setEntry={setEntry}
       onBodySaved={(saved) => (knownBody.current = saved)}
+      bodyNotice={
+        lease.editing ? null : (
+          <ReadOnlyNote
+            what="page"
+            onTake={() =>
+              void lease.take(async () => {
+                const fresh = await api.invoke('entry:read', { worldId, entryId })
+                knownBody.current = JSON.stringify(fresh.body)
+                setEntry(fresh)
+              })
+            }
+          />
+        )
+      }
     />
   )
 }
@@ -101,9 +120,12 @@ function EntryView(
     setEntry: (entry: WorldEntryFile) => void
     /** The page text as last saved (to tell our own saves from changes made elsewhere). */
     onBodySaved: (body: string) => void
+    /** Set when another window or pane is editing the page text (shown read-only). */
+    bodyNotice?: React.ReactNode
   },
 ) {
   const { world, entry, setEntry, record, actions } = props
+  const pane = usePane()
   const worldId = world.view.world.id
   const { settings } = useSettings()
   const { openMenu, toast } = useOverlays()
@@ -259,14 +281,14 @@ function EntryView(
   // F3 renames.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'F3') {
+      if (e.key === 'F3' && pane.active) {
         e.preventDefault()
         setRenaming(true)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [pane.active])
 
   /* ----- portrait ----- */
 
@@ -538,7 +560,9 @@ function EntryView(
       )}
 
       <section className="entry-body">
+        {props.bodyNotice}
         <RichTextField
+          editable={!props.bodyNotice}
           content={entry.body}
           placeholder={`Write about ${entry.name}… (type @ to link anything)`}
           ariaLabel={`${entry.name}: page`}

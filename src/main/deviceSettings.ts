@@ -7,9 +7,31 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { writeFileAtomic } from './fs/atomicWrite'
 import { serializeJson } from './fs/jsonFile'
+import { paneRouteSchema } from '@shared/panes'
+
+const boundsSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+})
+export type WindowBounds = z.infer<typeof boundsSchema>
+
+const NO_WINDOWS = { main: null, panes: [] }
 
 const deviceSettingsSchema = z.looseObject({
   libraryPath: z.string().nullable().default(null),
+  /** Where the windows were, and which panes were torn off (restored on the next start). */
+  windows: z
+    .looseObject({
+      main: boundsSchema.nullable().default(null),
+      panes: z
+        .array(z.object({ route: paneRouteSchema, bounds: boundsSchema.nullable() }))
+        .max(20)
+        .default([]),
+    })
+    .catch(NO_WINDOWS)
+    .default(NO_WINDOWS),
 })
 export type DeviceSettings = z.infer<typeof deviceSettingsSchema>
 
