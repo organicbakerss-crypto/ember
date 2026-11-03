@@ -1,6 +1,8 @@
 /** Registers every IPC request handler. Inputs are validated before they reach the library. */
 import { BrowserWindow, dialog, ipcMain, session, type IpcMainInvokeEvent } from 'electron'
 import type { DocLeases } from './docLeases'
+import { copyForRoyalRoad, exportVolume } from './export/service'
+import { readDocx } from './import/docx'
 import type { WindowManager } from './windows'
 import {
   IPC_EVENT_PREFIX,
@@ -33,6 +35,29 @@ export function registerIpc(
 ): void {
   const { manager, leases } = windows
   const handlers: Handlers = {
+    'export:volume': async (input, event) =>
+      exportVolume(host.current, BrowserWindow.fromWebContents(event.sender), {
+        ...input,
+        settings: (await settings.read()).export,
+      }),
+    'export:royalRoad': async (input) =>
+      copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
+    'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
+    'import:chapters': async (input) => {
+      // One after another, so they keep their order at the end of the volume.
+      for (const c of input.chapters) {
+        const created = await host.current.createChapter({
+          seriesId: input.seriesId,
+          volumeId: input.volumeId,
+          title: c.title,
+          type: c.type,
+        })
+        await host.current.saveChapter(input.seriesId, input.volumeId, created.id, {
+          content: c.content,
+        })
+      }
+      return { created: input.chapters.length }
+    },
     'window:open': (input, event) => {
       const from = BrowserWindow.fromWebContents(event.sender)
       manager.openPane(input.route, input.atCursor ? manager.boundsAtCursor(from) : null, from)

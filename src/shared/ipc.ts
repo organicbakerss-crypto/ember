@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { MAX_COVER_BYTES, MAX_MAP_BYTES, type CoverInfo, type CoverTarget } from './media'
 import { docKeySchema, paneRouteSchema, type PaneRoute } from './panes'
 import { PAGE_WIDTH, STATUS_ITEMS, type AppSettings } from './settings'
+import { exportSettingsSchema } from './exportSettings'
 
 export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
 import type { NameSuggestion } from './world/nameCatcher'
@@ -547,10 +548,42 @@ export const ipcInputs = {
         vocabulary: z.boolean(),
       })
       .optional(),
+    export: exportSettingsSchema.optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
   'window:flushed': z.void(),
+  /** Exports a volume (or some of its chapters) to a file the writer picks. */
+  'export:volume': z.object({
+    seriesId: id('series'),
+    volumeId: id('volume'),
+    format: z.enum(['docx', 'pdf', 'epub', 'markdown']),
+    /** Only these chapters (in reading order); the whole volume when left out. */
+    chapterIds: z.array(id('chapter')).min(1).max(5000).optional(),
+  }),
+  /** Copies one chapter for pasting into Royal Road. */
+  'export:royalRoad': z.object({
+    seriesId: id('series'),
+    volumeId: id('volume'),
+    chapterId: id('chapter'),
+  }),
+  /** Picks a Word file and reads it for import (nothing is created yet). */
+  'import:docx': z.void(),
+  /** Adds imported chapters at the end of a volume, in order. */
+  'import:chapters': z.object({
+    seriesId: id('series'),
+    volumeId: id('volume'),
+    chapters: z
+      .array(
+        z.object({
+          title: z.string().trim().max(200),
+          type: chapterTypeSchema,
+          content: richTextDocSchema,
+        }),
+      )
+      .min(1)
+      .max(2000),
+  }),
   /** Pops a pane out into a window of its own (`atCursor`: where its tab was dropped). */
   'window:open': z.object({ route: paneRouteSchema, atCursor: z.boolean().optional() }),
   /** A torn-off window's tab was dropped outside it: docks if that was over the main window. */
@@ -648,6 +681,10 @@ export interface IpcResults {
   'settings:update': AppSettings
   'window:flushed': null
   'window:open': null
+  'export:volume': { path: string; chapters: number; skipped: string[] }
+  'export:royalRoad': { title: string }
+  'import:docx': { fileName: string; html: string; warnings: string[] }
+  'import:chapters': { created: number }
   'window:dropped': boolean
   'window:dock': null
   'window:route': null

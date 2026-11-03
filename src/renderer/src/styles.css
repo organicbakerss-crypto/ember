@@ -3465,3 +3465,106 @@ kbd {
     font-size: 1.35rem;
   }
 }
+
+/* ---------- import and export ---------- */
+
+.export-dialog,
+.import-dialog {
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}
+.import-dialog {
+  width: min(56rem, calc(100vw - 2rem));
+}
+.export-style {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.6rem 1rem;
+}
+.export-style label,
+.import-options label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+.export-chapters {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1.5rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+.import-options {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+.import-chapters {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.import-chapter {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.import-chapter.skipped {
+  opacity: 0.55;
+}
+.import-chapter > .row {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.import-title {
+  flex: 1;
+  min-width: 10rem;
+}
+.import-first {
+  margin: 0.3rem 0 0 1.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-units {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0 0 0 1.6rem;
+  display: grid;
+  gap: 0.15rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.import-units li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+}
+.import-units .import-heading {
+  font-weight: 700;
+}
+.export-dialog,
+.import-dialog {
+  max-width: none;
+}
+.import-chapter input[type='checkbox'],
+.import-chapter select,
+.export-dialog input[type='radio'],
+.export-dialog input[type='checkbox'] {
+  width: auto;
+}
+.import-chapter .import-title {
+  width: auto;
+}
+.import-options select,
+.import-options input {
+  width: auto;
+  min-width: 12rem;
+}

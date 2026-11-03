@@ -41,6 +41,8 @@ import { useOverlays } from './overlays'
 import { StatusBar } from './StatusBar'
 import { useLibraryActions } from './useLibraryActions'
 import { useWords } from '../skins/useWords'
+import { copyChapterForRoyalRoad, ExportDialog } from '../io/ExportDialog'
+import { ImportDialog } from '../io/ImportDialog'
 import { usePane } from '../panes/PaneContext'
 
 type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'world'
@@ -105,7 +107,12 @@ export function WritingView(props: {
   const [chapterParagraphs, setChapterParagraphs] = useState<string[]>([])
   const [selectionParagraphs, setSelectionParagraphs] = useState<string[] | null>(null)
   const { settings } = useSettings()
-  const { choose } = useOverlays()
+  const { choose, openMenu } = useOverlays()
+  // Export and import dialogs (export can start with one chapter chosen).
+  const [exporting, setExporting] = useState<{ chapterId: string | null; only?: boolean } | null>(
+    null,
+  )
+  const [importing, setImporting] = useState(false)
   const actions = useLibraryActions()
 
   const refresh = useCallback(() => {
@@ -495,6 +502,25 @@ export function WritingView(props: {
         select(id)
       },
     })),
+    {
+      id: 'export',
+      title: 'Export… (Word, PDF, EPUB, Markdown)',
+      run: () => setExporting({ chapterId: selectedId }),
+    },
+    ...(selectedId
+      ? [
+          {
+            id: 'royal-road',
+            title: 'Copy this chapter for Royal Road',
+            run: () =>
+              void copyChapterForRoyalRoad(
+                { seriesId: series.id, volumeId: volume.id, chapterId: selectedId },
+                actions.toast,
+              ),
+          },
+        ]
+      : []),
+    { id: 'import-docx', title: 'Import from Word (.docx)…', run: () => setImporting(true) },
   ]
   useCommands('writing', commands)
 
@@ -550,6 +576,32 @@ export function WritingView(props: {
           )}
         </nav>
         <span className="status-spacer" />
+        <button
+          className="icon"
+          aria-label="Volume menu"
+          title="Export, copy for Royal Road, import"
+          onClick={(e) =>
+            openMenu(e, [
+              {
+                label: 'Export… (Word, PDF, EPUB, Markdown)',
+                onSelect: () => setExporting({ chapterId: selectedId }),
+              },
+              {
+                label: 'Copy this chapter for Royal Road',
+                disabled: !selectedId,
+                onSelect: () =>
+                  selectedId &&
+                  void copyChapterForRoyalRoad(
+                    { seriesId: series.id, volumeId: volume.id, chapterId: selectedId },
+                    actions.toast,
+                  ),
+              },
+              { label: 'Import from Word (.docx)…', onSelect: () => setImporting(true) },
+            ])
+          }
+        >
+          ⋯
+        </button>
         {props.onOpenWorldBeside && (
           <button
             className="icon side-by-side"
@@ -640,6 +692,13 @@ export function WritingView(props: {
               onRenamingChange={setRenamingId}
               onRenameChapter={renameChapter}
               onTrashChapter={trashChapter}
+              onCopyForRoyalRoad={(chapterId) =>
+                void copyChapterForRoyalRoad(
+                  { seriesId: series.id, volumeId: volume.id, chapterId },
+                  actions.toast,
+                )
+              }
+              onExportChapter={(chapterId) => setExporting({ chapterId, only: true })}
               onDeleteArc={(arc) => void deleteArc(arc)}
               revealArcId={revealArcId}
               entryName={(id) => world?.resolve(id)?.name}
@@ -789,6 +848,23 @@ export function WritingView(props: {
             return !!created
           }}
           onCancel={() => setQuickAdd(null)}
+        />
+      )}
+      {exporting && (
+        <ExportDialog
+          series={series}
+          volume={volume}
+          chapterId={exporting.chapterId}
+          startWithChapter={exporting.only}
+          onClose={() => setExporting(null)}
+        />
+      )}
+      {importing && (
+        <ImportDialog
+          series={series}
+          volumeId={volume.id}
+          onClose={() => setImporting(false)}
+          onImported={() => refresh()}
         />
       )}
     </div>

@@ -58,6 +58,26 @@ export interface AppSettings {
   /** Mark names from the world in chapters (hover for a card, Ctrl/Cmd+click to open). */
   linkNames: boolean
   world: WorldSettings
+  export: ExportSettings
+}
+
+/** How exports look (Word, PDF, EPUB, Markdown, Royal Road). */
+export interface ExportSettings {
+  /** On title pages and in the book's details. */
+  author: string
+  headings: 'both' | 'number' | 'title'
+  sceneBreak: string
+  paragraphs: 'spaced' | 'indented'
+  /** PDF paper: A4, US Letter, or 6 × 9 in trade paperback. */
+  paper: 'a4' | 'letter' | 'trade'
+}
+
+export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
+  author: '',
+  headings: 'both',
+  sceneBreak: '* * *',
+  paragraphs: 'spaced',
+  paper: 'a4',
 }
 
 /** World mode and the world beside the page. */
@@ -134,4 +154,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   statusBar: DEFAULT_STATUS_BAR,
   linkNames: true,
   world: DEFAULT_WORLD_SETTINGS,
+  export: DEFAULT_EXPORT_SETTINGS,
 }

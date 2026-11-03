@@ -34,6 +34,7 @@ One Electron app written in React and TypeScript. These are defaults; Claude Cod
 | Voice (default) | Piper or Kokoro | Local, free |
 | Voice (optional) | ElevenLabs | Better voice, needs an API key |
 | Word import | mammoth | .docx to structured content |
+| Export | docx, fflate (EPUB zip), Electron's printToPDF | Word, EPUB and PDF files |
 | Secrets | Electron safeStorage | Tokens and keys never in plain files |
 
 Architecture: the **main process** owns everything that touches disk, network or AI (files, sync, AI calls, sign-in, settings). **Renderer windows are views only.** They request data over IPC and receive change broadcasts, so every open window, split pane or torn-off window stays live.
@@ -158,6 +159,16 @@ The writing surface is a **page**, not open empty space: a fixed-width sheet cen
 - **Trash:** deleted series, volumes, worlds, chapters (and later world entries) go to a local trash, kept until emptied. Restoring puts an item back where it was (a chapter returns to its arc and position; a deleted arc is recreated). Device-only, opened from the bookshelf.
 - **Import:** .docx files, split into chapters at headings or "Chapter X" lines, with a preview to fix splits before anything is created.
 - **Export:** DOCX, PDF, EPUB, Markdown, and copy-for-Royal-Road (per chapter, formatting that pastes cleanly).
+
+**As built in 6:**
+
+- **Import from Word…** is on the series page header and in the writing view's volume menu (⋯). The file is read in the main process (mammoth; images are dropped, with a note) and nothing is created until Import is pressed; the Word file is never changed.
+- **The preview** lists the proposed chapters: include checkbox, title, Chapter/Interlude, word count and first line. Split at: headings and "Chapter …" lines (default), headings only, lines only, or don't split. Chapter lines are "Chapter 3", "Ch. 3: Title", "Chapter Twenty-One", "Chapter IV", and Prologue/Epilogue/Interlude/Foreword/Afterword; a heading or line becomes the title (so "Chapter 1: Arrival" is titled "Arrival") and isn't kept as text. Whatever comes before the first chapter is its own piece, unticked when it's under 40 words (a title page). Fix-ups: Join to previous, Split… (Split here at any paragraph), rename, change type, untick.
+- **Destination:** a new volume (named after the file) or the end of an existing one. Bold, italic, underline, strikethrough, lists and quotes come through; paragraphs that are only "* * *", "#", "⁂" and the like become scene breaks.
+- **Export…** (volume menu, series page volume menu, binder chapter menu, palette) writes Word, PDF, EPUB or Markdown for the whole volume, one chapter, or chosen chapters. Chapter numbers always follow the whole volume, so exporting chapter 2 alone still says "Chapter 2". Every file is written with the safe write.
+- **How exports look** lives in Settings → Import & export (and in the dialog): author for the title page, chapter headings (number and title, number only, title only), the scene-break mark, spaced or indented paragraphs, and the PDF paper size (A4, Letter, 6×9 in). Books have a title page and each chapter starts on a new page.
+- **PDF** is printed by a hidden window with scripts off, from a temporary file. **EPUB** is EPUB 3 with a table of contents (and an EPUB 2 NCX for older readers).
+- **Copy for Royal Road** (binder chapter menu, volume menu, palette) puts the chapter on the clipboard as plain HTML with no fonts or colours (bold, italic, centred scene breaks) plus plain text, so it pastes cleanly into Royal Road's editor.
 
 ### Writing analysis
 
@@ -735,7 +746,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
    - **4d: Time.** The scrubber, facts as of the selected moment everywhere, moving people by dragging, trails and playback, map versions, event pins.
    - **4e: Skins.** The world-skin system and vocabulary files; Fantasy, Cyberpunk and Arcade skins; lighter mode.
 5. **Layout:** split screen, tear-off windows, live updates across windows. (Done.)
-6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export.
+6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export. (Done.)
 7. **Sync engine:** Cloudflare Worker, R2 and D1 with step-by-step setup instructions; outbox, manifests, pull rule, conditional uploads, conflict copies, and the failure test harness. Ship only when the harness passes.
 8. **Smart Storage and settings sync.**
 9. **World extras:** nothing left here; maps moved to 4b and time (the timeline) to 4d.

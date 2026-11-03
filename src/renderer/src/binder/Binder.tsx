@@ -62,6 +62,10 @@ interface BinderProps {
   onRenamingChange: (id: string | null) => void
   onRenameChapter: (chapterId: string, title: string) => Promise<unknown>
   onTrashChapter: (chapterId: string) => void
+  /** Copies a chapter for pasting into Royal Road. */
+  onCopyForRoyalRoad?: (chapterId: string) => void
+  /** Exports one chapter (opens the export dialog with it chosen). */
+  onExportChapter?: (chapterId: string) => void
   onDeleteArc: (arc: OutlineArc) => void
   /** Unfold this arc (e.g. clicked in the breadcrumb). */
   revealArcId: string | null
@@ -194,6 +198,12 @@ export function Binder(props: BinderProps) {
           },
         ],
       },
+      ...(props.onCopyForRoyalRoad
+        ? [{ label: 'Copy for Royal Road', onSelect: () => props.onCopyForRoyalRoad?.(id) }]
+        : []),
+      ...(props.onExportChapter
+        ? [{ label: 'Export…', onSelect: () => props.onExportChapter?.(id) }]
+        : []),
       { label: 'Delete', danger: true, onSelect: () => props.onTrashChapter(id) },
     ]
   }

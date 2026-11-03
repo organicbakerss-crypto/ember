@@ -12,6 +12,7 @@ import { STATUS_LABELS } from '../analysisFormat'
 import { loadLocal, saveLocal } from '../storage'
 import { useSettings } from '../useTheme'
 import { SYSTEM_THEME, themes } from '../themes'
+import { ExportStyleFields } from '../io/ExportDialog'
 import { MOD } from './commands'
 import { useOverlays } from './overlays'
 
@@ -33,11 +34,7 @@ const CATEGORIES: Category[] = [
   { id: 'library', label: 'Library', render: () => <LibrarySettings /> },
   { id: 'shortcuts', label: 'Keyboard shortcuts', later: 'Change the keyboard shortcuts.' },
   { id: 'world', label: 'World', render: () => <WorldSettings /> },
-  {
-    id: 'import',
-    label: 'Import & export',
-    later: 'Word import and DOCX, PDF, EPUB, Markdown and Royal Road export (Milestone 6).',
-  },
+  { id: 'import', label: 'Import & export', render: () => <ImportExportSettings /> },
   {
     id: 'sync',
     label: 'Sync',
@@ -160,6 +157,32 @@ function AppearanceSettings() {
         Themes with a world skin also dress World mode: its look, map styling and its own words
         (Settings → World chooses how much). The writing page stays plain and readable in every
         theme.
+      </p>
+    </section>
+  )
+}
+
+function ImportExportSettings() {
+  const { settings, update } = useSettings()
+  return (
+    <section className="settings-section">
+      <h3>How exports look</h3>
+      <p className="muted small">
+        Used by every export (Word, PDF, EPUB, Markdown) and by “Copy for Royal Road”. Export from a
+        volume’s ⋯ menu, its right-click menu on the series page, a chapter’s right-click menu in
+        the binder, or the command palette.
+      </p>
+      <ExportStyleFields
+        value={settings.export}
+        onChange={(patch) =>
+          update(({ export: current }) => ({ export: { ...current, ...patch } }))
+        }
+      />
+      <h3>Import</h3>
+      <p className="muted small">
+        Bring chapters in from a Word file (.docx) with “Import from Word…” on a series page or in a
+        volume’s ⋯ menu. You see how it will be split into chapters, and can fix it, before anything
+        is created.
       </p>
     </section>
   )

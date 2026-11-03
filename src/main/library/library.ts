@@ -1237,6 +1237,31 @@ export class Library {
     return join(this.paths.localDir, 'history', volumeId, chapterId)
   }
 
+  /**
+   * A volume's chapters in reading order, for export (all of them, or the
+   * ones asked for). Unreadable chapters are left out and named in `skipped`.
+   */
+  async chaptersForExport(
+    seriesId: string,
+    volumeId: string,
+    only?: string[],
+  ): Promise<{ series: string; volume: string; chapters: ChapterFile[]; skipped: string[] }> {
+    const series = await this.getSeries(seriesId)
+    const volume = await this.getVolume(seriesId, volumeId)
+    const chapters: ChapterFile[] = []
+    const skipped: string[] = []
+    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId)) {
+      if (only && !only.includes(chapterId)) continue
+      try {
+        chapters.push(await this.readChapter(seriesId, volumeId, chapterId))
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+        skipped.push(chapterId)
+      }
+    }
+    return { series: series.name, volume: volume.name, chapters, skipped }
+  }
+
   /** Every chapter's paragraphs in reading order. Unreadable chapters are skipped. */
   async volumeTexts(
     seriesId: string,

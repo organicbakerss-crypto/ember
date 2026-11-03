@@ -7,6 +7,8 @@ import { EditableText } from './EditableText'
 import { NewCard } from './NewCard'
 import { useOverlays, type MenuItem } from './overlays'
 import { useLibraryActions } from './useLibraryActions'
+import { ExportDialog } from '../io/ExportDialog'
+import { ImportDialog } from '../io/ImportDialog'
 
 /** A series' volumes as covers, in reading order. */
 export function SeriesPage(props: {
@@ -22,8 +24,12 @@ export function SeriesPage(props: {
   const { openMenu } = useOverlays()
   const actions = useLibraryActions()
 
+  const [exporting, setExporting] = useState<VolumeSummary | null>(null)
+  const [importing, setImporting] = useState(false)
+
   const volumeMenu = (volume: VolumeSummary): MenuItem[] => [
     { label: 'Rename', hint: 'F3', onSelect: () => setRenaming(volume.id) },
+    { label: 'Export… (Word, PDF, EPUB, Markdown)', onSelect: () => setExporting(volume) },
     {
       label: 'Change cover',
       onSelect: () =>
@@ -69,8 +75,22 @@ export function SeriesPage(props: {
               {props.world ? `World: ${props.world.name}` : 'No world linked'}
             </p>
           </div>
+          <span className="status-spacer" />
+          <button onClick={() => setImporting(true)} title="Bring chapters in from a .docx file">
+            Import from Word…
+          </button>
         </div>
       </header>
+      {exporting && (
+        <ExportDialog series={series} volume={exporting} onClose={() => setExporting(null)} />
+      )}
+      {importing && (
+        <ImportDialog
+          series={series}
+          onClose={() => setImporting(false)}
+          onImported={(volumeId) => props.onOpenVolume(volumeId)}
+        />
+      )}
 
       <div className="shelf-row">
         {series.volumes.map((volume, i) => (
