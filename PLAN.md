@@ -636,7 +636,7 @@ Themes are data files (colours, fonts, page style), so adding one is a new file,
 A theme is an identity, not a colour scheme. Most carry a **world skin** (see below) that dresses World mode and gives it the theme's own words. Built so far (milestone 13 was brought forward):
 
 - **Everyday:** Light, Dark (defaults) and High Contrast (pure black and white, yellow accents, thick focus outlines). No skin.
-- **With a world skin (12):**
+- **With a world skin (16):**
 
 | Theme | The feel | Signature touch |
 | --- | --- | --- |
@@ -652,6 +652,10 @@ A theme is an identity, not a colour scheme. Most carry a **world skin** (see be
 | ’90s Desktop | Grey windows on a teal desktop | Bevelled buttons; every lens and entry is a window with a title bar |
 | Lo-fi Study | A rainy night in a lamp-lit room | Lined notebook pages; quick facts on sticky notes |
 | Deep Space | A starship's bridge | HUD corner brackets; the map as a nav display; a T+ mission clock |
+| Gothic Horror | A manor at midnight, blackletter in blood red | A flickering candle glow; portraits in oval cameos; ornate double frames |
+| Steampunk | Brass, riveted copper, Victorian display type | Riveted brass plates; the scrubber as a brass gauge whose gear turns during playback |
+| Wasteland | After the end: concrete, rust, stencil lettering | Hazard-stripe headers; a dusty, radiation-tinted map |
+| Y2K Aero | Early-2000s glass and aqua sky | Glossy glass panels and shiny pill buttons; views float up like bubbles |
 
 - **Later:** more can be added as files. ('90s Desktop and High Contrast from the original list are done; the "starter set" of colour themes was replaced by the identity themes above.)
 
@@ -676,6 +680,10 @@ A theme is an identity, not a colour scheme. Most carry a **world skin** (see be
 - **’90s Desktop:** Explorer · Contacts · History · Control Panel · Clipboard; My Computer, Today. Drive · Folder · Subfolder · Directory · Shortcut · Unsorted; User · Workgroup · User group · Virus; Version · System event; Program · Protocol · Policy · Hardware · Preference. Online · Not installed · Idle · In the Recycle Bin.
 - **Lo-fi Study:** Wanderings · Friends · Diary · Notes · Sticky Notes; Notebook, Tonight. Somewhere far · Country · Town · Neighbourhood · Favourite spot · Outdoors; Friend · Crowd · Family · Pet; Season · Memory; Little magic · Belief · House rule · Gadget · Habit. Around · Haven’t met yet · Haven’t heard from · Moved away.
 - **Deep Space:** Star Charts · Crew · Mission Log · Tech · Transmissions; Starship, Stardate. Sector · System · Station · Deck · Outpost · Uncharted space; Crew member · Fleet · Lineage · Lifeform; Epoch · Mission; Psionics · Creed · Directive · Tech · Protocol. On board · In transit · Lost signal · Lost in space.
+- **Gothic Horror:** Haunts · Souls · Omens · Rites · Whispers; Manor, Midnight. Cursed land · Dominion · Town · Parish · Crypt · Moors; Soul · Coven · Bloodline · Abomination; Dark age · Omen; Curse · Faith · Pact · Contraption · Rite. Among the living · Not yet risen · Vanished · Laid to rest.
+- **Steampunk:** Charts · Registry · Ledger · Mechanisms · Telegrams; Empire, Present hour. Territory · Nation · Metropolis · Borough · Monument · Frontier; Citizen · Guild · Household · Automaton; Epoch · Incident; Aether · Creed · Statute · Invention · Custom. In service · Expected · Unaccounted for · Retired.
+- **Wasteland:** Zones · Survivors · Before & After · Scrap · Radio; The Wastes, Today. Wasteland · Territory · Settlement · Sector · Ruin · Dead zone; Survivor · Gang · Clan · Mutant; Age · Incident; Anomaly · Cult · Code · Scrap tech · Ritual. Alive · Not yet found · Gone silent · Didn’t make it.
+- **Y2K Aero:** Explore · Buddies · Archive · Plugins · Messages; The Web, Online now. Region · Country · City · Neighborhood · Hotspot · Outdoors; Buddy · Network · Family · Digipet; Season · Update; Feature · Fandom · Terms · Gadget · Trend. Online · Pending invite · Away · Signed off.
 
 All fonts are bundled (OFL or Apache licensed), so themes work offline. Every theme's contrast is tested (text and buttons at least 4.5:1, the page 7:1, muted text 3:1). Settings lists themes in two groups: Everyday, and With a world skin.
 
@@ -715,7 +723,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
 12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
-13. **Themes:** done early (after 4e): High Contrast and nine more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
+13. **Themes:** done early (after 4e): High Contrast and thirteen more skinned themes (see Themes); four more slots are open for themes still to be chosen. Left for later: the faint glow on the active line in Cyberpunk.
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
 ## Open items

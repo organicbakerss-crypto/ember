@@ -1,0 +1,47 @@
+{
+  "id": "gothic-horror",
+  "name": "Gothic Horror",
+  "words": {
+    "world": "Manor",
+    "where": "Haunts",
+    "who": "Souls",
+    "when": "Omens",
+    "how": "Rites",
+    "inbox": "Whispers",
+    "now": "Midnight"
+  },
+  "kinds": {
+    "continent": "Cursed land",
+    "kingdom": "Dominion",
+    "city": "Town",
+    "district": "Parish",
+    "landmark": "Crypt",
+    "wilds": "Moors",
+    "person": "Soul",
+    "faction": "Coven",
+    "family": "Bloodline",
+    "creature": "Abomination",
+    "era": "Dark age",
+    "event": "Omen",
+    "magic": "Curse",
+    "religion": "Faith",
+    "law": "Pact",
+    "technology": "Contraption",
+    "custom": "Rite"
+  },
+  "cast": {
+    "story": "Among the living",
+    "waiting": "Not yet risen",
+    "quiet": "Vanished",
+    "left": "Laid to rest"
+  },
+  "tokens": {
+    "heading-font": "'UnifrakturMaguntia', 'Cormorant Garamond', serif",
+    "label-font": "'Cormorant Garamond', Georgia, serif",
+    "map-filter": "sepia(0.45) saturate(0.6) brightness(0.62) contrast(1.15)",
+    "region-stroke": "#b3121f",
+    "region-hover": "rgb(179 18 31 / 0.25)",
+    "candle": "rgb(255 170 80 / 0.14)",
+    "blood": "#b3121f"
+  }
+}

@@ -40,6 +40,7 @@
   filter: none !important;
 }
 :root[data-lighter][data-skin] .world-view * {
+  backdrop-filter: none !important;
   box-shadow: none !important;
   text-shadow: none !important;
 }

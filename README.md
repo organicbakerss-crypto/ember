@@ -54,7 +54,7 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
   - Fantasy, Cyberpunk and Arcade themes, each with a world skin: art, fonts, map styling, transitions and its own words (Atlas / Chronicle / Lore, NETDB / Logs / Protocols, Stages / Players / Unlocked)
   - skins are data files; Settings → World: full, plain or minimal skin, themed words on or off
   - the writing page stays plain and readable in every skin; lighter mode keeps skins cheap
-- **Themes:** 15 in all. Light, Dark and High Contrast, plus 12 with a world skin and their own words: Fantasy, Cyberpunk, Arcade, Storybook, Magic Academy, Noir, Isekai, Comic Book, Blueprint, ’90s Desktop, Lo-fi Study and Deep Space
+- **Themes:** 19 in all. Light, Dark and High Contrast, plus 16 with a world skin and their own words: Fantasy, Cyberpunk, Arcade, Storybook, Magic Academy, Noir, Isekai, Comic Book, Blueprint, ’90s Desktop, Lo-fi Study, Deep Space, Gothic Horror, Steampunk, Wasteland and Y2K Aero
 
 ## Requirements
 

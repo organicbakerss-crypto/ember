@@ -1,0 +1,46 @@
+{
+  "id": "wasteland",
+  "name": "Wasteland",
+  "words": {
+    "world": "The Wastes",
+    "where": "Zones",
+    "who": "Survivors",
+    "when": "Before & After",
+    "how": "Scrap",
+    "inbox": "Radio",
+    "now": "Today"
+  },
+  "kinds": {
+    "continent": "Wasteland",
+    "kingdom": "Territory",
+    "city": "Settlement",
+    "district": "Sector",
+    "landmark": "Ruin",
+    "wilds": "Dead zone",
+    "person": "Survivor",
+    "faction": "Gang",
+    "family": "Clan",
+    "creature": "Mutant",
+    "era": "Age",
+    "event": "Incident",
+    "magic": "Anomaly",
+    "religion": "Cult",
+    "law": "Code",
+    "technology": "Scrap tech",
+    "custom": "Ritual"
+  },
+  "cast": {
+    "story": "Alive",
+    "waiting": "Not yet found",
+    "quiet": "Gone silent",
+    "left": "Didn’t make it"
+  },
+  "tokens": {
+    "heading-font": "'Black Ops One', Impact, sans-serif",
+    "map-filter": "sepia(0.6) saturate(0.7) hue-rotate(25deg) brightness(0.75) contrast(1.15)",
+    "region-stroke": "#e0a020",
+    "region-hover": "rgb(224 160 32 / 0.22)",
+    "hazard": "#e0a020",
+    "rust": "#7a3a1a"
+  }
+}

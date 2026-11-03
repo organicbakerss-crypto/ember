@@ -4,7 +4,7 @@ import { themes } from '../themes'
 import { applySkin, SKIN_WORDS, skinFor, skins } from './index'
 
 describe('world skins', () => {
-  it('are the twelve full skins, each named by a theme', () => {
+  it('are the sixteen full skins, each named by a theme', () => {
     expect(skins.map((s) => s.id).sort()).toEqual([
       'arcade',
       'blueprint',
@@ -12,12 +12,16 @@ describe('world skins', () => {
       'cyberpunk',
       'deep-space',
       'fantasy',
+      'gothic-horror',
       'isekai',
       'lofi-study',
       'magic-academy',
       'nineties-desktop',
       'noir',
+      'steampunk',
       'storybook',
+      'wasteland',
+      'y2k-aero',
     ])
     expect(new Set(themes.filter((t) => t.skin).map((t) => t.skin)).size).toBe(skins.length)
     for (const theme of themes.filter((t) => t.skin)) expect(skinFor(theme)).not.toBeNull()

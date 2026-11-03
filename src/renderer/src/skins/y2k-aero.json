@@ -1,0 +1,48 @@
+{
+  "id": "y2k-aero",
+  "name": "Y2K Aero",
+  "words": {
+    "world": "The Web",
+    "where": "Explore",
+    "who": "Buddies",
+    "when": "Archive",
+    "how": "Plugins",
+    "inbox": "Messages",
+    "now": "Online now"
+  },
+  "kinds": {
+    "continent": "Region",
+    "kingdom": "Country",
+    "city": "City",
+    "district": "Neighborhood",
+    "landmark": "Hotspot",
+    "wilds": "Outdoors",
+    "person": "Buddy",
+    "faction": "Network",
+    "family": "Family",
+    "creature": "Digipet",
+    "era": "Season",
+    "event": "Update",
+    "magic": "Feature",
+    "religion": "Fandom",
+    "law": "Terms",
+    "technology": "Gadget",
+    "custom": "Trend"
+  },
+  "cast": {
+    "story": "Online",
+    "waiting": "Pending invite",
+    "quiet": "Away",
+    "left": "Signed off"
+  },
+  "tokens": {
+    "heading-font": "'Nunito', 'Trebuchet MS', sans-serif",
+    "map-filter": "saturate(1.25) brightness(1.05)",
+    "region-stroke": "#0a6fc2",
+    "region-hover": "rgb(10 111 194 / 0.18)",
+    "gloss": "linear-gradient(180deg, rgb(255 255 255 / 0.55) 0%, rgb(255 255 255 / 0.12) 50%, rgb(255 255 255 / 0) 51%)",
+    "aqua": "#3fb6f0",
+    "sky-top": "#bfe6ff",
+    "sky-bottom": "#f2fbff"
+  }
+}

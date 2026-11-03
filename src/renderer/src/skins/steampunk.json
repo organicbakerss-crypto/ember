@@ -1,0 +1,48 @@
+{
+  "id": "steampunk",
+  "name": "Steampunk",
+  "words": {
+    "world": "Empire",
+    "where": "Charts",
+    "who": "Registry",
+    "when": "Ledger",
+    "how": "Mechanisms",
+    "inbox": "Telegrams",
+    "now": "Present hour"
+  },
+  "kinds": {
+    "continent": "Territory",
+    "kingdom": "Nation",
+    "city": "Metropolis",
+    "district": "Borough",
+    "landmark": "Monument",
+    "wilds": "Frontier",
+    "person": "Citizen",
+    "faction": "Guild",
+    "family": "Household",
+    "creature": "Automaton",
+    "era": "Epoch",
+    "event": "Incident",
+    "magic": "Aether",
+    "religion": "Creed",
+    "law": "Statute",
+    "technology": "Invention",
+    "custom": "Custom"
+  },
+  "cast": {
+    "story": "In service",
+    "waiting": "Expected",
+    "quiet": "Unaccounted for",
+    "left": "Retired"
+  },
+  "tokens": {
+    "heading-font": "'Abril Fatface', Georgia, serif",
+    "map-filter": "sepia(0.55) saturate(0.9) brightness(0.85) contrast(1.05)",
+    "region-stroke": "#c8892e",
+    "region-hover": "rgb(200 137 46 / 0.22)",
+    "brass": "#c8892e",
+    "brass-light": "#f0c46a",
+    "copper": "#8a4a20",
+    "rivet": "#e8c070"
+  }
+}

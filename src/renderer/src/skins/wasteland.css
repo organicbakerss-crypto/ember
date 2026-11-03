@@ -1,0 +1,70 @@
+/*
+ * Wasteland: after the end. Stencilled titles, hazard-stripe headers,
+ * concrete and rust, and a dusty, radiation-tinted map. Fonts and map
+ * styling at "plain" and "full"; art at "full".
+ */
+
+:root[data-skin='wasteland'] .world-view :is(h1, .entry-name) {
+  color: var(--skin-hazard);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+:root[data-skin='wasteland'] .world-view :is(.world-lenses .world-nav-label, .panel-heading) {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 400;
+}
+
+/* ----- art ----- */
+
+:root[data-skin='wasteland'][data-skin-art] .world-view .world-main {
+  background:
+    radial-gradient(ellipse at 15% 85%, rgb(122 58 26 / 0.25), transparent 40%),
+    radial-gradient(ellipse at 90% 10%, rgb(224 160 32 / 0.08), transparent 35%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.47 0 0 0 0 0.4 0 0 0 0.12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    var(--bg);
+}
+/* Hazard stripes under each section's header. */
+:root[data-skin='wasteland'][data-skin-art] .world-view .lens-head {
+  padding-bottom: 0.6rem;
+  border-bottom: 8px solid;
+  border-image: repeating-linear-gradient(-45deg, var(--skin-hazard) 0 12px, #111 12px 24px) 8;
+}
+:root[data-skin='wasteland'][data-skin-art]
+  .world-view
+  :is(.map-scroll, .board-scroll, .family-tree, .entry-page, .time-scrubber, .card) {
+  border: 2px solid #4a4232;
+  border-radius: 0;
+  box-shadow:
+    inset 0 0 18px rgb(122 58 26 / 0.35),
+    4px 4px 0 rgb(0 0 0 / 0.5);
+}
+:root[data-skin='wasteland'][data-skin-art] .world-view .entry-page {
+  border-top: 6px solid;
+  border-image: repeating-linear-gradient(-45deg, var(--skin-hazard) 0 10px, #111 10px 20px) 6;
+}
+:root[data-skin='wasteland'][data-skin-art] .world-view .world-nav-item.active {
+  background: rgb(224 160 32 / 0.15);
+  box-shadow: inset 3px 0 0 var(--skin-hazard);
+  border-radius: 0;
+}
+:root[data-skin='wasteland'][data-skin-art] .world-view .page-scroll > * {
+  animation: wasteland-jolt 0.35s steps(5) both;
+}
+@keyframes wasteland-jolt {
+  0% {
+    opacity: 0;
+    transform: translate(-3px, 2px);
+  }
+  40% {
+    opacity: 1;
+    transform: translate(2px, -1px);
+  }
+  70% {
+    transform: translate(-1px, 1px);
+  }
+  100% {
+    transform: none;
+  }
+}
