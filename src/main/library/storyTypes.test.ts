@@ -109,4 +109,38 @@ describe('story types', () => {
     expect(done.settings['finished']).toBe(true)
     expect((await lib.listSnapshots(book.id, volumeId, ch.id)).length).toBeGreaterThan(0)
   })
+
+  it('reading never writes: looking at old volumes changes no file, so sync sends nothing', async () => {
+    const series = await lib.createSeries({ name: 'Saga', world: { mode: 'new', name: 'Isles' } })
+    const one = await lib.createVolume({ seriesId: series.id, name: 'One' })
+    const ch = await lib.createChapter({ seriesId: series.id, volumeId: one.id, title: 'A' })
+    await lib.saveChapter(series.id, one.id, ch.id, {
+      content: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Old words.' }] }],
+      },
+    })
+    await lib.world.createEntry(series.worldId!, { name: 'Mara', template: 'person' })
+    const files = async () => {
+      const out: Record<string, string> = {}
+      for (const e of await fs.promises.readdir(root, { recursive: true, withFileTypes: true })) {
+        if (!e.isFile()) continue
+        const full = join(e.parentPath, e.name)
+        if (full.startsWith(lib.paths.localDir)) continue
+        out[full] = (await fs.promises.readFile(full)).toString('base64')
+      }
+      return out
+    }
+    const before = await files()
+    expect(Object.keys(before).length).toBeGreaterThan(5)
+    await lib.snapshot()
+    await lib.getOutline(series.id, one.id)
+    await lib.readChapter(series.id, one.id, ch.id)
+    await lib.listSnapshots(series.id, one.id, ch.id)
+    await lib.volumeStats(series.id, one.id)
+    await lib.world.view(series.worldId!)
+    await lib.world.index(series.worldId!)
+    await lib.diskUsage()
+    expect(await files()).toEqual(before)
+  })
 })

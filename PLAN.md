@@ -511,7 +511,7 @@ Sync is per file and local-first: the local copy is the truth, the cloud is a ma
 
 ## Smart Storage
 
-**Measured after sync (Nov 2026): 20 MB, of which about 19 MB is images; all the writing and history is under 1 MB.** Compressing old volumes' text would save almost nothing yet, so the first steps go at what actually grows (below); the full Smart Storage design is still wanted and will be revisited.
+**Measured after sync (Nov 2026): 20 MB, of which about 19 MB is images; all the writing and history is under 1 MB.** Compressing old volumes' text would save almost nothing yet, so the first steps go at what actually grows (below); Smart Storage itself was then dropped (Nov 2026): not needed. What matters is that old work never moves: **reading never writes.** Opening, scrolling or searching an old volume changes no file, so sync sends nothing for it until something in it is actually edited (tested in `storyTypes.test.ts`, and checked end to end).
 
 **As built (space, before Smart Storage):**
 
@@ -778,7 +778,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export. (Done.)
 7. **Sync engine:** Cloudflare R2 with step-by-step setup instructions; manifests, pull rule, conditional uploads, conflict copies, and the failure test harness. Ship only when the harness passes. (Done, lean: no Worker, no D1, no SQLite.)
 7b. **Story types:** single books, short stories and collections, worlds optional and unlinkable, smaller worlds. (Done; see Story types.)
-8. **Smart Storage and settings sync.**
+8. **Settings sync.** (Smart Storage dropped: not needed; see Smart Storage.)
 9. **World extras:** nothing left here; maps moved to 4b and time (the timeline) to 4d.
 10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
