@@ -30,8 +30,11 @@ function service(settings: Partial<AiSettings>) {
   return new AiService({
     settings: async () => ({ ...DEFAULT_AI_SETTINGS, enabled: true, host: fake!.url, ...settings }),
     host: { current: lib } as unknown as LibraryHost,
+    chatgpt: { file: join(dir, 'chatgpt.json'), secrets: plain },
   })
 }
+
+const plain = { canEncrypt: () => false, encrypt: (t: string) => t, decrypt: (t: string) => t }
 
 async function story() {
   const series = await lib.createSeries({ name: 'Saga', world: { mode: 'new', name: 'Isles' } })
@@ -116,6 +119,7 @@ describe('the AI service', () => {
     const off = new AiService({
       settings: async () => DEFAULT_AI_SETTINGS,
       host: { current: lib } as unknown as LibraryHost,
+      chatgpt: { file: join(dir, 'chatgpt.json'), secrets: plain },
     })
     const ask = {
       requestId: 'x',

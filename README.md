@@ -58,7 +58,7 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
 - **Layout:** writing and the world side by side (Ctrl/Cmd+\\), panes torn off into their own windows and docked back, live updates across windows, one place edits a chapter at a time
 - **Import and export:** Word files imported as chapters with a preview to fix the splits; export a volume or chapters to Word, PDF, EPUB or Markdown; copy a chapter for Royal Road
 - **Story types:** single books (opened straight into writing), short stories, collections with title-only headings, series; worlds optional (link, change or unlink any time) and each world can turn off its map, people board and timeline
-- **AI (optional, off by default):** chat, brainstorm and “Ask the story” beside the page, reading only what you point it at; spelling and grammar with every change shown first. Answers from Ollama on your computer, or ChatGPT with your plan (through Codex, signed in from Settings → AI)
+- **AI (optional, off by default):** chat, brainstorm and “Ask the story” beside the page, reading only what you point it at; spelling and grammar with every change shown first. Answers from Ollama on your computer, or ChatGPT with your plan (Continue with ChatGPT in Settings → AI)
 - **Sync:** your library on all your computers through your own Cloudflare account (Settings → Sync: open Cloudflare, create a token, paste it). Only changed files move; nothing is ever overwritten (a chapter changed on two computers keeps both versions); deletions go to the other computer's Trash; works offline and catches up
 
 ## Requirements

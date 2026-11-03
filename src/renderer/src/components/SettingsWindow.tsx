@@ -408,13 +408,13 @@ function AiSettingsSection() {
   const asked = useRef(0)
   const check = () => {
     const n = ++asked.current
-    api.invoke('ai:status', { host: ai.host, provider: ai.provider, codexPath: ai.codexPath }).then(
+    api.invoke('ai:status', { host: ai.host, provider: ai.provider }).then(
       (s) => n === asked.current && setStatus(s),
       () => {},
     )
   }
   // Check on opening, and again when what's chosen changes.
-  useEffect(check, [ai.host, ai.enabled, ai.provider, ai.codexPath])
+  useEffect(check, [ai.host, ai.enabled, ai.provider])
   const set = (patch: Partial<typeof ai>) =>
     update(({ ai: current }) => ({ ai: { ...current, ...patch } }))
   const chatgpt = ai.provider === 'chatgpt'
@@ -464,14 +464,14 @@ function AiSettingsSection() {
               }}
             >
               <option value="ollama">Ollama (on this computer, free)</option>
-              <option value="chatgpt">ChatGPT (your plan, through Codex)</option>
+              <option value="chatgpt">ChatGPT (your plan)</option>
             </select>
           </label>
           <ul className="muted small ai-notes">
             {chatgpt ? (
               <>
                 <li>
-                  Uses your ChatGPT plan’s usage (shared with Codex). No API key, no extra cost.
+                  Uses your ChatGPT plan’s usage. No API key, no extra cost, nothing to install.
                 </li>
                 <li>
                   Nothing is sent until you ask; then only what the AI panel says it’s reading goes
@@ -562,7 +562,7 @@ function AiSettingsSection() {
                 }
               >
                 <option value="">
-                  {chatgpt ? 'Codex’s default' : 'First installed'}
+                  {chatgpt ? 'Default' : 'First installed'}
                   {!chatgpt && status?.models[0] ? ` (${status.models[0]})` : ''}
                 </option>
                 {status?.models.map((m) => (
@@ -574,26 +574,7 @@ function AiSettingsSection() {
             </label>
           )}
 
-          {chatgpt ? (
-            <details className="sync-guide">
-              <summary>Codex isn’t found, or is somewhere unusual</summary>
-              <p className="muted small">
-                ChatGPT answers come through Codex, OpenAI’s app for this (it signs you in and keeps
-                you signed in; this app never holds your login). Install it once on each computer
-                with <code>npm install -g @openai/codex</code>. If it’s installed somewhere else,
-                put its full path here.
-              </p>
-              <label>
-                Codex path
-                <input
-                  value={ai.codexPath}
-                  placeholder="Found by itself"
-                  spellCheck={false}
-                  onChange={(e) => set({ codexPath: e.target.value })}
-                />
-              </label>
-            </details>
-          ) : (
+          {!chatgpt && (
             <>
               <p className="muted small">
                 Bigger models answer better and slower. A good start on most computers:{' '}

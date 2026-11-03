@@ -65,16 +65,14 @@ export interface AppSettings {
 /** AI on this computer (never synced). Off until turned on in Settings → AI. */
 export interface AiSettings {
   enabled: boolean
-  /** Who answers: Ollama on this computer, or ChatGPT (your plan, through Codex). */
+  /** Who answers: Ollama on this computer, or ChatGPT (your plan). */
   provider: 'ollama' | 'chatgpt'
   /** Where Ollama listens. */
   host: string
   /** The Ollama model to use ("" = the first one installed). */
   model: string
-  /** The ChatGPT model ("" = Codex's default). */
+  /** The ChatGPT model ("" = the first it offers). */
   chatgptModel: string
-  /** Where Codex is, when it isn't found by itself. */
-  codexPath: string
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -83,7 +81,6 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   host: 'http://127.0.0.1:11434',
   model: '',
   chatgptModel: '',
-  codexPath: '',
 }
 
 /** How exports look (Word, PDF, EPUB, Markdown, Royal Road). */

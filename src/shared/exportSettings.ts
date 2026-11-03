@@ -16,5 +16,4 @@ export const aiSettingsSchema = z.object({
   host: z.string().trim().min(1).max(300),
   model: z.string().trim().max(200),
   chatgptModel: z.string().trim().max(200).catch('').default(''),
-  codexPath: z.string().trim().max(1000).catch('').default(''),
 })

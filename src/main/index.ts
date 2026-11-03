@@ -139,7 +139,26 @@ void app.whenReady().then(async () => {
   applySpelling(session.defaultSession, await appSettings.read())
   const manager = new WindowManager((options) => createWindow(appSettings, host, options), settings)
   windows = manager
-  const ai = new AiService({ settings: async () => (await appSettings.read()).ai, host })
+  const ai = new AiService({
+    settings: async () => (await appSettings.read()).ai,
+    host,
+    fetchImpl: ((input: string, init?: RequestInit) => net.fetch(input, init)) as typeof fetch,
+    chatgpt: {
+      file: join(app.getPath('userData'), 'chatgpt.json'),
+      secrets: {
+        canEncrypt: () => safeStorage.isEncryptionAvailable(),
+        encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
+        decrypt: (data) => safeStorage.decryptString(Buffer.from(data, 'base64')),
+      },
+      // End-to-end tests point ChatGPT at a stand-in (never in a packaged app).
+      ...(!app.isPackaged && process.env['CHATGPT_TEST_BASE']
+        ? {
+            authBase: process.env['CHATGPT_TEST_BASE'],
+            answersBase: process.env['CHATGPT_TEST_BASE'],
+          }
+        : {}),
+    },
+  })
   app.on('before-quit', () => ai.dispose())
   registerIpc(host, appSettings, { manager, leases }, syncService, ai)
   handleMediaRequests(host)

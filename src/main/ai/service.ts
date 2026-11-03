@@ -1,6 +1,6 @@
 /**
  * The AI layer: one place in the main process that talks to the model, so
- * features don't care which model answers (Ollama, or ChatGPT through Codex). It builds what
+ * features don't care which model answers (Ollama, or ChatGPT with your plan). It builds what
  * the model reads (the reading scope, the world entries named in it), streams
  * answers back to the window that asked, and can stop any request.
  *
@@ -14,7 +14,10 @@ import type { AiStatus } from '@shared/ipc'
 import { AppError } from '../errors'
 import type { LibraryHost } from '../libraryHost'
 import { Ollama, type ChatMessage } from './ollama'
-import { CODEX_MISSING, CodexClient, findCodex } from './codex'
+import { ChatGpt, type SecretBox } from './chatgpt'
+
+/** Used when ChatGPT doesn't list its models and none is chosen. */
+const DEFAULT_CHATGPT_MODEL = 'gpt-6.1-sol'
 import {
   chatMessages,
   grammarMessages,
@@ -48,7 +51,7 @@ export interface AskInput {
   } | null
 }
 
-/** Whoever answers: Ollama or ChatGPT (through Codex). */
+/** Whoever answers: Ollama or ChatGPT. */
 interface Provider {
   chat(input: {
     messages: ChatMessage[]
@@ -64,29 +67,34 @@ const words = (s: string) => s.split(/\s+/).filter(Boolean).length
 export class AiService {
   private readonly running = new Map<string, AbortController>()
 
+  private readonly chatgpt: ChatGpt
+
   constructor(
     private readonly options: {
       settings: () => Promise<AiSettings>
       host: LibraryHost
       fetchImpl?: typeof fetch
+      /** ChatGPT: where its login is kept, and how it's encrypted. */
+      chatgpt: { file: string; secrets: SecretBox; authBase?: string; answersBase?: string }
     },
-  ) {}
+  ) {
+    this.chatgpt = new ChatGpt({ ...options.chatgpt, fetchImpl: options.fetchImpl })
+  }
 
   private async client(): Promise<Provider> {
     const settings = await this.options.settings()
     if (!settings.enabled)
       throw new AppError('invalid-input', 'AI is off. Turn it on in Settings → AI.')
     if (settings.provider === 'chatgpt') {
-      this.codexPath = settings.codexPath
-      const codex = this.codex()
-      if (!(await codex.account())) {
+      if (!(await this.chatgpt.account())) {
         throw new AppError(
           'invalid-input',
           'Sign in with ChatGPT first: Settings → AI → Continue with ChatGPT.',
         )
       }
-      const model = settings.chatgptModel || undefined
-      return { chat: (i) => codex.chat({ ...i, model }) }
+      const model =
+        settings.chatgptModel || (await this.chatgpt.models())[0] || DEFAULT_CHATGPT_MODEL
+      return { chat: (i) => this.chatgpt.chat({ ...i, model }) }
     }
     const ollama = new Ollama(settings.host, this.options.fetchImpl)
     let model = settings.model
@@ -103,50 +111,30 @@ export class AiService {
     return { chat: (i) => ollama.chat({ ...i, model }) }
   }
 
-  /** Codex, started when first needed (and restarted if its path setting changes). */
-  private codexClient: { path: string; client: CodexClient } | null = null
-  private codex(path = this.codexPath): CodexClient {
-    if (!this.codexClient || this.codexClient.path !== path) {
-      this.codexClient?.client.stop()
-      this.codexClient = { path, client: new CodexClient(() => findCodex(path)) }
-    }
-    return this.codexClient.client
-  }
-  private codexPath = ''
-
-  /** ChatGPT: sign in through Codex (opens OpenAI's page in the browser). */
-  async chatgptSignIn(open: (url: string) => Promise<void>): Promise<void> {
-    await this.refreshPath()
-    await this.codex().signIn(open)
+  /** ChatGPT: sign in (opens OpenAI's page in the browser and waits for it). */
+  chatgptSignIn(open: (url: string) => Promise<void>): Promise<void> {
+    return this.chatgpt.signIn(open)
   }
 
-  async chatgptSignOut(): Promise<void> {
-    await this.refreshPath()
-    await this.codex().signOut()
+  chatgptSignOut(): Promise<void> {
+    return this.chatgpt.signOut()
   }
 
-  private async refreshPath() {
-    this.codexPath = (await this.options.settings()).codexPath
-  }
-
-  /** Stops Codex when the app quits. */
   dispose(): void {
-    this.codexClient?.client.stop()
+    this.chatgpt.cancelSignIn()
   }
 
-  /** Whether Ollama answers (at `host`, or the saved address) and with which models. */
+  /** Whether the AI can answer, and with which models. */
   async status(
-    shown: { host?: string; provider?: AiSettings['provider']; codexPath?: string } = {},
+    shown: { host?: string; provider?: AiSettings['provider'] } = {},
   ): Promise<AiStatus> {
     // What the settings page shows may be a moment ahead of what's saved.
     const settings = { ...(await this.options.settings()), ...shown }
-    const host = shown.host
-    this.codexPath = settings.codexPath
     if (settings.provider === 'chatgpt') return this.chatgptStatus(settings)
     const base = {
       enabled: settings.enabled,
       provider: 'ollama' as const,
-      host: host ?? settings.host,
+      host: shown.host ?? settings.host,
       account: null,
     }
     try {
@@ -167,26 +155,14 @@ export class AiService {
 
   private async chatgptStatus(settings: AiSettings): Promise<AiStatus> {
     const base = { enabled: settings.enabled, provider: 'chatgpt' as const, host: '' }
-    const path = findCodex(settings.codexPath)
-    if (!path) {
-      return {
-        ...base,
-        reachable: false,
-        models: [],
-        model: null,
-        account: null,
-        error: CODEX_MISSING,
-      }
-    }
     try {
-      const codex = this.codex()
-      const account = await codex.account()
-      const models = account ? (await codex.models().catch(() => [])).map((m) => m.id) : []
+      const account = await this.chatgpt.account()
+      const models = account ? await this.chatgpt.models().catch(() => []) : []
       return {
         ...base,
         reachable: true,
         models,
-        model: settings.chatgptModel || models[0] || null,
+        model: settings.chatgptModel || models[0] || (account ? DEFAULT_CHATGPT_MODEL : null),
         account,
         error: null,
       }

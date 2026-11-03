@@ -627,7 +627,6 @@ export const ipcInputs = {
     .object({
       host: z.string().trim().min(1).max(300).optional(),
       provider: z.enum(['ollama', 'chatgpt']).optional(),
-      codexPath: z.string().trim().max(1000).optional(),
     })
     .optional(),
   /** Chat, brainstorm or ask the story about what the writer is reading (streams `ai:token`). */
