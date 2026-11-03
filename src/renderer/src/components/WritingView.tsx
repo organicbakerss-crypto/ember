@@ -825,6 +825,7 @@ export function WritingView(props: {
               chapterId={selectedId}
               selection={selectionParagraphs?.join('\n\n') || null}
               screenText={() => editor.current?.visibleText() ?? ''}
+              provider={settings.ai.provider}
             />
           )}
           {panel === 'diagnostics' && (

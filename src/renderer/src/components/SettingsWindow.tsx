@@ -396,25 +396,45 @@ function SyncSettings() {
   )
 }
 
-/** AI on this computer: on or off, where Ollama is, which model. */
+/** AI on this computer: on or off, who answers (Ollama or ChatGPT), which model. */
 function AiSettingsSection() {
   const { settings, update } = useSettings()
+  const { toast } = useOverlays()
   const ai = settings.ai
   const [status, setStatus] = useState<IpcResult<'ai:status'> | null>(null)
   const [host, setHost] = useState(ai.host)
-  // Ask about the address as shown (saving it may not have reached the app yet).
+  const [signingIn, setSigningIn] = useState(false)
+  // Ask about what's shown (saving it may not have reached the app yet).
   const asked = useRef(0)
   const check = () => {
     const n = ++asked.current
-    api.invoke('ai:status', { host: ai.host }).then(
+    api.invoke('ai:status', { host: ai.host, provider: ai.provider, codexPath: ai.codexPath }).then(
       (s) => n === asked.current && setStatus(s),
       () => {},
     )
   }
-  // Check once on opening, and again when the address or switch changes.
-  useEffect(check, [ai.host, ai.enabled])
+  // Check on opening, and again when what's chosen changes.
+  useEffect(check, [ai.host, ai.enabled, ai.provider, ai.codexPath])
   const set = (patch: Partial<typeof ai>) =>
     update(({ ai: current }) => ({ ai: { ...current, ...patch } }))
+  const chatgpt = ai.provider === 'chatgpt'
+
+  const signIn = async () => {
+    setSigningIn(true)
+    try {
+      await api.invoke('ai:chatgptSignIn')
+      toast('Signed in with ChatGPT.')
+    } catch (err) {
+      toast(describeError(err).message)
+    } finally {
+      setSigningIn(false)
+      check()
+    }
+  }
+  const signOut = async () => {
+    await api.invoke('ai:chatgptSignOut').catch((err) => toast(describeError(err).message))
+    check()
+  }
 
   return (
     <section className="settings-section ai-settings">
@@ -422,8 +442,7 @@ function AiSettingsSection() {
       <p className="muted small">
         AI helps, it never writes your prose: chat about the story, brainstorm, ask questions about
         your chapters and world, and check spelling and grammar (every change shown first, nothing
-        applied until you choose). It runs on this computer with Ollama, so nothing you write leaves
-        it. Off, it leaves no trace in the app.
+        applied until you choose). Off, it leaves no trace in the app.
       </p>
       <label className="radio">
         <input
@@ -435,9 +454,54 @@ function AiSettingsSection() {
       </label>
       {ai.enabled && (
         <>
+          <label>
+            Answers from
+            <select
+              value={ai.provider}
+              onChange={(e) => {
+                setStatus(null)
+                set({ provider: e.target.value as typeof ai.provider })
+              }}
+            >
+              <option value="ollama">Ollama (on this computer, free)</option>
+              <option value="chatgpt">ChatGPT (your plan, through Codex)</option>
+            </select>
+          </label>
+          <ul className="muted small ai-notes">
+            {chatgpt ? (
+              <>
+                <li>
+                  Uses your ChatGPT plan’s usage (shared with Codex). No API key, no extra cost.
+                </li>
+                <li>
+                  Nothing is sent until you ask; then only what the AI panel says it’s reading goes
+                  to OpenAI.
+                </li>
+                <li>Chats are kept only while the app is open.</li>
+              </>
+            ) : (
+              <>
+                <li>Runs on this computer: nothing you write leaves it. Works offline.</li>
+                <li>Answers depend on the model and your computer’s speed.</li>
+              </>
+            )}
+          </ul>
+
           <div className="ai-status small" role="status">
             {!status ? (
-              <span className="muted">Checking Ollama…</span>
+              <span className="muted">Checking…</span>
+            ) : chatgpt ? (
+              !status.reachable ? (
+                <span className="error">{status.error}</span>
+              ) : status.account ? (
+                <span>
+                  ✓ Signed in with ChatGPT
+                  {status.account.email ? ` as ${status.account.email}` : ''}
+                  {status.account.plan ? ` (${status.account.plan})` : ''}.
+                </span>
+              ) : (
+                <span>Not signed in yet.</span>
+              )
             ) : status.reachable ? (
               status.models.length ? (
                 <span>
@@ -465,39 +529,91 @@ function AiSettingsSection() {
               Check again
             </button>
           </div>
-          <label>
-            Model
-            <select value={ai.model} onChange={(e) => set({ model: e.target.value })}>
-              <option value="">
-                First installed{status?.models[0] ? ` (${status.models[0]})` : ''}
-              </option>
-              {status?.models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-              {ai.model && !status?.models.includes(ai.model) && (
-                <option value={ai.model}>{ai.model} (not installed)</option>
+
+          {chatgpt && status?.reachable && !status.account && (
+            <div>
+              <button
+                className="primary chatgpt-button"
+                disabled={signingIn}
+                onClick={() => void signIn()}
+              >
+                {signingIn ? 'Waiting for the browser…' : 'Continue with ChatGPT'}
+              </button>
+              {signingIn && (
+                <p className="muted small">
+                  Finish signing in on the page that opened in your browser, then come back here.
+                </p>
               )}
-            </select>
-          </label>
-          <p className="muted small">
-            Bigger models answer better and slower. A good start on most computers:{' '}
-            <code>ollama pull llama3.2</code> (3B); with 16 GB of memory or more, try{' '}
-            <code>qwen2.5:14b</code>.
-          </p>
-          <label>
-            Ollama address
-            <input
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              onBlur={() => host.trim() && host !== ai.host && set({ host: host.trim() })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && host.trim()) set({ host: host.trim() })
-              }}
-              spellCheck={false}
-            />
-          </label>
+            </div>
+          )}
+          {chatgpt && status?.account && (
+            <div className="row">
+              <button onClick={() => void signOut()}>Sign out of ChatGPT</button>
+            </div>
+          )}
+
+          {(!chatgpt || status?.account) && (
+            <label>
+              Model
+              <select
+                value={chatgpt ? ai.chatgptModel : ai.model}
+                onChange={(e) =>
+                  set(chatgpt ? { chatgptModel: e.target.value } : { model: e.target.value })
+                }
+              >
+                <option value="">
+                  {chatgpt ? 'Codex’s default' : 'First installed'}
+                  {!chatgpt && status?.models[0] ? ` (${status.models[0]})` : ''}
+                </option>
+                {status?.models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {chatgpt ? (
+            <details className="sync-guide">
+              <summary>Codex isn’t found, or is somewhere unusual</summary>
+              <p className="muted small">
+                ChatGPT answers come through Codex, OpenAI’s app for this (it signs you in and keeps
+                you signed in; this app never holds your login). Install it once on each computer
+                with <code>npm install -g @openai/codex</code>. If it’s installed somewhere else,
+                put its full path here.
+              </p>
+              <label>
+                Codex path
+                <input
+                  value={ai.codexPath}
+                  placeholder="Found by itself"
+                  spellCheck={false}
+                  onChange={(e) => set({ codexPath: e.target.value })}
+                />
+              </label>
+            </details>
+          ) : (
+            <>
+              <p className="muted small">
+                Bigger models answer better and slower. A good start on most computers:{' '}
+                <code>ollama pull llama3.2</code> (3B); with 16 GB of memory or more, try{' '}
+                <code>qwen2.5:14b</code>.
+              </p>
+              <label>
+                Ollama address
+                <input
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  onBlur={() => host.trim() && host !== ai.host && set({ host: host.trim() })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && host.trim()) set({ host: host.trim() })
+                  }}
+                  spellCheck={false}
+                />
+              </label>
+            </>
+          )}
           <h3>Where it is</h3>
           <p className="muted small">
             The ✦ AI button on the left of the writing view opens chat, brainstorm and “Ask the

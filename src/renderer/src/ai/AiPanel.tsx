@@ -34,6 +34,7 @@ export function AiPanel(props: {
   selection: string | null
   /** What's on screen now. */
   screenText: () => string
+  provider: 'ollama' | 'chatgpt'
 }) {
   const [mode, setMode] = useState<Mode>('chat')
   const [threads, setThreads] = useState<Record<Mode, Message[]>>({
@@ -223,7 +224,10 @@ export function AiPanel(props: {
         </div>
       </form>
       <p className="muted small">
-        Runs on this computer (Ollama). Nothing in your chapter changes.
+        {props.provider === 'chatgpt'
+          ? 'Answers from ChatGPT (your plan).'
+          : 'Runs on this computer (Ollama).'}{' '}
+        Nothing in your chapter changes.
       </p>
     </div>
   )

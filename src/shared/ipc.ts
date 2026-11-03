@@ -623,7 +623,13 @@ export const ipcInputs = {
     }),
   ]),
   /** Whether the AI (Ollama) can be reached, and which models it has. */
-  'ai:status': z.object({ host: z.string().trim().min(1).max(300).optional() }).optional(),
+  'ai:status': z
+    .object({
+      host: z.string().trim().min(1).max(300).optional(),
+      provider: z.enum(['ollama', 'chatgpt']).optional(),
+      codexPath: z.string().trim().max(1000).optional(),
+    })
+    .optional(),
   /** Chat, brainstorm or ask the story about what the writer is reading (streams `ai:token`). */
   'ai:ask': z.object({
     requestId: z.string().min(1).max(80),
@@ -649,6 +655,9 @@ export const ipcInputs = {
     worldId: id('world').nullable().optional(),
   }),
   'ai:cancel': z.object({ requestId: z.string().min(1).max(80) }),
+  /** Signs in with ChatGPT (opens OpenAI's page; resolves when done). */
+  'ai:chatgptSignIn': z.void(),
+  'ai:chatgptSignOut': z.void(),
   /** Opens Cloudflare's token page, filled in with the permission sync needs. */
   'sync:openCloudflare': z.void(),
   /** Stops syncing on this computer (nothing is deleted anywhere). */
@@ -791,6 +800,8 @@ export interface IpcResults {
   'ai:ask': { text: string }
   'ai:grammar': { paragraphs: string[] }
   'ai:cancel': null
+  'ai:chatgptSignIn': null
+  'ai:chatgptSignOut': null
   'sync:now': SyncStatus
   'history:fetchCloud': { added: number }
   'window:dropped': boolean
@@ -848,6 +859,9 @@ export interface IpcEvents {
 
 export interface AiStatus {
   enabled: boolean
+  provider: 'ollama' | 'chatgpt'
+  /** Signed in to ChatGPT as… (ChatGPT only). */
+  account: { email: string | null; plan: string | null } | null
   host: string
   reachable: boolean
   models: string[]

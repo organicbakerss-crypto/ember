@@ -1,6 +1,6 @@
 /**
  * The AI layer: one place in the main process that talks to the model, so
- * features don't care which model answers (Ollama for now). It builds what
+ * features don't care which model answers (Ollama, or ChatGPT through Codex). It builds what
  * the model reads (the reading scope, the world entries named in it), streams
  * answers back to the window that asked, and can stop any request.
  *
@@ -13,7 +13,8 @@ import type { AiSettings } from '@shared/settings'
 import type { AiStatus } from '@shared/ipc'
 import { AppError } from '../errors'
 import type { LibraryHost } from '../libraryHost'
-import { Ollama } from './ollama'
+import { Ollama, type ChatMessage } from './ollama'
+import { CODEX_MISSING, CodexClient, findCodex } from './codex'
 import {
   chatMessages,
   grammarMessages,
@@ -47,6 +48,17 @@ export interface AskInput {
   } | null
 }
 
+/** Whoever answers: Ollama or ChatGPT (through Codex). */
+interface Provider {
+  chat(input: {
+    messages: ChatMessage[]
+    json?: boolean
+    temperature?: number
+    signal?: AbortSignal
+    onToken?: (text: string) => void
+  }): Promise<string>
+}
+
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length
 
 export class AiService {
@@ -60,10 +72,22 @@ export class AiService {
     },
   ) {}
 
-  private async client(): Promise<{ ollama: Ollama; model: string }> {
+  private async client(): Promise<Provider> {
     const settings = await this.options.settings()
     if (!settings.enabled)
       throw new AppError('invalid-input', 'AI is off. Turn it on in Settings → AI.')
+    if (settings.provider === 'chatgpt') {
+      this.codexPath = settings.codexPath
+      const codex = this.codex()
+      if (!(await codex.account())) {
+        throw new AppError(
+          'invalid-input',
+          'Sign in with ChatGPT first: Settings → AI → Continue with ChatGPT.',
+        )
+      }
+      const model = settings.chatgptModel || undefined
+      return { chat: (i) => codex.chat({ ...i, model }) }
+    }
     const ollama = new Ollama(settings.host, this.options.fetchImpl)
     let model = settings.model
     if (!model) {
@@ -76,13 +100,55 @@ export class AiService {
       }
       model = models[0]!
     }
-    return { ollama, model }
+    return { chat: (i) => ollama.chat({ ...i, model }) }
+  }
+
+  /** Codex, started when first needed (and restarted if its path setting changes). */
+  private codexClient: { path: string; client: CodexClient } | null = null
+  private codex(path = this.codexPath): CodexClient {
+    if (!this.codexClient || this.codexClient.path !== path) {
+      this.codexClient?.client.stop()
+      this.codexClient = { path, client: new CodexClient(() => findCodex(path)) }
+    }
+    return this.codexClient.client
+  }
+  private codexPath = ''
+
+  /** ChatGPT: sign in through Codex (opens OpenAI's page in the browser). */
+  async chatgptSignIn(open: (url: string) => Promise<void>): Promise<void> {
+    await this.refreshPath()
+    await this.codex().signIn(open)
+  }
+
+  async chatgptSignOut(): Promise<void> {
+    await this.refreshPath()
+    await this.codex().signOut()
+  }
+
+  private async refreshPath() {
+    this.codexPath = (await this.options.settings()).codexPath
+  }
+
+  /** Stops Codex when the app quits. */
+  dispose(): void {
+    this.codexClient?.client.stop()
   }
 
   /** Whether Ollama answers (at `host`, or the saved address) and with which models. */
-  async status(host?: string): Promise<AiStatus> {
-    const settings = await this.options.settings()
-    const base = { enabled: settings.enabled, host: host ?? settings.host }
+  async status(
+    shown: { host?: string; provider?: AiSettings['provider']; codexPath?: string } = {},
+  ): Promise<AiStatus> {
+    // What the settings page shows may be a moment ahead of what's saved.
+    const settings = { ...(await this.options.settings()), ...shown }
+    const host = shown.host
+    this.codexPath = settings.codexPath
+    if (settings.provider === 'chatgpt') return this.chatgptStatus(settings)
+    const base = {
+      enabled: settings.enabled,
+      provider: 'ollama' as const,
+      host: host ?? settings.host,
+      account: null,
+    }
     try {
       const models = await new Ollama(base.host, this.options.fetchImpl).models()
       const model =
@@ -94,6 +160,43 @@ export class AiService {
         reachable: false,
         models: [],
         model: null,
+        error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  }
+
+  private async chatgptStatus(settings: AiSettings): Promise<AiStatus> {
+    const base = { enabled: settings.enabled, provider: 'chatgpt' as const, host: '' }
+    const path = findCodex(settings.codexPath)
+    if (!path) {
+      return {
+        ...base,
+        reachable: false,
+        models: [],
+        model: null,
+        account: null,
+        error: CODEX_MISSING,
+      }
+    }
+    try {
+      const codex = this.codex()
+      const account = await codex.account()
+      const models = account ? (await codex.models().catch(() => [])).map((m) => m.id) : []
+      return {
+        ...base,
+        reachable: true,
+        models,
+        model: settings.chatgptModel || models[0] || null,
+        account,
+        error: null,
+      }
+    } catch (err) {
+      return {
+        ...base,
+        reachable: false,
+        models: [],
+        model: null,
+        account: null,
         error: err instanceof Error ? err.message : String(err),
       }
     }
@@ -116,11 +219,10 @@ export class AiService {
 
   /** Chat, brainstorm or ask the story; the answer streams to `onToken`. */
   async ask(input: AskInput, onToken: (text: string) => void): Promise<{ text: string }> {
-    const { ollama, model } = await this.client()
+    const provider = await this.client()
     return this.track(input.requestId, async (signal) => {
-      const context = await this.context(input, ollama, model, signal)
-      const text = await ollama.chat({
-        model,
+      const context = await this.context(input, provider, signal)
+      const text = await provider.chat({
         messages: chatMessages(context, input.messages),
         signal,
         onToken,
@@ -132,8 +234,7 @@ export class AiService {
   /** What the model reads: the scope, the entries named in it, and for questions the digest. */
   private async context(
     input: AskInput,
-    ollama: Ollama,
-    model: string,
+    provider: Provider,
     signal: AbortSignal,
   ): Promise<PromptContext> {
     const context: PromptContext = { mode: input.mode, scope: null, entries: [] }
@@ -145,8 +246,7 @@ export class AiService {
     if (scope.kind === 'chapter') {
       const paragraphs = docParagraphs(chapter.content)
       text = paragraphs.join('\n\n')
-      if (words(text) > CHAPTER_WORDS)
-        text = await this.summarise(paragraphs, ollama, model, signal)
+      if (words(text) > CHAPTER_WORDS) text = await this.summarise(paragraphs, provider, signal)
     }
     context.scope = { kind: scope.kind, text, chapterTitle: chapter.title }
 
@@ -172,8 +272,7 @@ export class AiService {
   /** A long chapter, read in parts and summarised (the model can't take it all at once). */
   private async summarise(
     paragraphs: string[],
-    ollama: Ollama,
-    model: string,
+    provider: Provider,
     signal: AbortSignal,
   ): Promise<string> {
     const parts: string[][] = [[]]
@@ -188,8 +287,7 @@ export class AiService {
     }
     const summaries: string[] = []
     for (const [i, part] of parts.entries()) {
-      const summary = await ollama.chat({
-        model,
+      const summary = await provider.chat({
         messages: summaryMessages(part.join('\n\n'), i + 1, parts.length),
         temperature: 0.2,
         signal,
@@ -207,7 +305,7 @@ export class AiService {
     input: { requestId: string; paragraphs: string[]; worldId?: string | null },
     onProgress: (done: number, total: number) => void,
   ): Promise<{ paragraphs: string[] }> {
-    const { ollama, model } = await this.client()
+    const provider = await this.client()
     let names: string[] = []
     if (input.worldId) {
       const view = await this.options.host.current.world.view(input.worldId).catch(() => null)
@@ -231,8 +329,7 @@ export class AiService {
       onProgress(0, todo.length)
       const fix = async (indexes: number[]): Promise<boolean> => {
         const texts = indexes.map((i) => input.paragraphs[i]!)
-        const reply = await ollama.chat({
-          model,
+        const reply = await provider.chat({
           messages: grammarMessages(texts, names),
           json: true,
           temperature: 0,

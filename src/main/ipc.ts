@@ -48,7 +48,7 @@ export function registerIpc(
     'export:royalRoad': async (input) =>
       copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
-    'ai:status': (input) => ai.status(input?.host),
+    'ai:status': (input) => ai.status(input),
     'ai:ask': (input, event) =>
       ai.ask(input, (text) => {
         if (!event.sender.isDestroyed()) {
@@ -65,6 +65,14 @@ export function registerIpc(
           })
         }
       }),
+    'ai:chatgptSignIn': async () => {
+      await ai.chatgptSignIn((url) => shell.openExternal(url))
+      return null
+    },
+    'ai:chatgptSignOut': async () => {
+      await ai.chatgptSignOut()
+      return null
+    },
     'ai:cancel': (input) => {
       ai.cancel(input.requestId)
       return null

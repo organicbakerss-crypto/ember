@@ -3742,3 +3742,10 @@ kbd {
 .grammar-change:focus-visible {
   outline: 2px solid var(--accent);
 }
+.ai-notes {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.chatgpt-button {
+  padding: 0.55rem 1.1rem;
+}

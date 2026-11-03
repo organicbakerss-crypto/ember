@@ -140,6 +140,7 @@ void app.whenReady().then(async () => {
   const manager = new WindowManager((options) => createWindow(appSettings, host, options), settings)
   windows = manager
   const ai = new AiService({ settings: async () => (await appSettings.read()).ai, host })
+  app.on('before-quit', () => ai.dispose())
   registerIpc(host, appSettings, { manager, leases }, syncService, ai)
   handleMediaRequests(host)
   await manager.start()
