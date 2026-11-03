@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { LibrarySnapshot, SeriesSummary, WorldSummary } from '@shared/ipc'
-import { api } from '../api'
-import { formatVolumes, seriesStack, worldCover } from '../covers'
+import { api, describeError } from '../api'
+import { formatVolumes, formatWords, seriesStack, worldCover } from '../covers'
 import { CoverDropZone } from './Cover'
 import { CoverStack } from './CoverStack'
 import { EditableText } from './EditableText'
@@ -9,11 +9,14 @@ import { NewCard } from './NewCard'
 import { NewSeriesForm } from './NewSeriesForm'
 import { useOverlays, type MenuItem } from './overlays'
 import { useLibraryActions } from './useLibraryActions'
+import { isBook, worldLinkMenu } from './worldLink'
 
 /** The home screen: every series as a cover (or a deck of covers), then the worlds. */
 export function Bookshelf(props: {
   snapshot: LibrarySnapshot
   onOpenSeries: (series: SeriesSummary, options?: { newVolume?: boolean }) => void
+  /** Opens a book (its one volume) straight in the writing view. */
+  onOpenVolume: (seriesId: string, volumeId: string) => void
   onOpenTrash: () => void
   onOpenSettings: () => void
   onOpenWorld: (worldId: string) => void
@@ -21,16 +24,37 @@ export function Bookshelf(props: {
   const { snapshot } = props
   const [creatingSeries, setCreatingSeries] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
-  const { openMenu } = useOverlays()
+  const { openMenu, toast } = useOverlays()
   const actions = useLibraryActions()
 
+  const open = (series: SeriesSummary) => {
+    const only = series.volumes[0]
+    if (isBook(series) && only) props.onOpenVolume(series.id, only.id)
+    else props.onOpenSeries(series)
+  }
+  const setKind = (series: SeriesSummary, kind: 'book' | 'series') =>
+    void api.invoke('series:setKind', { seriesId: series.id, kind }).then(
+      () => kind === 'series' && props.onOpenSeries(series, { newVolume: true }),
+      (err: unknown) => toast(describeError(err).message),
+    )
   const seriesMenu = (series: SeriesSummary): MenuItem[] => [
-    { label: 'New volume', onSelect: () => props.onOpenSeries(series, { newVolume: true }) },
+    ...(isBook(series)
+      ? [{ label: 'Add a volume (make it a series)', onSelect: () => setKind(series, 'series') }]
+      : [
+          {
+            label: 'New volume',
+            onSelect: () => props.onOpenSeries(series, { newVolume: true }),
+          },
+        ]),
     { label: 'Rename', hint: 'F3', onSelect: () => setRenaming(series.id) },
     {
       label: 'Change cover',
       onSelect: () => actions.pickCover({ kind: 'series', seriesId: series.id }),
     },
+    worldLinkMenu(series, snapshot.worlds, toast),
+    ...(!isBook(series) && series.volumes.length <= 1
+      ? [{ label: 'Show as a single book', onSelect: () => setKind(series, 'book') }]
+      : []),
     {
       label: 'Delete',
       danger: true,
@@ -97,7 +121,7 @@ export function Bookshelf(props: {
       {snapshot.problems.length > 0 && <Problems problems={snapshot.problems} />}
 
       <section className="shelf">
-        <h2>Series</h2>
+        <h2>Stories</h2>
         <div className="shelf-row">
           {snapshot.series.map((series) => (
             <div key={series.id} className="shelf-item" onContextMenu={menu(seriesMenu(series))}>
@@ -106,9 +130,9 @@ export function Bookshelf(props: {
                 role="button"
                 tabIndex={0}
                 aria-label={`Open ${series.name}`}
-                onClick={() => props.onOpenSeries(series)}
+                onClick={() => open(series)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') props.onOpenSeries(series)
+                  if (e.key === 'Enter') open(series)
                   if (e.key === 'F3') setRenaming(series.id)
                 }}
               >
@@ -127,11 +151,15 @@ export function Bookshelf(props: {
                   onEditingChange={(on) => setRenaming(on ? series.id : null)}
                   onRename={(name) => api.invoke('series:rename', { seriesId: series.id, name })}
                 />
-                <span className="muted small">{formatVolumes(series.volumes.length)}</span>
+                <span className="muted small">
+                  {isBook(series)
+                    ? `Book · ${formatWords(series.volumes[0]?.wordCount ?? 0)}`
+                    : formatVolumes(series.volumes.length)}
+                </span>
               </div>
             </div>
           ))}
-          <NewCard label="New series" onClick={() => setCreatingSeries(true)} />
+          <NewCard label="New story" onClick={() => setCreatingSeries(true)} />
         </div>
       </section>
 
@@ -187,7 +215,13 @@ export function Bookshelf(props: {
       {creatingSeries && (
         <div className="modal-backdrop" onClick={() => setCreatingSeries(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <NewSeriesForm worlds={snapshot.worlds} onDone={() => setCreatingSeries(false)} />
+            <NewSeriesForm
+              worlds={snapshot.worlds}
+              onDone={(created) => {
+                setCreatingSeries(false)
+                if (created?.volumeId) props.onOpenVolume(created.seriesId, created.volumeId)
+              }}
+            />
           </div>
         </div>
       )}

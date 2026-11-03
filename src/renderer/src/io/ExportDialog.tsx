@@ -39,9 +39,24 @@ export function ExportDialog(props: {
   const [outline, setOutline] = useState<OutlineView | null>(null)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
-  const style = settings.export
-  const setStyle = (patch: Partial<ExportSettings>) =>
-    update(({ export: current }) => ({ export: { ...current, ...patch } }))
+  // Chapter headings are this book's own choice (a collection of stories wants just
+  // titles); everything else is shared by every export.
+  const own = volume.settings['headings']
+  const [headings, setHeadings] = useState<ExportSettings['headings'] | null>(
+    own === 'both' || own === 'number' || own === 'title' ? own : null,
+  )
+  const style = { ...settings.export, headings: headings ?? settings.export.headings }
+  const setStyle = ({ headings: next, ...rest }: Partial<ExportSettings>) => {
+    if (next) {
+      setHeadings(next)
+      void api
+        .invoke('volume:update', { seriesId: series.id, volumeId: volume.id, headings: next })
+        .catch((err: unknown) => toast(describeError(err).message))
+    }
+    if (Object.keys(rest).length) {
+      update(({ export: current }) => ({ export: { ...current, ...rest } }))
+    }
+  }
 
   useEffect(() => {
     void api
@@ -163,7 +178,12 @@ export function ExportDialog(props: {
             </ul>
           )}
         </fieldset>
-        <ExportStyleFields value={style} onChange={setStyle} pdf={format === 'pdf'} />
+        <ExportStyleFields
+          value={style}
+          onChange={setStyle}
+          pdf={format === 'pdf'}
+          headingsLabel="Chapter headings (this book)"
+        />
         <div className="row">
           <span className="status-spacer" />
           <button onClick={props.onClose}>Cancel</button>
@@ -186,6 +206,7 @@ export function ExportStyleFields(props: {
   onChange: (patch: Partial<ExportSettings>) => void
   /** Show the PDF paper size. */
   pdf?: boolean
+  headingsLabel?: string
 }) {
   const { value: s, onChange } = props
   return (
@@ -199,7 +220,7 @@ export function ExportStyleFields(props: {
         />
       </label>
       <label>
-        Chapter headings
+        {props.headingsLabel ?? 'Chapter headings'}
         <select
           value={s.headings}
           onChange={(e) => onChange({ headings: e.target.value as ExportSettings['headings'] })}

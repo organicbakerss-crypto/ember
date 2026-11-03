@@ -71,7 +71,9 @@ export function WorldView(props: {
   }
   // The time scrubber's moment, shared by every view in World mode.
   const [stopId, setStopId] = useState<string | null>(null)
-  const timeOn = settings.world.timeScrubber
+  // Parts this world uses (a small world can turn off its map, board or timeline).
+  const features = loaded?.view.world.features ?? { map: true, board: true, timeline: true }
+  const timeOn = settings.world.timeScrubber && features.timeline
   const stop = (timeOn && stopId && loaded?.timeline.stops.find((s) => s.id === stopId)) || null
   const world = loaded && { ...loaded, at: stop ? stop.position : null }
   const time: TimeState = {
@@ -331,6 +333,27 @@ export function WorldView(props: {
                 },
                 { label: 'Templates…', onSelect: () => setTemplatesOpen(true) },
                 { label: 'View the world as text', onSelect: showDigest },
+                {
+                  label: 'Parts of this world',
+                  submenu: (
+                    [
+                      ['map', 'Map'],
+                      ['board', 'People board'],
+                      ['timeline', 'Timeline and time scrubber'],
+                    ] as const
+                  ).map(([key, label]) => ({
+                    label,
+                    checked: features[key],
+                    keepOpen: true,
+                    onSelect: () =>
+                      void api
+                        .invoke('world:setFeatures', {
+                          worldId,
+                          features: { [key]: !features[key] },
+                        })
+                        .catch((err: unknown) => toast(describeError(err).message)),
+                  })),
+                },
               ])
             }
           >
@@ -465,27 +488,35 @@ export function WorldView(props: {
                 onOpenEntry={openEntry}
                 onNew={(lens) => setQuickAdd({ lens })}
                 map={
-                  settings.world.map
+                  settings.world.map && features.map
                     ? { exists: !!worldMapOf(world), render: () => whereMap(null) }
                     : undefined
                 }
                 extra={
                   place.lens === 'who'
                     ? [
-                        {
-                          mode: 'board',
-                          label: 'Board',
-                          render: () => (
-                            <PeopleBoard world={world} record={record} onOpenEntry={openEntry} />
-                          ),
-                        },
+                        ...(features.board
+                          ? [
+                              {
+                                mode: 'board',
+                                label: 'Board',
+                                render: () => (
+                                  <PeopleBoard
+                                    world={world}
+                                    record={record}
+                                    onOpenEntry={openEntry}
+                                  />
+                                ),
+                              },
+                            ]
+                          : []),
                         {
                           mode: 'tree',
                           label: 'Family tree',
                           render: () => <FamilyTreeView world={world} onOpenEntry={openEntry} />,
                         },
                       ]
-                    : place.lens === 'when'
+                    : place.lens === 'when' && features.timeline
                       ? [
                           {
                             mode: 'timeline',
@@ -497,7 +528,7 @@ export function WorldView(props: {
                         ]
                       : undefined
                 }
-                defaultMode={place.lens === 'when' ? 'timeline' : undefined}
+                defaultMode={place.lens === 'when' && features.timeline ? 'timeline' : undefined}
                 listExtra={
                   place.lens === 'who' ? (
                     <RelationshipsTable world={world} record={record} onOpenEntry={openEntry} />

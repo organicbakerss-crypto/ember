@@ -13,6 +13,7 @@ import { SettingsWindow } from './SettingsWindow'
 import { TrashPage } from './TrashPage'
 import { WorldView } from '../world/WorldView'
 import { WritingView, type ChapterTarget } from './WritingView'
+import { isBook } from './worldLink'
 
 interface WriteSide {
   seriesId: string
@@ -197,13 +198,21 @@ export function Home(props: { detached?: PaneRoute | null }) {
               ]
             : []),
           ...snapshot.series.flatMap((s) => [
-            {
-              id: `series:${s.id}`,
-              group: 'Open series',
-              title: s.name,
-              run: () => setRoute({ view: 'series', seriesId: s.id }),
-            },
-            ...s.volumes.map((v) => ({
+            isBook(s) && s.volumes[0]
+              ? {
+                  id: `series:${s.id}`,
+                  group: 'Open book',
+                  title: s.name,
+                  run: () =>
+                    setRoute({ view: 'volume', seriesId: s.id, volumeId: s.volumes[0]!.id }),
+                }
+              : {
+                  id: `series:${s.id}`,
+                  group: 'Open series',
+                  title: s.name,
+                  run: () => setRoute({ view: 'series', seriesId: s.id }),
+                },
+            ...(isBook(s) ? [] : s.volumes).map((v) => ({
               id: `volume:${v.id}`,
               group: 'Open volume',
               title: `${s.name} › ${v.name}`,
@@ -308,6 +317,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
       onOpenSeries={(series, options) =>
         setRoute({ view: 'series', seriesId: series.id, newVolume: options?.newVolume })
       }
+      onOpenVolume={(seriesId, volumeId) => setRoute({ view: 'volume', seriesId, volumeId })}
       onOpenTrash={() => setRoute({ view: 'trash' })}
       onOpenWorld={(worldId) => setRoute({ view: 'world', worldId })}
       onOpenSettings={() => setRoute({ view: 'settings' })}
@@ -324,6 +334,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
         key={volume.id}
         series={series}
         volume={volume}
+        worlds={snapshot.worlds}
         open={write.open}
         onBack={place === 'detached' ? () => dock('write') : toShelf}
         onOpenSeries={() => setRoute({ view: 'series', seriesId: series.id })}
@@ -480,6 +491,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
         key={series.id}
         series={series}
         world={snapshot.worlds.find((w) => w.id === series.worldId)}
+        worlds={snapshot.worlds}
         startNewVolume={route.newVolume}
         onBack={toShelf}
         onOpenVolume={(volumeId) => setRoute({ view: 'volume', seriesId: series.id, volumeId })}

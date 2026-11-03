@@ -226,7 +226,10 @@ export function registerIpc(
       host.current.updateVolume(input.seriesId, input.volumeId, {
         name: input.name,
         goals: input.goals,
+        ...(input.headings !== undefined ? { settings: { headings: input.headings } } : {}),
       }),
+    'series:setKind': (input) => host.current.setSeriesKind(input.seriesId, input.kind),
+    'world:setFeatures': (input) => host.current.setWorldFeatures(input.worldId, input.features),
     'volume:stats': (input) => host.current.volumeStats(input.seriesId, input.volumeId),
     'volume:texts': (input) => host.current.volumeTexts(input.seriesId, input.volumeId),
     'volume:names': (input) => host.current.volumeNames(input.seriesId),

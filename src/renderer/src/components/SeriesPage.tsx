@@ -9,11 +9,13 @@ import { useOverlays, type MenuItem } from './overlays'
 import { useLibraryActions } from './useLibraryActions'
 import { ExportDialog } from '../io/ExportDialog'
 import { ImportDialog } from '../io/ImportDialog'
+import { worldLinkMenu } from './worldLink'
 
 /** A series' volumes as covers, in reading order. */
 export function SeriesPage(props: {
   series: SeriesSummary
   world: WorldSummary | undefined
+  worlds: WorldSummary[]
   /** Open with the "New volume" name field ready (from the bookshelf menu). */
   startNewVolume?: boolean
   onBack: () => void
@@ -21,7 +23,7 @@ export function SeriesPage(props: {
 }) {
   const { series } = props
   const [renaming, setRenaming] = useState<string | null>(null)
-  const { openMenu } = useOverlays()
+  const { openMenu, toast } = useOverlays()
   const actions = useLibraryActions()
 
   const [exporting, setExporting] = useState<VolumeSummary | null>(null)
@@ -71,9 +73,13 @@ export function SeriesPage(props: {
                 onRename={(name) => api.invoke('series:rename', { seriesId: series.id, name })}
               />
             </h1>
-            <p className="muted">
-              {props.world ? `World: ${props.world.name}` : 'No world linked'}
-            </p>
+            <button
+              className="link muted world-link"
+              title="Choose the world this series uses"
+              onClick={(e) => openMenu(e, worldLinkMenu(series, props.worlds, toast).submenu!)}
+            >
+              {props.world ? `World: ${props.world.name}` : 'No world'} ▾
+            </button>
           </div>
           <span className="status-spacer" />
           <button onClick={() => setImporting(true)} title="Bring chapters in from a .docx file">

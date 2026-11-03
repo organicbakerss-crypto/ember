@@ -5,10 +5,17 @@ import { api, describeError } from '../api'
 
 type WorldChoice = 'none' | 'new' | string
 
-/** New story flow: name the series, then connect it to a world (existing, new, or none). */
-export function NewSeriesForm(props: { worlds: WorldFile[]; onDone: (seriesId?: string) => void }) {
+/**
+ * New story: a single book or a series, and the world it uses, if any (none
+ * by default; one can be linked or made later).
+ */
+export function NewSeriesForm(props: {
+  worlds: WorldFile[]
+  onDone: (created?: { seriesId: string; volumeId?: string }) => void
+}) {
   const [name, setName] = useState('')
-  const [world, setWorld] = useState<WorldChoice>('new')
+  const [kind, setKind] = useState<'book' | 'series'>('book')
+  const [world, setWorld] = useState<WorldChoice>('none')
   const [worldName, setWorldName] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -19,8 +26,8 @@ export function NewSeriesForm(props: { worlds: WorldFile[]; onDone: (seriesId?: 
     else if (world === 'new') choice = { mode: 'new', name: worldName || `${name} world` }
     else choice = { mode: 'existing', worldId: world }
     try {
-      const series = await api.invoke('series:create', { name, world: choice })
-      props.onDone(series.id)
+      const series = await api.invoke('series:create', { name, world: choice, kind })
+      props.onDone({ seriesId: series.id, volumeId: series.volumeOrder[0] })
     } catch (err) {
       setError(describeError(err).message)
     }
@@ -28,7 +35,31 @@ export function NewSeriesForm(props: { worlds: WorldFile[]; onDone: (seriesId?: 
 
   return (
     <form className="card stack" onSubmit={(e) => void submit(e)}>
-      <h3>New series</h3>
+      <h3>New story</h3>
+      <div className="segmented" role="radiogroup" aria-label="Kind">
+        {(
+          [
+            ['book', 'A single book'],
+            ['series', 'A series'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={kind === value}
+            className={kind === value ? 'active' : ''}
+            onClick={() => setKind(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="muted small">
+        {kind === 'book'
+          ? 'A novel, a short story or a collection. It can become a series later.'
+          : 'Several books (volumes) that belong together.'}
+      </p>
       <label>
         Name
         <input autoFocus required value={name} onChange={(e) => setName(e.target.value)} />
@@ -36,15 +67,20 @@ export function NewSeriesForm(props: { worlds: WorldFile[]; onDone: (seriesId?: 
       <label>
         World
         <select value={world} onChange={(e) => setWorld(e.target.value)}>
+          <option value="none">No world</option>
           <option value="new">Create a new world</option>
           {props.worlds.map((w) => (
             <option key={w.id} value={w.id}>
               Use {w.name}
             </option>
           ))}
-          <option value="none">Skip for now</option>
         </select>
       </label>
+      {world === 'none' && (
+        <p className="muted small">
+          You can link or make a world any time (right-click the story on the shelf).
+        </p>
+      )}
       {world === 'new' && (
         <label>
           World name

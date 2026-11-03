@@ -39,8 +39,9 @@ const FORMATS: Record<ExportFormat, { ext: string; name: string }> = {
   markdown: { ext: 'md', name: 'Markdown' },
 }
 
-const styleOf = (s: ExportSettings): ExportStyle => ({
-  headings: s.headings,
+const styleOf = (s: ExportSettings, headings?: string | null): ExportStyle => ({
+  headings:
+    headings === 'both' || headings === 'number' || headings === 'title' ? headings : s.headings,
   sceneBreak: s.sceneBreak,
   paragraphs: s.paragraphs,
 })
@@ -52,7 +53,7 @@ export async function buildManuscript(
   volumeId: string,
   author: string,
   only?: string[],
-): Promise<{ manuscript: Manuscript; skipped: string[] }> {
+): Promise<{ manuscript: Manuscript; skipped: string[]; headings: string | null }> {
   const found = await library.chaptersForExport(seriesId, volumeId, only)
   // Numbers follow the whole volume, even when only some chapters are exported.
   const all = only ? (await library.chaptersForExport(seriesId, volumeId)).chapters : found.chapters
@@ -67,6 +68,7 @@ export async function buildManuscript(
   return {
     manuscript: { title: found.volume, series: found.series, author, chapters },
     skipped: found.skipped,
+    headings: found.headings,
   }
 }
 
@@ -101,7 +103,7 @@ export async function exportVolume(
     settings: ExportSettings
   },
 ): Promise<{ path: string; chapters: number; skipped: string[] }> {
-  const { manuscript, skipped } = await buildManuscript(
+  const { manuscript, skipped, headings } = await buildManuscript(
     library,
     input.seriesId,
     input.volumeId,
@@ -125,7 +127,7 @@ export async function exportVolume(
     ? await dialog.showSaveDialog(window, options)
     : await dialog.showSaveDialog(options)
   if (choice.canceled || !choice.filePath) throw new AppError('cancelled', 'Export cancelled.')
-  const style = styleOf(input.settings)
+  const style = styleOf(input.settings, headings)
   const bytes =
     input.format === 'markdown'
       ? manuscriptMarkdown(manuscript, style)
@@ -143,7 +145,7 @@ export async function copyForRoyalRoad(
   library: Library,
   input: { seriesId: string; volumeId: string; chapterId: string; settings: ExportSettings },
 ): Promise<{ title: string }> {
-  const { manuscript } = await buildManuscript(
+  const { manuscript, headings } = await buildManuscript(
     library,
     input.seriesId,
     input.volumeId,
@@ -152,7 +154,7 @@ export async function copyForRoyalRoad(
   )
   const chapter = manuscript.chapters[0]
   if (!chapter) throw new AppError('not-found', 'That chapter could not be read.')
-  const style = styleOf(input.settings)
+  const style = styleOf(input.settings, headings)
   await clipboard.write([
     new ClipboardItem({
       'text/html': royalRoadHtml(chapter, style),

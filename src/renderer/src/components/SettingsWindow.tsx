@@ -170,6 +170,7 @@ function ImportExportSettings() {
         the binder, or the command palette.
       </p>
       <ExportStyleFields
+        headingsLabel="Chapter headings (unless a book has its own)"
         value={settings.export}
         onChange={(patch) =>
           update(({ export: current }) => ({ export: { ...current, ...patch } }))

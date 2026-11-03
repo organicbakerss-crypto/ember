@@ -86,8 +86,18 @@ Rules:
 - **Stable IDs everywhere.** Every series, volume, arc, chapter and world entry has a permanent random ID. Links use IDs, never names, so renaming a character never breaks a link. Renaming anything changes only its display name; IDs and folders stay the same.
 - **One file per item.** Chapters and world entries are separate small files, so sync moves only what changed.
 - **Reorganizing is cheap.** Moving a chapter between arcs, or reordering, edits only `outline.json`. Nothing is renamed or moved on disk.
-- **New story flow:** creating a series asks to connect it to a world: pick an existing one, create a new one, or skip. Volumes can be moved to another world later.
+- **New story flow:** "New story" asks for a single book or a series, a name, and a world: none (the default), a new one, or an existing one. The world can be linked, changed or unlinked any time.
 - **Safe writes:** every save writes a temp file, then renames it over the original, so a crash never leaves a half-written file.
+
+### Story types (as built, after 7)
+
+Not every story is a multi-book epic with a full world. The same files serve every size; the app shows only what a story uses.
+
+- **A single book** is a series with one volume and `kind: "book"` in `series.json` (old files read as series). The shelf shows it as a book ("Book · 12,400 words") and opening it goes straight to writing; the breadcrumb is just the book and the chapter, and renaming the book renames its volume (and back). "Add a volume (make it a series)" on the shelf, or making a second volume anywhere (an import, say), turns it into a series; a series with at most one volume can be shown as a single book again.
+- **Short stories:** a book with one chapter opens with the binder out of the way (the rail still opens it).
+- **Collections:** each book can choose its own chapter headings for exports and Royal Road copies ("Arrival" instead of "Chapter 1: Arrival"), from the writing view's ⋯ menu or the Export dialog; it is kept in the volume's settings. Settings → Import & export holds the default for books that haven't chosen.
+- **Worlds are optional.** A story has none by default. "World: …" on the series page header, in a story's right-click menu on the shelf, and in a book's ⋯ menu picks a world, none, or makes one. Unlinking removes only the link; the world stays on the shelf. With no world, no world parts appear anywhere (no World switch, no world panel, no capture menu).
+- **Smaller worlds:** each world can turn off its map, its people board, and its timeline with the time scrubber (World ⋯ → Parts of this world; `features` in `world.json`). Off, they leave no trace in its views; nothing in the world is deleted, and turning them back on shows everything again.
 
 ## App shell and layout
 
@@ -761,6 +771,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 5. **Layout:** split screen, tear-off windows, live updates across windows. (Done.)
 6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export. (Done.)
 7. **Sync engine:** Cloudflare R2 with step-by-step setup instructions; manifests, pull rule, conditional uploads, conflict copies, and the failure test harness. Ship only when the harness passes. (Done, lean: no Worker, no D1, no SQLite.)
+7b. **Story types:** single books, short stories and collections, worlds optional and unlinkable, smaller worlds. (Done; see Story types.)
 8. **Smart Storage and settings sync.**
 9. **World extras:** nothing left here; maps moved to 4b and time (the timeline) to 4d.
 10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.

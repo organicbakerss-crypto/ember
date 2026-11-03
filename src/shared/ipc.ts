@@ -275,6 +275,18 @@ export const ipcInputs = {
       z.object({ mode: z.literal('existing'), worldId: id('world') }),
       z.object({ mode: z.literal('new'), name: nameSchema }),
     ]),
+    kind: z.enum(['series', 'book']).optional(),
+  }),
+  /** Shows a story as a single book or as a series. */
+  'series:setKind': z.object({ seriesId: id('series'), kind: z.enum(['series', 'book']) }),
+  /** Turns the map, the people board or the timeline on or off for one world. */
+  'world:setFeatures': z.object({
+    worldId: id('world'),
+    features: z.object({
+      map: z.boolean().optional(),
+      board: z.boolean().optional(),
+      timeline: z.boolean().optional(),
+    }),
   }),
   'series:rename': z.object({ seriesId: id('series'), name: nameSchema }),
   'world:rename': z.object({ worldId: id('world'), name: nameSchema }),
@@ -493,6 +505,8 @@ export const ipcInputs = {
     ...volumeRef,
     name: nameSchema.optional(),
     goals: volumeGoalsSchema.optional(),
+    /** This book's chapter headings in exports (overrides Settings). */
+    headings: z.enum(['both', 'number', 'title']).nullable().optional(),
   }),
   'volume:stats': z.object(volumeRef),
   /** Every chapter's paragraphs, in reading order (for volume-wide diagnostics). */
@@ -651,6 +665,8 @@ export interface IpcResults {
   'library:snapshot': LibrarySnapshot
   'series:create': SeriesFile
   'series:setWorld': SeriesFile
+  'series:setKind': SeriesFile
+  'world:setFeatures': WorldFile
   'series:rename': SeriesFile
   'world:rename': WorldFile
   'arc:delete': OutlineView

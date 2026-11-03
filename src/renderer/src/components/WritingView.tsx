@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isBook, worldLinkMenu } from './worldLink'
 import type {
+  WorldSummary,
   CaptureContext,
   OutlineView,
   SeriesSummary,
@@ -58,6 +60,8 @@ export interface ChapterTarget {
 export function WritingView(props: {
   series: SeriesSummary
   volume: VolumeSummary
+  /** Every world, to link one to this story. */
+  worlds?: WorldSummary[]
   /** Back to the bookshelf. */
   onBack: () => void
   open?: ChapterTarget
@@ -115,6 +119,13 @@ export function WritingView(props: {
   const [importing, setImporting] = useState(false)
   const actions = useLibraryActions()
 
+  // A story of one chapter (a short story) opens with the binder out of the way.
+  const [sized, setSized] = useState(false)
+  if (view && !sized) {
+    setSized(true)
+    if (Object.keys(view.chapters).length === 1 && panel === 'binder') setPanel(null)
+  }
+
   const refresh = useCallback(() => {
     api.invoke('outline:get', ref).then(setView, (err) => setError(describeError(err).message))
     api.invoke('volume:stats', ref).then(setStats, () => {})
@@ -123,6 +134,7 @@ export function WritingView(props: {
   // The series' world: its entries become linked names, POV choices and names left out of analysis.
   const worldId = series.worldId
   const { data: world } = useWorld(worldId)
+  const book = isBook(series)
   const recordUndo = useUndo()
   const worldActions = useWorldActions(world, recordUndo)
   const names = useMemo(
@@ -492,7 +504,9 @@ export function WritingView(props: {
     { id: 'binder', title: 'Show binder', run: () => openPanel('binder') },
     { id: 'history', title: 'Version history of this chapter', run: () => openPanel('history') },
     { id: 'settings', title: 'Settings', run: () => setSettingsOpen(true) },
-    { id: 'series', title: `Go to series page: ${series.name}`, run: props.onOpenSeries },
+    ...(book
+      ? []
+      : [{ id: 'series', title: `Go to series page: ${series.name}`, run: props.onOpenSeries }]),
     ...(view ? chapterOrder(toContainers(view.outline)) : []).map((id) => ({
       id: `chapter:${id}`,
       group: 'Go to chapter',
@@ -536,14 +550,18 @@ export function WritingView(props: {
           ← Bookshelf
         </button>
         <nav className="breadcrumb small" aria-label="Breadcrumb">
-          <button className="link" onClick={props.onOpenSeries} title="Open the series page">
-            {series.name}
-          </button>
-          <span className="muted">/</span>
+          {!book && (
+            <>
+              <button className="link" onClick={props.onOpenSeries} title="Open the series page">
+                {series.name}
+              </button>
+              <span className="muted">/</span>
+            </>
+          )}
           <button
             className="link"
             onClick={() => openPanel('binder')}
-            title="Show this volume's binder"
+            title={book ? 'Show the chapters' : "Show this volume's binder"}
           >
             {volume.name}
           </button>
@@ -597,6 +615,25 @@ export function WritingView(props: {
                   ),
               },
               { label: 'Import from Word (.docx)…', onSelect: () => setImporting(true) },
+              {
+                label: book ? 'Chapter headings in exports' : 'This volume’s chapter headings',
+                submenu: (
+                  [
+                    [null, 'As in Settings'],
+                    ['both', 'Chapter 1: Arrival'],
+                    ['number', 'Chapter 1'],
+                    ['title', 'Arrival (stories, a collection)'],
+                  ] as const
+                ).map(([value, label]) => ({
+                  label,
+                  checked: (volume.settings['headings'] ?? null) === value,
+                  onSelect: () =>
+                    void api
+                      .invoke('volume:update', { ...ref, headings: value })
+                      .catch((err: unknown) => actions.toast(describeError(err).message)),
+                })),
+              },
+              ...(book && props.worlds ? [worldLinkMenu(series, props.worlds, actions.toast)] : []),
             ])
           }
         >

@@ -47,6 +47,11 @@ export const seriesFileSchema = z.looseObject({
   id: id('series'),
   name: nameSchema,
   worldId: id('world').nullable(),
+  /**
+   * `book`: a single book, shown and opened as one (its one volume holds the
+   * chapters). Adding a second volume makes it a series.
+   */
+  kind: z.enum(['series', 'book']).catch('series'),
   volumeOrder: z.array(id('volume')),
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -133,6 +138,14 @@ export const worldFileSchema = z.looseObject({
   name: nameSchema,
   /** Entries pinned to the top of World mode. */
   pinned: z.array(id('entry')).default([]),
+  /** Parts of World mode this world uses. Off: no trace of them in its views. */
+  features: z
+    .looseObject({
+      map: z.boolean().catch(true),
+      board: z.boolean().catch(true),
+      timeline: z.boolean().catch(true),
+    })
+    .catch({ map: true, board: true, timeline: true }),
   createdAt: timestamp,
   updatedAt: timestamp,
 })

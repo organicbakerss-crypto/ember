@@ -401,6 +401,8 @@ export class Library {
   async createSeries(input: {
     name: string
     world: { mode: 'none' } | { mode: 'existing'; worldId: string } | { mode: 'new'; name: string }
+    /** A single book: made with its one volume, named the same. */
+    kind?: SeriesFile['kind']
   }): Promise<SeriesFile> {
     let worldId: string | null = null
     if (input.world.mode === 'existing') worldId = (await this.getWorld(input.world.worldId)).id
@@ -413,6 +415,7 @@ export class Library {
       id: newId('series'),
       name: input.name.trim(),
       worldId,
+      kind: input.kind ?? 'series',
       volumeOrder: [],
       createdAt: time,
       updatedAt: time,
@@ -421,8 +424,35 @@ export class Library {
       await fs.promises.mkdir(this.paths.volumesDir(series.id), { recursive: true })
       await writeJsonFile(this.paths.seriesFile(series.id), series)
     })
+    if (series.kind === 'book') {
+      const volume = await this.createVolume({ seriesId: series.id, name: series.name })
+      series.volumeOrder = [volume.id]
+    }
     this.onChange({ kind: 'series', seriesId: series.id })
     return series
+  }
+
+  /**
+   * Shows a story as a single book or as a series. A book has one volume, so
+   * only a series with at most one volume can become one.
+   */
+  async setSeriesKind(seriesId: string, kind: SeriesFile['kind']): Promise<SeriesFile> {
+    const volumes = await listDirs(this.paths.volumesDir(seriesId))
+    if (kind === 'book' && volumes.length > 1) {
+      throw new AppError('invalid-input', 'Only a series with one volume can be a single book.')
+    }
+    const updated = await this.lock.run(`series:${seriesId}`, async () => {
+      const series = await this.getSeries(seriesId)
+      const next = { ...series, kind, updatedAt: this.timestamp() }
+      await writeJsonFile(this.paths.seriesFile(seriesId), next)
+      return next
+    })
+    // A book with no volume yet gets one, so it can be opened.
+    if (kind === 'book' && volumes.length === 0) {
+      await this.createVolume({ seriesId, name: updated.name })
+    }
+    this.onChange({ kind: 'series', seriesId })
+    return updated
   }
 
   async setSeriesWorld(seriesId: string, worldId: string | null): Promise<SeriesFile> {
@@ -464,7 +494,10 @@ export class Library {
     })
     await this.lock.run(`series:${seriesId}`, async () => {
       const series = await this.getSeries(seriesId)
-      const next = { ...series, volumeOrder: [...series.volumeOrder, volume.id], updatedAt: time }
+      const volumeOrder = [...series.volumeOrder, volume.id]
+      // A book given a second volume becomes a series.
+      const kind = series.kind === 'book' && volumeOrder.length > 1 ? 'series' : series.kind
+      const next = { ...series, kind, volumeOrder, updatedAt: time }
       await writeJsonFile(this.paths.seriesFile(seriesId), next)
     })
     this.onChange({ kind: 'volume', seriesId, volumeId: volume.id })
@@ -474,18 +507,31 @@ export class Library {
   async updateVolume(
     seriesId: string,
     volumeId: string,
-    patch: { name?: string; goals?: VolumeFile['goals'] },
+    patch: {
+      name?: string
+      goals?: VolumeFile['goals']
+      /** Merged into the volume's settings (other keys are kept). */
+      settings?: Record<string, unknown>
+    },
   ): Promise<VolumeFile> {
     const updated = await this.lock.run(`volume:${volumeId}`, async () => {
       const volume = await this.getVolume(seriesId, volumeId)
       const next: VolumeFile = {
         ...volume,
         ...definedOnly({ name: patch.name?.trim(), goals: patch.goals }),
+        ...(patch.settings ? { settings: { ...volume.settings, ...patch.settings } } : {}),
         updatedAt: this.timestamp(),
       }
       await this.writeVolumeFile(seriesId, volumeId, unitPaths.volume, next)
       return next
     })
+    // A single book's name is its volume's name.
+    if (patch.name !== undefined) {
+      const series = await this.getSeries(seriesId).catch(() => null)
+      if (series?.kind === 'book' && series.name !== updated.name) {
+        await this.renameSeries(seriesId, updated.name)
+      }
+    }
     this.onChange({ kind: 'volume', seriesId, volumeId })
     return updated
   }
@@ -666,6 +712,7 @@ export class Library {
       id: newId('world'),
       name: input.name.trim(),
       pinned: [],
+      features: { map: true, board: true, timeline: true },
       createdAt: time,
       updatedAt: time,
     }
@@ -725,7 +772,35 @@ export class Library {
       await writeJsonFile(this.paths.seriesFile(seriesId), next)
       return next
     })
+    // A single book's name is its volume's name too.
+    if (updated.kind === 'book') {
+      for (const volumeId of await listDirs(this.paths.volumesDir(seriesId))) {
+        const volume = await this.getVolume(seriesId, volumeId).catch(() => null)
+        if (volume && volume.name !== updated.name) {
+          await this.updateVolume(seriesId, volumeId, { name: updated.name })
+        }
+      }
+    }
     this.onChange({ kind: 'series', seriesId })
+    return updated
+  }
+
+  /** Turns parts of World mode on or off for one world (nothing in it is deleted). */
+  async setWorldFeatures(
+    worldId: string,
+    features: Partial<WorldFile['features']>,
+  ): Promise<WorldFile> {
+    const updated = await this.lock.run(`world:${worldId}`, async () => {
+      const world = await this.getWorld(worldId)
+      const next = {
+        ...world,
+        features: { ...world.features, ...features },
+        updatedAt: this.timestamp(),
+      }
+      await this.writeWorldFile(worldId, unitPaths.world, next)
+      return next
+    })
+    this.onChange({ kind: 'world', worldId })
     return updated
   }
 
@@ -1245,7 +1320,14 @@ export class Library {
     seriesId: string,
     volumeId: string,
     only?: string[],
-  ): Promise<{ series: string; volume: string; chapters: ChapterFile[]; skipped: string[] }> {
+  ): Promise<{
+    series: string
+    volume: string
+    /** The book's own choice of chapter headings, if it made one. */
+    headings: string | null
+    chapters: ChapterFile[]
+    skipped: string[]
+  }> {
     const series = await this.getSeries(seriesId)
     const volume = await this.getVolume(seriesId, volumeId)
     const chapters: ChapterFile[] = []
@@ -1259,7 +1341,9 @@ export class Library {
         skipped.push(chapterId)
       }
     }
-    return { series: series.name, volume: volume.name, chapters, skipped }
+    const headings =
+      typeof volume.settings['headings'] === 'string' ? volume.settings['headings'] : null
+    return { series: series.name, volume: volume.name, headings, chapters, skipped }
   }
 
   /** Every chapter's paragraphs in reading order. Unreadable chapters are skipped. */
