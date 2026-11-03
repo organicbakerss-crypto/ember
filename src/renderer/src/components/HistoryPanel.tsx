@@ -6,6 +6,7 @@ import { ReadOnlyDoc } from '../editor/ReadOnlyDoc'
 import { flushAll } from '../saving'
 import { useOverlays } from './overlays'
 import { formatWhen } from './TrashPage'
+import { useSyncStatus } from '../useSync'
 
 const REASONS: Record<SnapshotInfo['reason'], string> = {
   auto: '',
@@ -13,6 +14,7 @@ const REASONS: Record<SnapshotInfo['reason'], string> = {
   'before-deletion': 'before a deletion',
   'before-restore': 'before a restore',
   'before-replace': 'before replace all',
+  'before-sync': 'before an update from another computer',
 }
 
 /** Earlier versions of the open chapter. Preview one, then restore it if wanted. */
@@ -30,6 +32,8 @@ export function HistoryPanel(props: {
   const [list, setList] = useState<SnapshotInfo[] | null>(null)
   const [preview, setPreview] = useState<{ info: SnapshotInfo; content: RichTextDoc } | null>(null)
   const { toast } = useOverlays()
+  const synced = useSyncStatus()?.connected ?? false
+  const [fetching, setFetching] = useState(false)
 
   const refresh = useCallback(() => {
     if (!chapterId) return
@@ -85,6 +89,25 @@ export function HistoryPanel(props: {
     }
   }
 
+  /** Versions saved by the other computer (one a day) are only fetched when wanted. */
+  const fetchCloud = async () => {
+    if (!chapterId) return
+    setFetching(true)
+    try {
+      const { added } = await api.invoke('history:fetchCloud', { volumeId, chapterId })
+      toast(
+        added
+          ? `Added ${added} ${added === 1 ? 'version' : 'versions'} from the cloud.`
+          : 'No other versions in the cloud.',
+      )
+      refresh()
+    } catch (err) {
+      toast(describeError(err).message)
+    } finally {
+      setFetching(false)
+    }
+  }
+
   if (!chapterId) return <p className="muted small">Open a chapter to see its history.</p>
   return (
     <div className="history-panel">
@@ -118,6 +141,11 @@ export function HistoryPanel(props: {
         <p className="muted small">
           No earlier versions yet. Click one when it appears to preview it.
         </p>
+      )}
+      {synced && (
+        <button className="link small" disabled={fetching} onClick={() => void fetchCloud()}>
+          {fetching ? 'Looking…' : 'Get versions from the cloud'}
+        </button>
       )}
 
       {preview && (

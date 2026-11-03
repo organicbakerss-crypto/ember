@@ -11,6 +11,8 @@ export class LibraryHost {
     private readonly settings: DeviceSettingsStore,
     readonly defaultPath: string,
     private readonly onChange: (change: LibraryChange) => void,
+    /** The open library changed (opened, or none). */
+    private readonly onOpen: (library: Library | null) => void = () => {},
   ) {}
 
   /** Reopens the library used last time, if it is still there. */
@@ -19,6 +21,7 @@ export class LibraryHost {
     if (!libraryPath) return
     try {
       this.library = await Library.open(libraryPath, { onChange: this.onChange })
+      this.onOpen(this.library)
     } catch (err) {
       // Moved or unplugged drive: show the welcome screen, keep the setting for next time.
       console.warn(`Could not reopen library at ${libraryPath}:`, err)
@@ -28,6 +31,7 @@ export class LibraryHost {
   async open(path: string): Promise<LibraryStatus> {
     this.library = await Library.open(path, { create: true, onChange: this.onChange })
     await this.settings.update({ libraryPath: path })
+    this.onOpen(this.library)
     this.onChange({ kind: 'library' })
     return this.status()
   }

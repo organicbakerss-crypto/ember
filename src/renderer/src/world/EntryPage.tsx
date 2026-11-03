@@ -66,8 +66,6 @@ export function EntryPage(props: {
   const [error, setError] = useState<string | null>(null)
   // Bumped when the page text changed elsewhere (a merge, an undo), to reload the editor.
   const [bodyVersion, setBodyVersion] = useState(0)
-  // One place edits the page text at a time; elsewhere it shows read-only and kept live.
-  const lease = useDocLease(`entry:${entryId}`)
   const knownBody = useRef<string | null>(null)
 
   const load = useCallback(() => {
@@ -83,6 +81,8 @@ export function EntryPage(props: {
     )
   }, [worldId, entryId])
   useEffect(load, [load])
+  // One place edits the page text at a time; elsewhere it shows read-only and kept live.
+  const lease = useDocLease(`entry:${entryId}`, async () => load())
   useIpcEvent('library:changed', (c) => {
     if (c.kind === 'entry' && c.entryId === entryId) load()
   })

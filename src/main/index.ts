@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, safeStorage, session, shell } from 'electron'
 import { join } from 'node:path'
 import { appConfig } from '../../app.config'
 import { AppSettingsStore } from './appSettings'
@@ -14,6 +14,7 @@ import { LibraryHost } from './libraryHost'
 import { handleMediaRequests, registerMediaScheme } from './media'
 import { setAppMenu } from './menu'
 import { applySpelling, attachTextMenu } from './spelling'
+import { SyncService } from './sync/service'
 
 // Name and data folder come from the app config, not package.json.
 app.setName(appConfig.name)
@@ -45,6 +46,7 @@ function createWindow(
     },
   })
   window.once('ready-to-show', () => window.show())
+  window.on('focus', () => sync?.focused())
   guardClose(window)
   attachScreenshotKey(window)
   attachTextMenu(
@@ -74,8 +76,13 @@ function createWindow(
   return window
 }
 
-const leases = new DocLeases(`${IPC_EVENT_PREFIX}doc:yield`)
+const leases = new DocLeases(
+  `${IPC_EVENT_PREFIX}doc:yield`,
+  undefined,
+  `${IPC_EVENT_PREFIX}doc:returned`,
+)
 let windows: WindowManager | null = null
+let sync: SyncService | null = null
 
 app.on('second-instance', () => windows?.focusMain())
 
@@ -83,21 +90,48 @@ void app.whenReady().then(async () => {
   setAppMenu()
   const settings = new DeviceSettingsStore(app.getPath('userData'))
   const defaultPath = join(app.getPath('documents'), `${appConfig.name} Library`)
-  const host = new LibraryHost(settings, defaultPath, (change) =>
-    broadcast('library:changed', change),
+  sync = new SyncService({
+    userData: app.getPath('userData'),
+    leases,
+    secrets: {
+      canEncrypt: () => safeStorage.isEncryptionAvailable(),
+      encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
+      decrypt: (data) => safeStorage.decryptString(Buffer.from(data, 'base64')),
+    },
+    onStatus: (status) => broadcast('sync:status', status),
+    onNotice: (message) => broadcast('app:notice', message),
+  })
+  const syncService = sync
+  const host = new LibraryHost(
+    settings,
+    defaultPath,
+    (change) => {
+      broadcast('library:changed', change)
+      if (change.kind !== 'trash') syncService.noteChange()
+    },
+    (library) => void syncService.attach(library),
   )
   await host.restore()
   const appSettings = new AppSettingsStore(app.getPath('userData'))
   applySpelling(session.defaultSession, await appSettings.read())
   const manager = new WindowManager((options) => createWindow(appSettings, host, options), settings)
   windows = manager
-  registerIpc(host, appSettings, { manager, leases })
+  registerIpc(host, appSettings, { manager, leases }, syncService)
   handleMediaRequests(host)
   await manager.start()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void manager.start()
   })
+})
+
+// Before quitting, send what's left (a few seconds at most; the rest goes next time).
+let synced = false
+app.on('will-quit', (event) => {
+  if (synced || !sync) return
+  event.preventDefault()
+  synced = true
+  void sync.flush(8_000).finally(() => app.quit())
 })
 
 app.on('window-all-closed', () => {

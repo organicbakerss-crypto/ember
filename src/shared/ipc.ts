@@ -150,7 +150,8 @@ export interface SnapshotInfo {
   title: string
   wordCount: number
   /** Why it was taken: on a schedule while writing, or just before a restore or replace-all. */
-  reason: 'auto' | 'manual' | 'before-deletion' | 'before-restore' | 'before-replace'
+  reason:
+    'auto' | 'manual' | 'before-deletion' | 'before-restore' | 'before-replace' | 'before-sync'
 }
 
 export const SNAPSHOT_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/
@@ -569,6 +570,23 @@ export const ipcInputs = {
   }),
   /** Picks a Word file and reads it for import (nothing is created yet). */
   'import:docx': z.void(),
+  'sync:status': z.void(),
+  /**
+   * Connects this library to a cloud bucket. When the cloud already holds
+   * other work and so does this library, it asks first (`confirm` to go ahead).
+   */
+  'sync:connect': z.object({
+    url: z.string().trim().min(1).max(500),
+    accessKeyId: z.string().trim().min(1).max(200),
+    secretAccessKey: z.string().trim().min(1).max(200),
+    device: z.string().trim().min(1).max(60),
+    confirm: z.boolean().optional(),
+  }),
+  /** Stops syncing on this computer (nothing is deleted anywhere). */
+  'sync:disconnect': z.void(),
+  'sync:now': z.void(),
+  /** Brings a chapter's versions saved by other computers into its history. */
+  'history:fetchCloud': z.object({ volumeId: id('volume'), chapterId: id('chapter') }),
   /** Adds imported chapters at the end of a volume, in order. */
   'import:chapters': z.object({
     seriesId: id('series'),
@@ -685,6 +703,11 @@ export interface IpcResults {
   'export:royalRoad': { title: string }
   'import:docx': { fileName: string; html: string; warnings: string[] }
   'import:chapters': { created: number }
+  'sync:status': SyncStatus
+  'sync:connect': { status: SyncStatus } | { confirm: { series: number; worlds: number } }
+  'sync:disconnect': SyncStatus
+  'sync:now': SyncStatus
+  'history:fetchCloud': { added: number }
   'window:dropped': boolean
   'window:dock': null
   'window:route': null
@@ -729,6 +752,23 @@ export interface IpcEvents {
   'pane:showEntry': { worldId: string; entryId: string }
   /** Another place wants to edit this document: save, stop editing, invoke `doc:yielded`. */
   'doc:yield': { key: string; pane: string }
+  /** Sync has written the other computer's version: reload this document and carry on editing. */
+  'doc:returned': { key: string; pane: string }
+  'sync:status': SyncStatus
+}
+
+/** Sync as the status bar and settings show it. */
+export interface SyncStatus {
+  connected: boolean
+  state: 'off' | 'idle' | 'syncing' | 'offline' | 'error'
+  /** Files changed here that the cloud doesn't have yet. */
+  pending: number
+  lastSyncedAt: string | null
+  /** Why it's offline or failing. */
+  message: string | null
+  device: string
+  /** Where it syncs to (bucket name), when connected. */
+  bucket: string | null
 }
 
 /** Shape of `window.api`, exposed by the preload script. */

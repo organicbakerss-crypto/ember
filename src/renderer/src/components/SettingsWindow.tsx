@@ -15,6 +15,7 @@ import { SYSTEM_THEME, themes } from '../themes'
 import { ExportStyleFields } from '../io/ExportDialog'
 import { MOD } from './commands'
 import { useOverlays } from './overlays'
+import { syncLabel, useSyncStatus } from '../useSync'
 
 interface Category {
   id: string
@@ -35,11 +36,7 @@ const CATEGORIES: Category[] = [
   { id: 'shortcuts', label: 'Keyboard shortcuts', later: 'Change the keyboard shortcuts.' },
   { id: 'world', label: 'World', render: () => <WorldSettings /> },
   { id: 'import', label: 'Import & export', render: () => <ImportExportSettings /> },
-  {
-    id: 'sync',
-    label: 'Sync',
-    later: 'Cloud sync setup and settings sync between devices (Milestones 7–8).',
-  },
+  { id: 'sync', label: 'Sync', render: () => <SyncSettings /> },
   {
     id: 'storage',
     label: 'Smart Storage',
@@ -184,6 +181,184 @@ function ImportExportSettings() {
         volume’s ⋯ menu. You see how it will be split into chapters, and can fix it, before anything
         is created.
       </p>
+    </section>
+  )
+}
+
+/** Connecting to the cloud (Cloudflare R2), and how sync is doing. */
+function SyncSettings() {
+  const status = useSyncStatus()
+  const { toast } = useOverlays()
+  const [form, setForm] = useState({ url: '', accessKeyId: '', secretAccessKey: '', device: '' })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<{ series: number; worlds: number } | null>(null)
+  if (!status) return null
+  const device = form.device || status.device
+
+  const connect = async (confirmed: boolean) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await api.invoke('sync:connect', { ...form, device, confirm: confirmed })
+      if ('confirm' in r) {
+        setConfirm(r.confirm)
+      } else {
+        setConfirm(null)
+        setForm({ url: '', accessKeyId: '', secretAccessKey: '', device: '' })
+        toast('Connected. Syncing now.')
+      }
+    } catch (err) {
+      setError(describeError(err).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const run = async (channel: 'sync:now' | 'sync:disconnect') => {
+    setBusy(true)
+    try {
+      await api.invoke(channel)
+    } catch (err) {
+      toast(describeError(err).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (status.connected) {
+    const label = syncLabel(status)
+    return (
+      <section className="settings-section">
+        <h3>Sync</h3>
+        <p>
+          <strong>{label?.text}</strong>
+          {status.lastSyncedAt && (
+            <span className="muted">
+              {' '}
+              · last synced {new Date(status.lastSyncedAt).toLocaleString()}
+            </span>
+          )}
+        </p>
+        {status.message && (
+          <p className={status.state === 'error' ? 'error small' : 'muted small'}>
+            {status.message}
+          </p>
+        )}
+        <p className="muted small">
+          This computer is “{status.device}”, syncing with the bucket “{status.bucket}”. Changes go
+          up about 30 seconds after you stop typing, and the other computer’s changes come down when
+          a window comes back into focus, every few minutes, and when the app starts. If a chapter
+          changed on both computers, both versions are kept.
+        </p>
+        <div className="row">
+          <button disabled={busy} onClick={() => void run('sync:now')}>
+            Sync now
+          </button>
+          <button disabled={busy} onClick={() => void run('sync:disconnect')}>
+            Stop syncing on this computer
+          </button>
+        </div>
+        <p className="muted small">
+          Stopping keeps every file here and in the cloud; connecting again carries on where it left
+          off.
+        </p>
+      </section>
+    )
+  }
+
+  const field = (key: keyof typeof form, label: string, extra: object = {}) => (
+    <label>
+      {label}
+      <input
+        value={key === 'device' ? device : form[key]}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+        spellCheck={false}
+        autoComplete="off"
+        {...extra}
+      />
+    </label>
+  )
+  return (
+    <section className="settings-section sync-settings">
+      <h3>Sync</h3>
+      <p className="muted small">
+        Keep this library the same on your computers through your own free Cloudflare storage (R2).
+        Files stay on each computer; the cloud is only a mailbox between them. Sync never replaces
+        work: if the same chapter changed on both computers, you get both versions.
+      </p>
+      <details className="sync-guide">
+        <summary>How to set up Cloudflare (about 10 minutes, once)</summary>
+        <ol>
+          <li>
+            Make a free account at <strong>dash.cloudflare.com</strong>. Open{' '}
+            <strong>R2 Object Storage</strong> and turn it on (Cloudflare asks for a card; the free
+            tier is 10 GB, and a library uses a few MB).
+          </li>
+          <li>
+            <strong>Create bucket</strong>: give it a name (like “my-library”), leave the rest as it
+            is.
+          </li>
+          <li>
+            In the bucket’s <strong>Settings</strong>, copy the <strong>S3 API</strong> address (it
+            ends with the bucket’s name).
+          </li>
+          <li>
+            Back on the R2 page, <strong>Manage API tokens</strong> →{' '}
+            <strong>Create API token</strong>. Permission: <strong>Object Read &amp; Write</strong>,
+            for this bucket only. Create it, then copy the <strong>Access Key ID</strong> and the{' '}
+            <strong>Secret Access Key</strong> (shown only once; keep them somewhere safe, like a
+            password manager).
+          </li>
+          <li>Paste all three below and press Connect.</li>
+          <li>
+            On your other computer: open a library folder (an empty one is fine), then Settings →
+            Sync with the same three things. Everything comes down.
+          </li>
+        </ol>
+      </details>
+      <div className="stack">
+        {field('url', 'S3 API address', {
+          placeholder: 'https://….r2.cloudflarestorage.com/my-library',
+        })}
+        {field('accessKeyId', 'Access Key ID')}
+        {field('secretAccessKey', 'Secret Access Key', { type: 'password' })}
+        {field('device', 'This computer’s name')}
+      </div>
+      <p className="muted small">
+        The keys stay on this computer (in the system’s secure storage when it has one). They only
+        open this one bucket.
+      </p>
+      {error && <p className="error small">{error}</p>}
+      {confirm ? (
+        <div className="card stack">
+          <p>
+            The cloud already holds {confirm.series} {confirm.series === 1 ? 'series' : 'series'}
+            {confirm.worlds
+              ? ` and ${confirm.worlds} ${confirm.worlds === 1 ? 'world' : 'worlds'}`
+              : ''}{' '}
+            from another computer, and this library has work too. Connecting puts them together:
+            everything here goes up, everything there comes down. Nothing is replaced.
+          </p>
+          <div className="row">
+            <button className="primary" disabled={busy} onClick={() => void connect(true)}>
+              Connect and combine
+            </button>
+            <button onClick={() => setConfirm(null)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <button
+            className="primary"
+            disabled={
+              busy || !form.url || !form.accessKeyId || !form.secretAccessKey || !device.trim()
+            }
+            onClick={() => void connect(false)}
+          >
+            {busy ? 'Checking…' : 'Connect'}
+          </button>
+        </div>
+      )}
     </section>
   )
 }

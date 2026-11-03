@@ -89,7 +89,7 @@ const snapshotFileSchema = z.looseObject({
   volumeId: z.string(),
   savedAt: z.iso.datetime(),
   reason: z
-    .enum(['auto', 'manual', 'before-deletion', 'before-restore', 'before-replace'])
+    .enum(['auto', 'manual', 'before-deletion', 'before-restore', 'before-replace', 'before-sync'])
     .catch('auto'),
   title: z.string(),
   wordCount: z.number().int().nonnegative(),
@@ -1554,6 +1554,161 @@ export class Library {
         join(trashDir, `${stamp}-${target.label}-${name}`),
       )
       if (target.unit) await this.recordInManifest(target.unit, name, null)
+    }
+  }
+
+  /* ---------- sync ---------- */
+
+  /** The write lock of a sync unit (`series/<id>`, `series/<id>/volumes/<id>`, `worlds/<id>`). */
+  lockUnit<T>(unit: string, task: () => Promise<T>): Promise<T> {
+    const id = unit.slice(unit.lastIndexOf('/') + 1)
+    const kind = unit.startsWith('worlds/')
+      ? 'world'
+      : unit.includes('/volumes/')
+        ? 'volume'
+        : 'series'
+    return this.lock.run(`${kind}:${id}`, task)
+  }
+
+  /** Before sync replaces a chapter with the other computer's version: keep this one in history. */
+  async keepBeforeSync(unit: string, rel: string): Promise<void> {
+    const m = /^series\/([^/]+)\/volumes\/([^/]+)$/.exec(unit)
+    const chapterId = /^chapters\/([^/]+)\.json$/.exec(rel)?.[1]
+    if (!m || !chapterId) return
+    try {
+      const chapter = await this.readChapter(m[1]!, m[2]!, chapterId)
+      await this.snapshotChapter(m[2]!, chapter, 'before-sync', true)
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err
+    }
+  }
+
+  /**
+   * A file deleted on another computer goes to this one's trash (call while
+   * holding the unit's lock). Chapters, entries and maps can be restored from
+   * the Trash page; other files are kept in the device folder.
+   */
+  async trashSyncedFile(unit: string, rel: string): Promise<void> {
+    const path = join(this.root, unit, rel)
+    const volume = /^series\/([^/]+)\/volumes\/([^/]+)$/.exec(unit)
+    const world = /^worlds\/([^/]+)$/.exec(unit)?.[1]
+    const chapterId = /^chapters\/([^/]+)\.json$/.exec(rel)?.[1]
+    const entryId = /^entries\/([^/]+)\.json$/.exec(rel)?.[1]
+    const mapId = /^maps\/([^/]+)\.json$/.exec(rel)?.[1]
+    let item: TrashItem | null = null
+    try {
+      if (volume && chapterId) {
+        const [seriesId, volumeId] = [volume[1]!, volume[2]!]
+        const chapter = await this.readChapter(seriesId, volumeId, chapterId)
+        const [series, vol] = await Promise.all([
+          this.getSeries(seriesId).catch(() => null),
+          this.getVolume(seriesId, volumeId).catch(() => null),
+        ])
+        item = this.newTrashItem(
+          'chapter',
+          chapter.title || 'Untitled chapter',
+          series && vol ? `${series.name} › ${vol.name}` : null,
+          { seriesId, volumeId, chapterId, arc: null },
+        )
+      } else if (world && entryId) {
+        const entry = await this.world.readEntry(world, entryId)
+        item = this.newTrashItem('entry', entry.name, null, { worldId: world, entryId })
+      } else if (world && mapId) {
+        const map = await this.world.readMap(world, mapId)
+        item = this.newTrashItem('map', map.name, null, { worldId: world, mapId })
+      }
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err
+      item = null
+    }
+    if (item) {
+      await this.putInTrash(item, path)
+      this.onChange({ kind: 'trash' })
+    } else {
+      const stamp = this.timestamp().replace(/[:.]/g, '-')
+      const dest = join(
+        this.paths.localDir,
+        'trash',
+        'sync',
+        `${stamp}-${unit}/${rel}`.replaceAll('/', '~'),
+      )
+      await fs.promises.mkdir(join(dest, '..'), { recursive: true })
+      await fs.promises.rename(path, dest).catch((err: NodeJS.ErrnoException) => {
+        if (err.code !== 'ENOENT') throw err
+      })
+    }
+  }
+
+  /** A volume, world or series deleted on another computer goes to this one's trash. */
+  async trashSyncedUnit(unit: string): Promise<void> {
+    const volume = /^series\/([^/]+)\/volumes\/([^/]+)$/.exec(unit)
+    const series = /^series\/([^/]+)$/.exec(unit)?.[1]
+    const world = /^worlds\/([^/]+)$/.exec(unit)?.[1]
+    const nameOf = async (read: () => Promise<{ name: string }>, fallback: string) =>
+      read().then(
+        (x) => x.name,
+        () => fallback,
+      )
+    let item: TrashItem
+    if (volume) {
+      const [seriesId, volumeId] = [volume[1]!, volume[2]!]
+      const s = await this.getSeries(seriesId).catch(() => null)
+      item = this.newTrashItem(
+        'volume',
+        await nameOf(() => this.getVolume(seriesId, volumeId), 'Volume'),
+        s?.name ?? null,
+        { seriesId, volumeId, index: Math.max(0, s?.volumeOrder.indexOf(volumeId) ?? 0) },
+      )
+    } else if (series) {
+      item = this.newTrashItem(
+        'series',
+        await nameOf(() => this.getSeries(series), 'Series'),
+        null,
+        {
+          seriesId: series,
+        },
+      )
+    } else if (world) {
+      item = this.newTrashItem('world', await nameOf(() => this.getWorld(world), 'World'), null, {
+        worldId: world,
+        linkedSeries: [],
+      })
+    } else {
+      return
+    }
+    await this.putInTrash(item, join(this.root, unit))
+    this.onChange({ kind: 'trash' })
+  }
+
+  /** Sync changed files in a unit: refresh the local manifest and tell the windows. */
+  async syncedChanges(unit: string, rels: string[], unitChanged: boolean): Promise<void> {
+    const volume = /^series\/([^/]+)\/volumes\/([^/]+)$/.exec(unit)
+    const series = /^series\/([^/]+)$/.exec(unit)?.[1]
+    const world = /^worlds\/([^/]+)$/.exec(unit)?.[1]
+    const dir = join(this.root, unit)
+    if ((volume || world) && (await pathExists(dir))) {
+      await this.lockUnit(unit, () =>
+        this.rebuildManifest(volume ? 'volume' : 'world', dir, volume ? volume[2]! : world!),
+      ).catch(() => {})
+    }
+    if (unitChanged || series) this.onChange({ kind: 'library' })
+    if (volume) {
+      const [seriesId, volumeId] = [volume[1]!, volume[2]!]
+      this.onChange({ kind: 'volume', seriesId, volumeId })
+      this.onChange({ kind: 'outline', seriesId, volumeId })
+      for (const rel of rels) {
+        const chapterId = /^chapters\/([^/]+)\.json$/.exec(rel)?.[1]
+        if (chapterId) this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId })
+      }
+    }
+    if (series) this.onChange({ kind: 'series', seriesId: series })
+    if (world) {
+      this.onChange({ kind: 'world', worldId: world })
+      for (const rel of rels) {
+        const entryId = /^entries\/([^/]+)\.json$/.exec(rel)?.[1]
+        if (entryId) this.onChange({ kind: 'entry', worldId: world, entryId })
+        if (rel === 'inbox.json') this.onChange({ kind: 'inbox', worldId: world })
+      }
     }
   }
 

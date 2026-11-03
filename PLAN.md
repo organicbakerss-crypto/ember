@@ -25,9 +25,8 @@ One Electron app written in React and TypeScript. These are defaults; Claude Cod
 | UI | React + TypeScript | Largest ecosystem for editor, drag-and-drop and companion rendering |
 | Editor | TipTap (ProseMirror) | Rich text stored as structured JSON, not raw HTML |
 | Binder drag-and-drop | dnd-kit | Reorder chapters and arcs |
-| Local index and outbox | SQLite (better-sqlite3) | Sync queue, search index, file versions |
 | Spellcheck | Electron's built-in spellchecker + personal dictionary | Google Docs style flags |
-| Cloud sync | Cloudflare Worker + R2 (files) + D1 (version table) | Free tier is enough for one person |
+| Cloud sync | Cloudflare R2, spoken to directly (S3 API, conditional writes) | Free tier is enough for one person; no server code |
 | Local AI | Ollama | Free, offline, already installed |
 | Cloud AI (optional) | Sign in with ChatGPT | Uses the ChatGPT Plus plan, no API key |
 | Speech to text | whisper.cpp | Local and private |
@@ -77,7 +76,7 @@ library/
     relationship-types.json     renamed or added relationship types (only once used)
     board.json                  where each person sits on the people board (layout only)
     manifest.json
-  .ember-local/                 device-only: SQLite index, outbox, trash, doodles, window layout
+  .ember-local/                 device-only: sync state, history, trash, doodles
 ```
 
 (The `.ember-local` folder name comes from the app config, per the branding rule.)
@@ -465,11 +464,9 @@ Sync is per file and local-first: the local copy is the truth, the cloud is a ma
 | Content | Chapters, outlines, world entries, maps | Automatic, per file |
 | History | Snapshots | Upload-only; pulled only on restore |
 
-**Per-file tracking.** Each content file records its content hash, the cloud version it was last synced from (its base version), and a dirty flag.
+**Per-file tracking.** For each file, sync remembers its base: the hash both sides last agreed on. A file whose hash differs from its base has changed here. There is no separate queue: comparing hashes with the bases *is* the outbox, so it survives going offline, closing the app and crashes, and can always be rebuilt.
 
-**Outbox.** Every save adds an entry to a persistent queue in SQLite. The queue survives going offline, closing the app and crashes, and uploads with retries and backoff when the network returns.
-
-**Manifests.** Each volume and world has a small manifest of its files, versions and hashes. Sync compares manifests and transfers only changed files, usually a single chapter.
+**Manifests.** Each sync unit (a series folder, a volume, a world) has a small manifest in the cloud of its files and hashes. One listing of the manifests shows which units changed; sync transfers only changed files, usually a single chapter.
 
 **The pull rule** (this is what prevents lost work):
 
@@ -480,7 +477,7 @@ Sync is per file and local-first: the local copy is the truth, the cloud is a ma
 | Yes | Yes | Keep both: save a conflict copy, show a quiet notice, never overwrite |
 | No | No | Nothing |
 
-**Conditional uploads.** The Worker accepts an upload only if the file's cloud version still equals the base version the device started from (checked in D1 in one transaction). Otherwise it rejects the upload and the app treats it as a conflict.
+**Conditional uploads.** A unit's manifest is replaced only if it is still the version this device last saw (R2's conditional write, checked by the storage itself). Otherwise the upload is refused and sync looks again: what changed there is compared file by file, and a file changed on both sides is a conflict.
 
 **Deletions.** A deletion syncs as a marker. Every device moves its own copy into its own local trash rather than erasing it, so nothing is lost on any machine.
 
@@ -488,7 +485,23 @@ Sync is per file and local-first: the local copy is the truth, the cloud is a ma
 
 **Sync must prove itself.** Build an automated test harness alongside the engine, not after: two simulated devices editing the same and different files, the network cut mid-upload, the app killed mid-save, then reconnecting. The test passes only if no words are ever lost.
 
+**As built in 7 (lean):**
+
+- **No server code.** The app talks to the R2 bucket directly with the S3 API (signed requests, a few hundred lines, no SDK). R2's conditional writes (`If-Match`, `If-None-Match`) do the job a Worker and a D1 table would have. Connecting checks that the storage refuses a second "only if new" write, and won't start without it.
+- **In the bucket** (under `library/`): `units/<unit>.json`, one manifest per unit (each file's hash, `null` once deleted, who changed it and when); `blobs/<sha256>`, each file's contents gzipped and named by its hash, so stored once and never changed (images are uploaded once even when renamed); `history/<volume>/<chapter>/<snapshot>.json.gz`.
+- **On this computer** (`.ember-local/sync/`): per unit, the manifest last seen and each file's base; a cache of file hashes (by size, time and inode) so unchanged files aren't re-read. Losing either costs a careful re-check, never words: files that differ then count as changed on both sides, and both versions are kept.
+- **When:** 2 seconds after the app opens, when a window comes back into focus, 30 seconds after writing pauses (at most 2 minutes while writing nonstop), every 5 minutes, and once more on quit (up to 8 seconds; anything left goes next time). An idle check is one listing request. Offline, it retries after 30 s, 1, 2 then 5 minutes.
+- **Both changed:** a chapter or a world entry from the other computer becomes a copy beside this one, named "Arrival (copy from Mac, 2026-11-03 14:05)" (a chapter appears at the end of the volume; an entry's copy has no aliases), with a notice. Other files (outline, board, settings of a world) keep this computer's version and the other one is saved under `.ember-local/sync/conflicts/`; the outline mends itself (chapters on disk but not in it appear at the end).
+- **Deleted elsewhere:** chapters, entries, maps, volumes, series and worlds go to this computer's Trash and can be restored (which syncs them back). A file edited here after being deleted there is kept and uploaded again, and the other way round. A deleted series takes its volumes only if none changed here.
+- **An open chapter updates:** before sync writes the other computer's version of a chapter or entry that's open, the editor saves and pauses (the document lease), the old version is kept in history ("before an update from another computer"), and the page reloads and carries on. Text typed in that moment is never overwritten: it becomes a conflict instead.
+- **History:** the last version of each chapter per finished day goes up; the History panel's "Get versions from the cloud" brings the other computer's into the list.
+- **Settings → Sync:** the setup guide, then the bucket's S3 API address, the access key, the secret and this computer's name. If both the cloud and this library already hold work, it asks before putting them together. The secret is kept with the system's secure storage (Electron safeStorage) where there is one. Status bar: "Synced", "3 changes to sync", "Syncing…", "Offline, 3 changes saved locally" or "Sync problem".
+- **The harness** (`src/main/sync/sync.test.ts`): two computers make 120 random steps each run (edits of the same and different chapters, deletions, syncs with dropped requests and lost replies, the app killed mid-apply, typing while a download lands, restarts), then must agree exactly, and every version not replaced or deleted by the user must still exist. Planting either of two bugs (overwrite on conflict; skip the "changed meanwhile" check) makes it fail. Real libraries are tested too (`library.test.ts`), and the whole app end to end with two instances against an S3-like server.
+- **Not built (lean):** clean-up of old blobs in the cloud (a year of writing is tens of MB of the 10 GB free); live sync while typing; merging two edits of one chapter.
+
 ## Smart Storage
+
+**Decide after sync, from real sizes.** A novel is about 1 MB of text; images take the space. If libraries stay small, this can shrink to one action, "Remove from this computer (keep in the cloud)", instead of the automatic going-cold below.
 
 Volumes and worlds you are working on stay local and sync per file; ones you rarely open are compressed and only downloaded when you open them. It all happens in the background with no manual file management.
 
@@ -747,7 +760,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
    - **4e: Skins.** The world-skin system and vocabulary files; Fantasy, Cyberpunk and Arcade skins; lighter mode.
 5. **Layout:** split screen, tear-off windows, live updates across windows. (Done.)
 6. **Import and export:** .docx import with preview; DOCX, PDF, EPUB, Markdown and Royal Road export. (Done.)
-7. **Sync engine:** Cloudflare Worker, R2 and D1 with step-by-step setup instructions; outbox, manifests, pull rule, conditional uploads, conflict copies, and the failure test harness. Ship only when the harness passes.
+7. **Sync engine:** Cloudflare R2 with step-by-step setup instructions; manifests, pull rule, conditional uploads, conflict copies, and the failure test harness. Ship only when the harness passes. (Done, lean: no Worker, no D1, no SQLite.)
 8. **Smart Storage and settings sync.**
 9. **World extras:** nothing left here; maps moved to 4b and time (the timeline) to 4d.
 10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.

@@ -72,4 +72,35 @@ describe('document leases', () => {
     leases.releaseAll(b.sender)
     expect(leases.holder('chapter:chp_1111')).toBeUndefined()
   })
+
+  it('sync borrows a document: the editor saves, stops, and gets it back', async () => {
+    const leases = new DocLeases('yield', 5000, 'returned')
+    const a = window()
+    await leases.claim('chapter:chp_1111', a.sender, 'p1', false)
+    let lent = false
+    const borrowing = leases.borrow(['chapter:chp_1111', 'chapter:chp_2222']).then((r) => {
+      lent = true
+      return r
+    })
+    await Promise.resolve()
+    expect(a.sent).toEqual([{ channel: 'yield', payload: { key: 'chapter:chp_1111', pane: 'p1' } }])
+    expect(lent).toBe(false)
+    leases.yielded('chapter:chp_1111', a.sender, 'p1')
+    const giveBack = await borrowing
+    // Meanwhile nobody else can edit it.
+    const b = window()
+    expect(await leases.claim('chapter:chp_1111', b.sender, 'p2', false)).toEqual({
+      editing: false,
+    })
+    expect(await leases.claim('chapter:chp_2222', b.sender, 'p2', false)).toEqual({
+      editing: false,
+    })
+    giveBack()
+    expect(a.sent[1]).toEqual({
+      channel: 'returned',
+      payload: { key: 'chapter:chp_1111', pane: 'p1' },
+    })
+    expect(await leases.claim('chapter:chp_1111', a.sender, 'p1', false)).toEqual({ editing: true })
+    expect(await leases.claim('chapter:chp_2222', b.sender, 'p2', false)).toEqual({ editing: true })
+  })
 })

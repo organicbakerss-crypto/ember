@@ -85,12 +85,11 @@ export function ChapterEditor(props: Props) {
   const { seriesId, volumeId, chapterId } = props
   const [chapter, setChapter] = useState<ChapterFile | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const lease = useDocLease(`chapter:${chapterId}`)
-
   const read = useCallback(
     () => api.invoke('chapter:read', { seriesId, volumeId, chapterId }),
     [seriesId, volumeId, chapterId],
   )
+  const lease = useDocLease(`chapter:${chapterId}`, async () => setChapter(await read()))
   useEffect(() => {
     read().then(setChapter, (err) => setError(describeError(err).message))
   }, [read])

@@ -21,11 +21,12 @@ import { api, describeError } from '../api'
 import { STATUS_LABELS, STATUS_SHORT, formatWords, type StatKey } from '../analysisFormat'
 import type { SaveState } from '../editor/useChapterSaver'
 import { useSettings } from '../useTheme'
+import { syncLabel, useSyncStatus } from '../useSync'
 import { useOverlays } from './overlays'
 
 /**
  * The status bar. Right-click to choose what it shows; drag items to
- * reorder them. It is the only place save (and later sync) status appears.
+ * reorder them. It is the only place save and sync status appear.
  */
 export function StatusBar(props: {
   seriesId: string
@@ -42,6 +43,7 @@ export function StatusBar(props: {
   const { settings, update } = useSettings()
   const { openMenu } = useOverlays()
   const items = settings.statusBar
+  const sync = syncLabel(useSyncStatus())
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const toggle = (item: StatusItem) =>
@@ -82,11 +84,21 @@ export function StatusBar(props: {
       case 'goals':
         return <Goals {...props} />
       case 'sync':
+        if (props.saveState === 'error') {
+          return (
+            <span className="error" role="status">
+              Not saved: {props.saveError} (retrying)
+            </span>
+          )
+        }
+        // Saving comes first; once saved, where sync is.
         return (
-          <span className={props.saveState === 'error' ? 'error' : 'muted'} role="status">
-            {props.saveState === 'error'
-              ? `Not saved: ${props.saveError} (retrying)`
-              : SAVE_LABELS[props.saveState]}
+          <span
+            className={sync?.problem ? 'error' : 'muted'}
+            role="status"
+            title={sync?.problem ? 'See Settings → Sync' : undefined}
+          >
+            {props.saveState === 'saved' && sync ? sync.text : SAVE_LABELS[props.saveState]}
           </span>
         )
       default:

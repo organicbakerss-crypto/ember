@@ -19,6 +19,9 @@ interface Holder {
 /** How long a place has to save before editing moves anyway (a stuck window can't block it). */
 const YIELD_TIMEOUT_MS = 4000
 
+/** Sync, holding documents while it writes the other computer's version. */
+const SYNC: LeaseSender = { isDestroyed: () => false, send: () => {} }
+
 export class DocLeases {
   private readonly holders = new Map<string, Holder>()
   private readonly waiting = new Map<string, () => void>()
@@ -27,7 +30,42 @@ export class DocLeases {
     /** The event channel that asks a place to save and stop editing. */
     private readonly yieldChannel: string,
     private readonly timeoutMs = YIELD_TIMEOUT_MS,
+    /** The event channel that gives a document back after sync borrowed it. */
+    private readonly returnChannel = '',
   ) {}
+
+  /**
+   * Sync is about to write these documents: whoever edits them saves and
+   * stops (shown read-only meanwhile). The returned function gives them back;
+   * the place that was editing reloads and carries on.
+   */
+  async borrow(keys: string[]): Promise<() => void> {
+    const lent: { key: string; from: Holder | null }[] = []
+    await Promise.all(
+      [...new Set(keys)].map(async (key) => {
+        const current = this.holder(key)
+        if (current?.sender === SYNC) return
+        if (current) {
+          await new Promise<void>((resolve) => {
+            this.waiting.set(key, resolve)
+            current.sender.send(this.yieldChannel, { key, pane: current.pane })
+            setTimeout(resolve, this.timeoutMs)
+          })
+          this.waiting.delete(key)
+        }
+        this.holders.set(key, { sender: SYNC, pane: 'sync' })
+        lent.push({ key, from: current ?? null })
+      }),
+    )
+    return () => {
+      for (const { key, from } of lent) {
+        if (this.holders.get(key)?.sender === SYNC) this.holders.delete(key)
+        if (from && !from.sender.isDestroyed() && this.returnChannel) {
+          from.sender.send(this.returnChannel, { key, pane: from.pane })
+        }
+      }
+    }
+  }
 
   /** Who edits a document now, if anyone. */
   holder(key: string): Holder | undefined {

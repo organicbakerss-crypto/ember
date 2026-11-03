@@ -20,6 +20,7 @@ import { applySpelling } from './spelling'
 import { setCaptureContext } from './capture'
 import { AppError } from './errors'
 import type { LibraryHost } from './libraryHost'
+import type { SyncService } from './sync/service'
 
 type Handlers = {
   [C in IpcChannel]: (
@@ -32,6 +33,7 @@ export function registerIpc(
   host: LibraryHost,
   settings: AppSettingsStore,
   windows: { manager: WindowManager; leases: DocLeases },
+  sync: SyncService,
 ): void {
   const { manager, leases } = windows
   const handlers: Handlers = {
@@ -43,6 +45,13 @@ export function registerIpc(
     'export:royalRoad': async (input) =>
       copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
+    'sync:status': () => sync.status(),
+    'sync:connect': (input) => sync.connect(input),
+    'sync:disconnect': () => sync.disconnect(),
+    'sync:now': () => sync.syncNow(),
+    'history:fetchCloud': async (input) => ({
+      added: await sync.fetchHistory(input.volumeId, input.chapterId),
+    }),
     'import:chapters': async (input) => {
       // One after another, so they keep their order at the end of the volume.
       for (const c of input.chapters) {

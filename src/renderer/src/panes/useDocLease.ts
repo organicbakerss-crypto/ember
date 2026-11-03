@@ -10,7 +10,11 @@ import { usePane } from './PaneContext'
  * `take` moves editing here: the other place saves and stops first, then
  * `before` runs (to load the saved text), then this place edits.
  */
-export function useDocLease(key: string) {
+export function useDocLease(
+  key: string,
+  /** After sync wrote the other computer's version: load it before editing again. */
+  reload?: () => Promise<void>,
+) {
   const pane = usePane()
   const holder = `${pane.id}:${useId()}`
   const [state, setState] = useState<{ key: string; editing: boolean | null }>({
@@ -40,6 +44,18 @@ export function useDocLease(key: string) {
       setState({ key, editing: false })
       void api.invoke('doc:yielded', { key, pane: holder })
     })
+  })
+
+  // Sync borrowed it (to write the other computer's version) and gives it back.
+  useIpcEvent('doc:returned', (back) => {
+    if (back.key !== key || back.pane !== holder) return
+    void api
+      .invoke('doc:claim', { key, pane: holder, take: false })
+      .then(async (r) => {
+        if (r.editing) await reload?.().catch(() => {})
+        setState({ key, editing: r.editing })
+      })
+      .catch(() => {})
   })
 
   const take = useCallback(
