@@ -1,5 +1,6 @@
 /** Registers every IPC request handler. Inputs are validated before they reach the library. */
-import { BrowserWindow, dialog, ipcMain, session, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
+import { tokenPageUrl } from './sync/cloudflare'
 import type { DocLeases } from './docLeases'
 import { copyForRoyalRoad, exportVolume } from './export/service'
 import { readDocx } from './import/docx'
@@ -48,6 +49,10 @@ export function registerIpc(
     'sync:status': () => sync.status(),
     'sync:connect': (input) => sync.connect(input),
     'sync:disconnect': () => sync.disconnect(),
+    'sync:openCloudflare': async () => {
+      await shell.openExternal(tokenPageUrl())
+      return null
+    },
     'sync:now': () => sync.syncNow(),
     'history:fetchCloud': async (input) => ({
       added: await sync.fetchHistory(input.volumeId, input.chapterId),

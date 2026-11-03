@@ -575,13 +575,24 @@ export const ipcInputs = {
    * Connects this library to a cloud bucket. When the cloud already holds
    * other work and so does this library, it asks first (`confirm` to go ahead).
    */
-  'sync:connect': z.object({
-    url: z.string().trim().min(1).max(500),
-    accessKeyId: z.string().trim().min(1).max(200),
-    secretAccessKey: z.string().trim().min(1).max(200),
-    device: z.string().trim().min(1).max(60),
-    confirm: z.boolean().optional(),
-  }),
+  'sync:connect': z.union([
+    /** One Cloudflare API token: the app makes (or finds) its own bucket. */
+    z.object({
+      token: z.string().trim().min(20).max(400),
+      device: z.string().trim().min(1).max(60),
+      confirm: z.boolean().optional(),
+    }),
+    /** A bucket set up by hand. */
+    z.object({
+      url: z.string().trim().min(1).max(500),
+      accessKeyId: z.string().trim().min(1).max(200),
+      secretAccessKey: z.string().trim().min(1).max(200),
+      device: z.string().trim().min(1).max(60),
+      confirm: z.boolean().optional(),
+    }),
+  ]),
+  /** Opens Cloudflare's token page, filled in with the permission sync needs. */
+  'sync:openCloudflare': z.void(),
   /** Stops syncing on this computer (nothing is deleted anywhere). */
   'sync:disconnect': z.void(),
   'sync:now': z.void(),
@@ -706,6 +717,7 @@ export interface IpcResults {
   'sync:status': SyncStatus
   'sync:connect': { status: SyncStatus } | { confirm: { series: number; worlds: number } }
   'sync:disconnect': SyncStatus
+  'sync:openCloudflare': null
   'sync:now': SyncStatus
   'history:fetchCloud': { added: number }
   'window:dropped': boolean

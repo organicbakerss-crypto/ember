@@ -21,6 +21,7 @@ import { CloudError, PreconditionFailed, type CloudStore } from './cloud'
 import { SyncEngine, UNITS_PREFIX, type SyncHooks } from './engine'
 import { fetchHistory, uploadHistory } from './history'
 import { parseBucketUrl, S3Cloud } from './s3'
+import { setupFromToken } from './cloudflare'
 import { localUnits } from './units'
 
 const START_DELAY_MS = 2_000
@@ -58,6 +59,8 @@ export interface SyncServiceOptions {
   onNotice: (message: string) => void
   /** For tests: a cloud instead of R2. */
   makeCloud?: (config: SyncConfig, secret: string) => CloudStore
+  /** For tests: where the Cloudflare API is. */
+  tokenSetup?: Parameters<typeof setupFromToken>[1]
 }
 
 export const defaultDeviceName = () =>
@@ -287,33 +290,38 @@ export class SyncService {
 
   /* ---------- setting up ---------- */
 
-  async connect(input: {
-    url: string
-    accessKeyId: string
-    secretAccessKey: string
-    device: string
-    confirm?: boolean
-  }): Promise<{ status: SyncStatus } | { confirm: { series: number; worlds: number } }> {
+  async connect(
+    input: { device: string; confirm?: boolean } & (
+      { token: string } | { url: string; accessKeyId: string; secretAccessKey: string }
+    ),
+  ): Promise<{ status: SyncStatus } | { confirm: { series: number; worlds: number } }> {
     const library = this.library
     if (!library) throw new AppError('no-library', 'Open a library first.')
-    const where = parseBucketUrl(input.url)
-    if (!where?.bucket) {
-      throw new AppError(
-        'invalid-input',
-        'Paste the bucket’s S3 API address; it ends with the bucket’s name (…cloudflarestorage.com/your-bucket).',
-      )
+    let where: { endpoint: string; bucket: string; accessKeyId: string; secretAccessKey: string }
+    if ('token' in input) {
+      where = await setupFromToken(input.token, this.options.tokenSetup)
+    } else {
+      const parsed = parseBucketUrl(input.url)
+      if (!parsed?.bucket) {
+        throw new AppError(
+          'invalid-input',
+          'Paste the bucket’s S3 API address; it ends with the bucket’s name (…cloudflarestorage.com/your-bucket).',
+        )
+      }
+      where = { ...parsed, accessKeyId: input.accessKeyId, secretAccessKey: input.secretAccessKey }
     }
     const config: SyncConfig = {
-      ...where,
-      accessKeyId: input.accessKeyId,
-      secret: input.secretAccessKey,
+      endpoint: where.endpoint,
+      bucket: where.bucket,
+      accessKeyId: where.accessKeyId,
+      secret: where.secretAccessKey,
       encrypted: false,
       device: input.device,
       libraryId: library.info.id,
     }
     const cloud =
-      this.options.makeCloud?.(config, input.secretAccessKey) ??
-      cloudFor(config, input.secretAccessKey)
+      this.options.makeCloud?.(config, where.secretAccessKey) ??
+      cloudFor(config, where.secretAccessKey)
     await checkCloud(cloud)
 
     // Both sides hold work: say what will happen before putting them together.
@@ -324,7 +332,7 @@ export class SyncService {
     }
 
     if (this.options.secrets.canEncrypt()) {
-      config.secret = this.options.secrets.encrypt(input.secretAccessKey)
+      config.secret = this.options.secrets.encrypt(where.secretAccessKey)
       config.encrypted = true
     }
     await writeFileAtomic(this.configFile, serializeJson({ formatVersion: 1, ...config }))

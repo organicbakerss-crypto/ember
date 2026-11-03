@@ -57,7 +57,7 @@ See [PLAN.md](PLAN.md) for the full build plan and ground rules.
 - **Themes:** 24 in all. Light, Dark and High Contrast, plus 21 with a world skin and their own words: Fantasy, Cyberpunk, Arcade, Storybook, Magic Academy, Noir, Isekai, Comic Book, Blueprint, ’90s Desktop, Lo-fi Study, Deep Space, Gothic Horror, Steampunk, Wasteland, Y2K Aero, Tarot, Atomic Age, Trading Card, Wild West and Circus
 - **Layout:** writing and the world side by side (Ctrl/Cmd+\\), panes torn off into their own windows and docked back, live updates across windows, one place edits a chapter at a time
 - **Import and export:** Word files imported as chapters with a preview to fix the splits; export a volume or chapters to Word, PDF, EPUB or Markdown; copy a chapter for Royal Road
-- **Sync:** your library on all your computers through your own Cloudflare R2 bucket (Settings → Sync has the setup steps). Only changed files move; nothing is ever overwritten (a chapter changed on two computers keeps both versions); deletions go to the other computer's Trash; works offline and catches up
+- **Sync:** your library on all your computers through your own Cloudflare account (Settings → Sync: open Cloudflare, create a token, paste it). Only changed files move; nothing is ever overwritten (a chapter changed on two computers keeps both versions); deletions go to the other computer's Trash; works offline and catches up
 
 ## Requirements
 

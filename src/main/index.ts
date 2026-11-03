@@ -100,6 +100,15 @@ void app.whenReady().then(async () => {
     },
     onStatus: (status) => broadcast('sync:status', status),
     onNotice: (message) => broadcast('app:notice', message),
+    // End-to-end tests point setup at a stand-in for Cloudflare (never in a packaged app).
+    ...(!app.isPackaged && process.env['SYNC_TEST_API'] && process.env['SYNC_TEST_S3']
+      ? {
+          tokenSetup: {
+            api: process.env['SYNC_TEST_API'],
+            endpointFor: () => process.env['SYNC_TEST_S3']!,
+          },
+        }
+      : {}),
   })
   const syncService = sync
   const host = new LibraryHost(

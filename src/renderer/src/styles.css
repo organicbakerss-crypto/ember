@@ -3581,6 +3581,22 @@ kbd {
 .sync-settings label input {
   width: 100%;
 }
+.sync-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.6rem;
+  width: min(34rem, 100%);
+}
+.sync-name {
+  display: grid;
+  gap: 0.25rem;
+  width: min(34rem, 100%);
+}
+.sync-settings .sync-steps input,
+.sync-name input {
+  width: 100%;
+}
 .sync-guide {
   border: 1px solid var(--border);
   border-radius: 6px;

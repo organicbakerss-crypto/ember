@@ -189,23 +189,34 @@ function ImportExportSettings() {
 function SyncSettings() {
   const status = useSyncStatus()
   const { toast } = useOverlays()
-  const [form, setForm] = useState({ url: '', accessKeyId: '', secretAccessKey: '', device: '' })
+  const [token, setToken] = useState('')
+  const [manual, setManual] = useState({ url: '', accessKeyId: '', secretAccessKey: '' })
+  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<{ series: number; worlds: number } | null>(null)
+  /** How the last Connect was asked for (repeated when confirming). */
+  const [how, setHow] = useState<'token' | 'manual'>('token')
   if (!status) return null
-  const device = form.device || status.device
+  const device = name || status.device
 
-  const connect = async (confirmed: boolean) => {
+  const connect = async (via: 'token' | 'manual', confirmed: boolean) => {
     setBusy(true)
     setError(null)
+    setHow(via)
     try {
-      const r = await api.invoke('sync:connect', { ...form, device, confirm: confirmed })
+      const r = await api.invoke(
+        'sync:connect',
+        via === 'token'
+          ? { token, device, confirm: confirmed }
+          : { ...manual, device, confirm: confirmed },
+      )
       if ('confirm' in r) {
         setConfirm(r.confirm)
       } else {
         setConfirm(null)
-        setForm({ url: '', accessKeyId: '', secretAccessKey: '', device: '' })
+        setToken('')
+        setManual({ url: '', accessKeyId: '', secretAccessKey: '' })
         toast('Connected. Syncing now.')
       }
     } catch (err) {
@@ -266,12 +277,12 @@ function SyncSettings() {
     )
   }
 
-  const field = (key: keyof typeof form, label: string, extra: object = {}) => (
+  const field = (key: keyof typeof manual, label: string, extra: object = {}) => (
     <label>
       {label}
       <input
-        value={key === 'device' ? device : form[key]}
-        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+        value={manual[key]}
+        onChange={(e) => setManual((f) => ({ ...f, [key]: e.target.value }))}
         spellCheck={false}
         autoComplete="off"
         {...extra}
@@ -282,57 +293,39 @@ function SyncSettings() {
     <section className="settings-section sync-settings">
       <h3>Sync</h3>
       <p className="muted small">
-        Keep this library the same on your computers through your own free Cloudflare storage (R2).
-        Files stay on each computer; the cloud is only a mailbox between them. Sync never replaces
-        work: if the same chapter changed on both computers, you get both versions.
+        Keep this library the same on your computers, through your own free Cloudflare storage.
+        Files stay on each computer; the cloud is only a mailbox between them. Nothing is ever
+        replaced: if a chapter changed on both computers, you get both versions.
       </p>
-      <details className="sync-guide">
-        <summary>How to set up Cloudflare (about 10 minutes, once)</summary>
-        <ol>
-          <li>
-            Make a free account at <strong>dash.cloudflare.com</strong>. Open{' '}
-            <strong>R2 Object Storage</strong> and turn it on (Cloudflare asks for a card; the free
-            tier is 10 GB, and a library uses a few MB).
-          </li>
-          <li>
-            <strong>Create bucket</strong>: give it a name (like “my-library”), leave the rest as it
-            is.
-          </li>
-          <li>
-            In the bucket’s <strong>Settings</strong>, copy the <strong>S3 API</strong> address (it
-            ends with the bucket’s name).
-          </li>
-          <li>
-            Back on the R2 page, <strong>Manage API tokens</strong> →{' '}
-            <strong>Create API token</strong>. Permission: <strong>Object Read &amp; Write</strong>,
-            for this bucket only. Create it, then copy the <strong>Access Key ID</strong> and the{' '}
-            <strong>Secret Access Key</strong> (shown only once; keep them somewhere safe, like a
-            password manager).
-          </li>
-          <li>Paste all three below and press Connect.</li>
-          <li>
-            On your other computer: open a library folder (an empty one is fine), then Settings →
-            Sync with the same three things. Everything comes down.
-          </li>
-        </ol>
-      </details>
-      <div className="stack">
-        {field('url', 'S3 API address', {
-          placeholder: 'https://….r2.cloudflarestorage.com/my-library',
-        })}
-        {field('accessKeyId', 'Access Key ID')}
-        {field('secretAccessKey', 'Secret Access Key', { type: 'password' })}
-        {field('device', 'This computer’s name')}
-      </div>
-      <p className="muted small">
-        The keys stay on this computer (in the system’s secure storage when it has one). They only
-        open this one bucket.
-      </p>
+      <ol className="sync-steps">
+        <li>
+          <button onClick={() => void api.invoke('sync:openCloudflare')}>Open Cloudflare</button>{' '}
+          and sign in (or make a free account). It opens on the page for making a key, already
+          filled in.
+        </li>
+        <li>
+          Press <strong>Continue to summary</strong>, then <strong>Create Token</strong>, and copy
+          the token.
+        </li>
+        <li>
+          <label>
+            Paste it here
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="The token from Cloudflare"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </label>
+        </li>
+      </ol>
       {error && <p className="error small">{error}</p>}
       {confirm ? (
         <div className="card stack">
           <p>
-            The cloud already holds {confirm.series} {confirm.series === 1 ? 'series' : 'series'}
+            The cloud already holds {confirm.series} series
             {confirm.worlds
               ? ` and ${confirm.worlds} ${confirm.worlds === 1 ? 'world' : 'worlds'}`
               : ''}{' '}
@@ -340,7 +333,7 @@ function SyncSettings() {
             everything here goes up, everything there comes down. Nothing is replaced.
           </p>
           <div className="row">
-            <button className="primary" disabled={busy} onClick={() => void connect(true)}>
+            <button className="primary" disabled={busy} onClick={() => void connect(how, true)}>
               Connect and combine
             </button>
             <button onClick={() => setConfirm(null)}>Cancel</button>
@@ -350,15 +343,48 @@ function SyncSettings() {
         <div>
           <button
             className="primary"
-            disabled={
-              busy || !form.url || !form.accessKeyId || !form.secretAccessKey || !device.trim()
-            }
-            onClick={() => void connect(false)}
+            disabled={busy || token.trim().length < 20 || !device.trim()}
+            onClick={() => void connect('token', false)}
           >
-            {busy ? 'Checking…' : 'Connect'}
+            {busy ? 'Setting up…' : 'Connect'}
           </button>
         </div>
       )}
+      <p className="muted small">
+        The app makes its own storage space in your Cloudflare account and never touches anything
+        else there. On your other computer, paste the same token (keep it in a password manager) and
+        everything comes down. The token stays on this computer, in the system’s secure storage when
+        it has one.
+      </p>
+      <label className="sync-name">
+        This computer’s name (shown on the other one)
+        <input value={device} onChange={(e) => setName(e.target.value)} spellCheck={false} />
+      </label>
+      <details className="sync-guide">
+        <summary>Use a storage bucket you set up yourself</summary>
+        <p className="muted small">
+          For a bucket you made by hand: its S3 API address (from the bucket’s settings, ending with
+          its name) and an R2 API token’s Access Key ID and Secret Access Key, with Object Read
+          &amp; Write on that bucket.
+        </p>
+        <div className="stack">
+          {field('url', 'S3 API address', {
+            placeholder: 'https://….r2.cloudflarestorage.com/my-bucket',
+          })}
+          {field('accessKeyId', 'Access Key ID')}
+          {field('secretAccessKey', 'Secret Access Key', { type: 'password' })}
+          <div>
+            <button
+              disabled={
+                busy || !manual.url || !manual.accessKeyId || !manual.secretAccessKey || !device
+              }
+              onClick={() => void connect('manual', false)}
+            >
+              Connect to this bucket
+            </button>
+          </div>
+        </div>
+      </details>
     </section>
   )
 }
