@@ -34,9 +34,12 @@ export function registerIpc(
   const { manager, leases } = windows
   const handlers: Handlers = {
     'window:open': (input, event) => {
-      manager.openPane(input.route, null, BrowserWindow.fromWebContents(event.sender))
+      const from = BrowserWindow.fromWebContents(event.sender)
+      manager.openPane(input.route, input.atCursor ? manager.boundsAtCursor(from) : null, from)
       return null
     },
+    'window:dropped': (input, event) =>
+      manager.droppedOutside(BrowserWindow.fromWebContents(event.sender), input.route),
     'window:dock': (input, event) => {
       manager.dock(BrowserWindow.fromWebContents(event.sender), input.route, input.keep ?? false)
       return null

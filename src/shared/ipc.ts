@@ -551,8 +551,10 @@ export const ipcInputs = {
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
   'window:flushed': z.void(),
-  /** Pops a pane out into a window of its own. */
-  'window:open': z.object({ route: paneRouteSchema }),
+  /** Pops a pane out into a window of its own (`atCursor`: where its tab was dropped). */
+  'window:open': z.object({ route: paneRouteSchema, atCursor: z.boolean().optional() }),
+  /** A torn-off window's tab was dropped outside it: docks if that was over the main window. */
+  'window:dropped': z.object({ route: paneRouteSchema }),
   /**
    * Puts this torn-off window's pane back beside the main window's view, and
    * closes this window; with `keep`, just shows the route there (this window stays).
@@ -646,6 +648,7 @@ export interface IpcResults {
   'settings:update': AppSettings
   'window:flushed': null
   'window:open': null
+  'window:dropped': boolean
   'window:dock': null
   'window:route': null
   'window:showEntry': boolean

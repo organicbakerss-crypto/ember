@@ -3,7 +3,7 @@ import type { LibrarySnapshot, SeriesSummary } from '@shared/ipc'
 import type { PaneRoute } from '@shared/panes'
 import { api, describeError, useIpcEvent } from '../api'
 import { PaneContext } from '../panes/PaneContext'
-import { PaneFrame, PANE_DRAG } from '../panes/PaneFrame'
+import { PaneFrame } from '../panes/PaneFrame'
 import { SplitView } from '../panes/SplitView'
 import { useWords } from '../skins/useWords'
 import { Bookshelf } from './Bookshelf'
@@ -122,20 +122,6 @@ export function Home(props: { detached?: PaneRoute | null }) {
         : current,
     )
   })
-  // A torn-off pane dragged over this window can be dropped here to dock.
-  useEffect(() => {
-    if (detached) return
-    const over = (e: DragEvent) => {
-      if (e.dataTransfer?.types.includes(PANE_DRAG)) e.preventDefault()
-    }
-    window.addEventListener('dragover', over)
-    window.addEventListener('drop', over)
-    return () => {
-      window.removeEventListener('dragover', over)
-      window.removeEventListener('drop', over)
-    }
-  }, [detached])
-
   const reportWrite = useCallback(
     (r: PaneRoute) => {
       at.current.write = r
@@ -259,15 +245,20 @@ export function Home(props: { detached?: PaneRoute | null }) {
     const r = at.current[side]
     if (r) void api.invoke('window:dock', { route: r })
   }
+  /** In a torn-off window: its tab let go outside it docks if that was over the main window. */
+  const dropOutside = (side: 'write' | 'world') => {
+    const r = at.current[side]
+    if (r) void api.invoke('window:dropped', { route: r })
+  }
   /** Pops a split pane out into its own window, leaving the other one here. */
-  const popOut = (side: 'write' | 'world') => {
+  const popOut = (side: 'write' | 'world', atCursor = false) => {
     if (route.view !== 'split') return
     const r =
       at.current[side] ??
       (side === 'write'
         ? { kind: 'write' as const, seriesId: route.write.seriesId, volumeId: route.write.volumeId }
         : { kind: 'world' as const, worldId: route.world.worldId })
-    void api.invoke('window:open', { route: r })
+    void api.invoke('window:open', { route: r, atCursor })
     if (side === 'world') setRoute({ view: 'volume', ...route.write })
     else setRoute({ view: 'world', ...route.world, from: route.write })
   }
@@ -357,13 +348,14 @@ export function Home(props: { detached?: PaneRoute | null }) {
         detached={place === 'detached'}
         onActivate={() => setActiveSide('write')}
         onRoute={reportWrite}
-        onPopOut={place === 'split' ? () => popOut('write') : undefined}
+        onPopOut={place === 'split' ? (atCursor) => popOut('write', atCursor) : undefined}
         onClose={
           place === 'split' && route.view === 'split'
             ? () => setRoute({ view: 'world', ...route.world, from: route.write })
             : undefined
         }
         onDock={place === 'detached' ? () => dock('write') : undefined}
+        onDropOutside={place === 'detached' ? () => dropOutside('write') : undefined}
       >
         {view}
       </PaneFrame>
@@ -433,13 +425,14 @@ export function Home(props: { detached?: PaneRoute | null }) {
         detached={place === 'detached'}
         onActivate={() => setActiveSide('world')}
         onRoute={reportWorld}
-        onPopOut={place === 'split' ? () => popOut('world') : undefined}
+        onPopOut={place === 'split' ? (atCursor) => popOut('world', atCursor) : undefined}
         onClose={
           place === 'split' && route.view === 'split'
             ? () => setRoute({ view: 'volume', ...route.write })
             : undefined
         }
         onDock={place === 'detached' ? () => dock('world') : undefined}
+        onDropOutside={place === 'detached' ? () => dropOutside('world') : undefined}
       >
         {view}
       </PaneFrame>

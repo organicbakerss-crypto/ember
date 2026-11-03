@@ -1,6 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { loadLocal, saveLocal } from '../storage'
-import { PANE_DRAG } from './PaneFrame'
 
 const KEY = 'layout.split'
 const MIN = 0.25
@@ -31,10 +30,6 @@ export function SplitView(props: { left: ReactNode; right: ReactNode }) {
       ref={box}
       className={`split-view ${dragging ? 'resizing' : ''}`}
       style={{ gridTemplateColumns: `${size}fr 6px ${1 - size}fr` }}
-      // A torn-off pane's tab dropped here docks it (its window sees the drop and docks).
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes(PANE_DRAG)) e.preventDefault()
-      }}
     >
       {props.left}
       <div

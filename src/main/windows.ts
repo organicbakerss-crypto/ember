@@ -5,7 +5,7 @@
  * which panes were torn off, is remembered on this device (never synced)
  * and restored on the next start.
  */
-import type { BrowserWindow } from 'electron'
+import { screen, type BrowserWindow } from 'electron'
 import { IPC_EVENT_PREFIX, type IpcEvents } from '@shared/ipc'
 import { paneHash, type PaneRoute } from '@shared/panes'
 import type { DeviceSettingsStore, WindowBounds } from './deviceSettings'
@@ -98,6 +98,32 @@ export class WindowManager {
     this.send(main, 'pane:dock', route)
     this.focusMain()
     if (!keep && from && from !== main && !from.isDestroyed()) from.close()
+  }
+
+  /** Where a window dropped at the cursor goes: its tab under the pointer. */
+  boundsAtCursor(from: BrowserWindow | null): WindowBounds {
+    const at = screen.getCursorScreenPoint()
+    const size = from && !from.isDestroyed() ? from.getBounds() : { width: 1000, height: 760 }
+    return {
+      x: Math.round(at.x - 120),
+      y: Math.round(at.y - 12),
+      width: Math.max(640, Math.round(size.width * 0.6)),
+      height: size.height,
+    }
+  }
+
+  /**
+   * A torn-off window's tab was dragged out of it and let go: over the main
+   * window, the pane docks there. Returns whether it did.
+   */
+  droppedOutside(from: BrowserWindow | null, route: PaneRoute): boolean {
+    const main = this.main
+    if (!main || main.isDestroyed() || from === main) return false
+    const at = screen.getCursorScreenPoint()
+    const b = main.getBounds()
+    const over = at.x >= b.x && at.x <= b.x + b.width && at.y >= b.y && at.y <= b.y + b.height
+    if (over) this.dock(from, route)
+    return over
   }
 
   /** A torn-off window's pane moved; it reopens there next time. */

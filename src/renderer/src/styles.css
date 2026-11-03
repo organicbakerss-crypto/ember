@@ -3272,8 +3272,29 @@ kbd {
   min-height: 0;
 }
 .pane-body {
+  position: relative;
   min-height: 0;
   min-width: 0;
+}
+.pane.tearing .pane-tab {
+  cursor: grabbing;
+  background: var(--accent-soft);
+}
+.pane.tearing.outside .pane-body {
+  opacity: 0.55;
+}
+.pane-drop-hint {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  white-space: nowrap;
+  pointer-events: none;
 }
 .pane-tab {
   display: flex;
@@ -3328,4 +3349,119 @@ kbd {
 }
 .read-only-note .link {
   white-space: nowrap;
+}
+
+/* ---------- narrow views (a split pane, a small window) ---------- */
+
+/* Each view lays itself out by its own width, not the screen's. */
+#root,
+.pane-body {
+  container-type: inline-size;
+  container-name: view;
+}
+
+@container view (max-width: 980px) {
+  .top-bar {
+    gap: 0.6rem;
+    padding: 0.4rem 0.6rem;
+  }
+  .status-bar {
+    gap: 0.75rem;
+    padding: 0.35rem 0.6rem;
+    overflow: hidden;
+  }
+  .writing-view.panel-open {
+    grid-template-columns: auto 13rem 1fr;
+  }
+  .world-view {
+    grid-template-columns: 11.5rem 1fr;
+  }
+  .world-view .side-panel {
+    padding-inline: 0.5rem;
+  }
+  .lens-view {
+    padding: 1rem 1rem 3rem;
+  }
+  /* Headers wrap onto a second line instead of squeezing their buttons. */
+  .lens-head,
+  .map-head {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .lens-head h1 {
+    font-size: 1.6rem;
+  }
+  .lens-head button,
+  .map-head button,
+  .map-head label {
+    white-space: nowrap;
+  }
+  /*
+   * The pin bar and tray go under the map, which keeps the width; the page
+   * scrolls, so the map keeps a usable height too.
+   */
+  .lens-view.lens-map {
+    height: auto;
+  }
+  .lens-map > .where-map {
+    flex: none;
+  }
+  .where-map > .map-body {
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .map-canvas {
+    height: clamp(320px, 62vh, 640px);
+  }
+  .map-side {
+    overflow: visible;
+  }
+  /* The scrubber's moment goes on its own line. */
+  .time-scrubber {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 0.25rem;
+  }
+  .time-scrubber .scrubber-label,
+  .time-scrubber > .link {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@container view (max-width: 640px) {
+  /* The world's sections become a strip across the top. */
+  .world-view {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'top'
+      'panel'
+      'page'
+      'status';
+  }
+  .world-view .side-panel {
+    display: block;
+    padding: 0.3rem 0.5rem;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .world-view .side-panel > :not(.world-lenses) {
+    display: none;
+  }
+  .world-view .world-lenses {
+    display: flex;
+    gap: 0.25rem;
+  }
+  .world-view .world-lenses .world-nav-item {
+    width: auto;
+    white-space: nowrap;
+  }
+  .writing-view.panel-open {
+    grid-template-columns: auto 11rem 1fr;
+  }
+  .lens-head h1 {
+    font-size: 1.35rem;
+  }
 }
