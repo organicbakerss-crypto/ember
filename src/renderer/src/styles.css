@@ -3612,3 +3612,133 @@ kbd {
   display: grid;
   gap: 0.4rem;
 }
+
+/* ---------- AI ---------- */
+
+.ai-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  height: 100%;
+  min-height: 0;
+}
+.ai-modes {
+  width: 100%;
+}
+.ai-modes button {
+  flex: 1;
+  padding-inline: 0.3rem;
+}
+.ai-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.ai-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  color: var(--muted);
+}
+.ai-whole {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.ai-whole input {
+  width: auto;
+}
+.ai-messages {
+  flex: 1;
+  min-height: 8rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ai-message {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.ai-message.user {
+  align-self: flex-end;
+  background: var(--accent-soft);
+}
+.ai-message.assistant {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.ai-starters {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+.ai-input textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+.ai-read {
+  margin: 0;
+}
+.ai-settings code,
+.ai-status code {
+  user-select: all;
+}
+
+.dialog.grammar-dialog {
+  max-width: min(52rem, 94vw);
+  width: min(52rem, 94vw);
+  max-height: 88vh;
+}
+.grammar-dialog progress {
+  width: 100%;
+}
+.grammar-preview {
+  overflow-y: auto;
+  max-height: 60vh;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  background: var(--page);
+  color: var(--page-text);
+  font-family: var(--page-font);
+}
+.grammar-paragraph {
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.grammar-change {
+  all: unset;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.grammar-change del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.grammar-change ins {
+  text-decoration: none;
+  background: color-mix(in srgb, #2e9d4f 25%, transparent);
+}
+.grammar-change.off ins {
+  display: none;
+}
+.grammar-change.off del {
+  text-decoration: underline dotted;
+  opacity: 1;
+}
+.grammar-change.wording ins,
+.grammar-wording-label {
+  background: color-mix(in srgb, #d08a00 30%, transparent);
+}
+.grammar-change:focus-visible {
+  outline: 2px solid var(--accent);
+}

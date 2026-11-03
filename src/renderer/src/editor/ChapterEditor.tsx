@@ -13,6 +13,7 @@ import { NameCards, type NameIndex } from './NameCards'
 import { docWords, findScenes, type Scene } from './scenes'
 import { Toolbar } from './Toolbar'
 import { useChapterSaver, type SaveState } from './useChapterSaver'
+import { applyBlockChanges, textBlocks, type BlockChange } from './textBlocks'
 
 export interface ChapterMeta {
   title: string
@@ -36,6 +37,12 @@ export interface EditorHandle {
   selectedText: () => string
   /** The text just before the selection, in the same paragraph (to guess what a name is). */
   textBeforeSelection: () => string
+  /** The paragraphs (and headings) visible on screen, as text. */
+  visibleText: () => string
+  /** Every paragraph and heading as text (for AI fixes), or null when it can't be edited here. */
+  textBlocks: () => string[] | null
+  /** Applies chosen changes to those blocks as one undoable step; returns how many applied. */
+  applyBlockChanges: (expected: string[], changes: BlockChange[]) => number
 }
 
 /** A search match to select once the chapter is open. */
@@ -378,6 +385,35 @@ function EditorPage(
       const { from, to } = editor.state.selection
       return editor.state.doc.textBetween(from, to, ' ').trim()
     },
+    visibleText() {
+      const box = (
+        scroller.current?.querySelector('.page-scroll') ?? scroller.current?.closest('.page-scroll')
+      )?.getBoundingClientRect()
+      const parts: string[] = []
+      editor.state.doc.descendants((node, pos) => {
+        if (!node.isTextblock) return true
+        const dom = editor.view.nodeDOM(pos)
+        if (dom instanceof HTMLElement && box) {
+          const r = dom.getBoundingClientRect()
+          if (r.bottom >= box.top && r.top <= box.bottom && node.textContent.trim()) {
+            parts.push(node.textContent)
+          }
+        }
+        return false
+      })
+      return parts.join('\n\n')
+    },
+    textBlocks() {
+      if (readOnly || contentError) return null
+      return textBlocks(editor.state.doc).map((b) => b.text)
+    },
+    applyBlockChanges(expected: string[], changes: BlockChange[]) {
+      if (readOnly) return 0
+      const tr = editor.state.tr
+      const applied = applyBlockChanges(tr, expected, changes)
+      if (applied) editor.view.dispatch(tr)
+      return applied
+    },
     textBeforeSelection() {
       const { $from } = editor.state.selection
       return $from.parent.textBetween(Math.max(0, $from.parentOffset - 40), $from.parentOffset, ' ')
@@ -388,7 +424,10 @@ function EditorPage(
     },
     jumpTo(pos: number) {
       if (pos === 0) {
-        scroller.current?.closest('.page-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })
+        ;(
+          scroller.current?.querySelector('.page-scroll') ??
+          scroller.current?.closest('.page-scroll')
+        )?.scrollTo({ top: 0, behavior: 'smooth' })
         editor.commands.focus('start')
         return
       }

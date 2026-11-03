@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isBook, worldLinkMenu } from './worldLink'
+import { AiPanel } from '../ai/AiPanel'
+import { GrammarDialog } from '../ai/GrammarDialog'
 import type {
   WorldSummary,
   CaptureContext,
@@ -47,7 +49,7 @@ import { copyChapterForRoyalRoad, ExportDialog } from '../io/ExportDialog'
 import { ImportDialog } from '../io/ImportDialog'
 import { usePane } from '../panes/PaneContext'
 
-type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'world'
+type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'world' | 'ai'
 
 /** A chapter to open, optionally showing the first use of a name. */
 export interface ChapterTarget {
@@ -113,6 +115,8 @@ export function WritingView(props: {
   const { settings } = useSettings()
   const { choose, openMenu } = useOverlays()
   // Export and import dialogs (export can start with one chapter chosen).
+  const aiOn = settings.ai.enabled
+  const [checking, setChecking] = useState(false)
   const [exporting, setExporting] = useState<{ chapterId: string | null; only?: boolean } | null>(
     null,
   )
@@ -503,6 +507,24 @@ export function WritingView(props: {
     },
     { id: 'binder', title: 'Show binder', run: () => openPanel('binder') },
     { id: 'history', title: 'Version history of this chapter', run: () => openPanel('history') },
+    ...(aiOn
+      ? [
+          {
+            id: 'ai',
+            title: 'Ask the AI (chat, brainstorm, ask the story)',
+            run: () => openPanel('ai'),
+          },
+          ...(selectedId
+            ? [
+                {
+                  id: 'ai-grammar',
+                  title: 'Check spelling and grammar (AI)',
+                  run: () => setChecking(true),
+                },
+              ]
+            : []),
+        ]
+      : []),
     { id: 'settings', title: 'Settings', run: () => setSettingsOpen(true) },
     ...(book
       ? []
@@ -615,6 +637,15 @@ export function WritingView(props: {
                   ),
               },
               { label: 'Import from Word (.docx)…', onSelect: () => setImporting(true) },
+              ...(aiOn
+                ? [
+                    {
+                      label: 'Check spelling and grammar (AI)…',
+                      disabled: !selectedId,
+                      onSelect: () => setChecking(true),
+                    },
+                  ]
+                : []),
               {
                 label: book ? 'Chapter headings in exports' : 'This volume’s chapter headings',
                 submenu: (
@@ -701,6 +732,12 @@ export function WritingView(props: {
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 7.5V12l3 2" />
         </RailButton>
+        {aiOn && (
+          <RailButton label="AI" active={panel === 'ai'} onClick={() => togglePanel('ai')}>
+            <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" />
+            <path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" />
+          </RailButton>
+        )}
         {world && (
           <RailButton
             label="World beside the page"
@@ -779,6 +816,15 @@ export function WritingView(props: {
                   : null
               }
               onRestored={() => setReloadToken((t) => t + 1)}
+            />
+          )}
+          {panel === 'ai' && aiOn && (
+            <AiPanel
+              seriesId={series.id}
+              volumeId={volume.id}
+              chapterId={selectedId}
+              selection={selectionParagraphs?.join('\n\n') || null}
+              screenText={() => editor.current?.visibleText() ?? ''}
             />
           )}
           {panel === 'diagnostics' && (
@@ -896,6 +942,18 @@ export function WritingView(props: {
             return !!created
           }}
           onCancel={() => setQuickAdd(null)}
+        />
+      )}
+      {checking && selectedId && (
+        <GrammarDialog
+          seriesId={series.id}
+          volumeId={volume.id}
+          chapterId={selectedId}
+          worldId={worldId}
+          blocks={() => editor.current?.textBlocks() ?? null}
+          apply={(expected, changes) => editor.current?.applyBlockChanges(expected, changes) ?? 0}
+          onClose={() => setChecking(false)}
+          toast={actions.toast}
         />
       )}
       {exporting && (

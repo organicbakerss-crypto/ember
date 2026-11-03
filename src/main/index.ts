@@ -15,6 +15,7 @@ import { handleMediaRequests, registerMediaScheme } from './media'
 import { setAppMenu } from './menu'
 import { applySpelling, attachTextMenu } from './spelling'
 import { SyncService } from './sync/service'
+import { AiService } from './ai/service'
 
 // Name and data folder come from the app config, not package.json.
 app.setName(appConfig.name)
@@ -138,7 +139,8 @@ void app.whenReady().then(async () => {
   applySpelling(session.defaultSession, await appSettings.read())
   const manager = new WindowManager((options) => createWindow(appSettings, host, options), settings)
   windows = manager
-  registerIpc(host, appSettings, { manager, leases }, syncService)
+  const ai = new AiService({ settings: async () => (await appSettings.read()).ai, host })
+  registerIpc(host, appSettings, { manager, leases }, syncService, ai)
   handleMediaRequests(host)
   await manager.start()
 

@@ -59,6 +59,22 @@ export interface AppSettings {
   linkNames: boolean
   world: WorldSettings
   export: ExportSettings
+  ai: AiSettings
+}
+
+/** AI on this computer (never synced). Off until turned on in Settings → AI. */
+export interface AiSettings {
+  enabled: boolean
+  /** Where Ollama listens. */
+  host: string
+  /** The Ollama model to use ("" = the first one installed). */
+  model: string
+}
+
+export const DEFAULT_AI_SETTINGS: AiSettings = {
+  enabled: false,
+  host: 'http://127.0.0.1:11434',
+  model: '',
 }
 
 /** How exports look (Word, PDF, EPUB, Markdown, Royal Road). */
@@ -155,4 +171,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   linkNames: true,
   world: DEFAULT_WORLD_SETTINGS,
   export: DEFAULT_EXPORT_SETTINGS,
+  ai: DEFAULT_AI_SETTINGS,
 }

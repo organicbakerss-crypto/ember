@@ -8,7 +8,7 @@ import { z } from 'zod'
 import { MAX_COVER_BYTES, MAX_MAP_BYTES, type CoverInfo, type CoverTarget } from './media'
 import { docKeySchema, paneRouteSchema, type PaneRoute } from './panes'
 import { PAGE_WIDTH, STATUS_ITEMS, type AppSettings } from './settings'
-import { exportSettingsSchema } from './exportSettings'
+import { aiSettingsSchema, exportSettingsSchema } from './exportSettings'
 
 export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
 import type { NameSuggestion } from './world/nameCatcher'
@@ -151,7 +151,13 @@ export interface SnapshotInfo {
   wordCount: number
   /** Why it was taken: on a schedule while writing, or just before a restore or replace-all. */
   reason:
-    'auto' | 'manual' | 'before-deletion' | 'before-restore' | 'before-replace' | 'before-sync'
+    | 'auto'
+    | 'manual'
+    | 'before-deletion'
+    | 'before-restore'
+    | 'before-replace'
+    | 'before-sync'
+    | 'before-ai'
 }
 
 export const SNAPSHOT_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/
@@ -306,7 +312,11 @@ export const ipcInputs = {
     chapterId: id('chapter'),
     snapshotId: z.string().regex(SNAPSHOT_ID),
   }),
-  'history:keep': z.object({ ...volumeRef, chapterId: id('chapter') }),
+  'history:keep': z.object({
+    ...volumeRef,
+    chapterId: id('chapter'),
+    reason: z.enum(['manual', 'before-ai']).optional(),
+  }),
   'history:restore': z.object({
     ...volumeRef,
     chapterId: id('chapter'),
@@ -570,6 +580,7 @@ export const ipcInputs = {
       })
       .optional(),
     export: exportSettingsSchema.optional(),
+    ai: aiSettingsSchema.optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
@@ -611,6 +622,33 @@ export const ipcInputs = {
       confirm: z.boolean().optional(),
     }),
   ]),
+  /** Whether the AI (Ollama) can be reached, and which models it has. */
+  'ai:status': z.object({ host: z.string().trim().min(1).max(300).optional() }).optional(),
+  /** Chat, brainstorm or ask the story about what the writer is reading (streams `ai:token`). */
+  'ai:ask': z.object({
+    requestId: z.string().min(1).max(80),
+    mode: z.enum(['chat', 'brainstorm', 'ask']),
+    messages: z
+      .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(20000) }))
+      .min(1)
+      .max(100),
+    scope: z
+      .object({
+        kind: z.enum(['selection', 'screen', 'chapter']),
+        seriesId: id('series'),
+        volumeId: id('volume'),
+        chapterId: id('chapter'),
+        text: z.string().max(200000),
+      })
+      .nullable(),
+  }),
+  /** Spelling and grammar fixes for some paragraphs (streams `ai:progress`). Nothing is changed. */
+  'ai:grammar': z.object({
+    requestId: z.string().min(1).max(80),
+    paragraphs: z.array(z.string().max(50000)).max(5000),
+    worldId: id('world').nullable().optional(),
+  }),
+  'ai:cancel': z.object({ requestId: z.string().min(1).max(80) }),
   /** Opens Cloudflare's token page, filled in with the permission sync needs. */
   'sync:openCloudflare': z.void(),
   /** Stops syncing on this computer (nothing is deleted anywhere). */
@@ -749,6 +787,10 @@ export interface IpcResults {
   'sync:connect': { status: SyncStatus } | { confirm: { series: number; worlds: number } }
   'sync:disconnect': SyncStatus
   'sync:openCloudflare': null
+  'ai:status': AiStatus
+  'ai:ask': { text: string }
+  'ai:grammar': { paragraphs: string[] }
+  'ai:cancel': null
   'sync:now': SyncStatus
   'history:fetchCloud': { added: number }
   'window:dropped': boolean
@@ -798,6 +840,20 @@ export interface IpcEvents {
   /** Sync has written the other computer's version: reload this document and carry on editing. */
   'doc:returned': { key: string; pane: string }
   'sync:status': SyncStatus
+  /** More of an AI answer. */
+  'ai:token': { requestId: string; text: string }
+  /** How far a spelling and grammar check has got (paragraphs). */
+  'ai:progress': { requestId: string; done: number; total: number }
+}
+
+export interface AiStatus {
+  enabled: boolean
+  host: string
+  reachable: boolean
+  models: string[]
+  /** The model in use (the chosen one, or the first installed). */
+  model: string | null
+  error: string | null
 }
 
 /** Sync as the status bar and settings show it. */

@@ -8,3 +8,10 @@ export const exportSettingsSchema = z.object({
   paragraphs: z.enum(['spaced', 'indented']),
   paper: z.enum(['a4', 'letter', 'trade']),
 })
+
+/** AI settings as stored and as sent from a window (see AiSettings). */
+export const aiSettingsSchema = z.object({
+  enabled: z.boolean(),
+  host: z.string().trim().min(1).max(300),
+  model: z.string().trim().max(200),
+})

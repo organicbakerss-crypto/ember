@@ -22,6 +22,7 @@ import { setCaptureContext } from './capture'
 import { AppError } from './errors'
 import type { LibraryHost } from './libraryHost'
 import type { SyncService } from './sync/service'
+import type { AiService } from './ai/service'
 
 type Handlers = {
   [C in IpcChannel]: (
@@ -35,6 +36,7 @@ export function registerIpc(
   settings: AppSettingsStore,
   windows: { manager: WindowManager; leases: DocLeases },
   sync: SyncService,
+  ai: AiService,
 ): void {
   const { manager, leases } = windows
   const handlers: Handlers = {
@@ -46,6 +48,27 @@ export function registerIpc(
     'export:royalRoad': async (input) =>
       copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
+    'ai:status': (input) => ai.status(input?.host),
+    'ai:ask': (input, event) =>
+      ai.ask(input, (text) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(`${IPC_EVENT_PREFIX}ai:token`, { requestId: input.requestId, text })
+        }
+      }),
+    'ai:grammar': (input, event) =>
+      ai.grammar(input, (done, total) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, {
+            requestId: input.requestId,
+            done,
+            total,
+          })
+        }
+      }),
+    'ai:cancel': (input) => {
+      ai.cancel(input.requestId)
+      return null
+    },
     'sync:status': () => sync.status(),
     'sync:connect': (input) => sync.connect(input),
     'sync:disconnect': () => sync.disconnect(),
@@ -124,7 +147,7 @@ export function registerIpc(
     'history:read': (input) =>
       host.current.readSnapshot(input.seriesId, input.volumeId, input.chapterId, input.snapshotId),
     'history:keep': async (input) => {
-      await host.current.keepSnapshot(input.seriesId, input.volumeId, input.chapterId)
+      await host.current.keepSnapshot(input.seriesId, input.volumeId, input.chapterId, input.reason)
       return null
     },
     'history:restore': (input) =>

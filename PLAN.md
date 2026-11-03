@@ -568,6 +568,14 @@ On-screen and selection reads also get a short summary of the chapter so far, so
 
 **Nothing touches files without consent.** AI output is a suggestion until the user accepts it.
 
+**As built in 10a (local AI, Ollama):**
+
+- **Off by default.** Settings → AI: "Use AI", the Ollama address (default `http://127.0.0.1:11434`), the model (default: the first one installed), and a live check ("✓ Ollama is running, with 3 models" or what's wrong and how to fix it: install Ollama, `ollama pull llama3.2`). AI settings stay on each computer. Off, nothing about AI appears anywhere.
+- **The AI panel** (✦ on the writing view's rail, or the palette): Chat, Brainstorm, Ask the story, each its own conversation for the session. A chip says what it reads: the selection if there is one, else what's on screen; "Whole chapter" reads all of it (a chapter over 2,500 words is read in parts and summarised first). The world entries named in that text go with it (up to 6, as their text forms); "Ask the story" also gets the world digest and is told to answer only from what it's given. Answers stream in and can be stopped. Nothing in the chapter changes.
+- **Spelling and grammar** (⋯ menu, palette): the chapter's paragraphs go to the model a few at a time, asking for JSON with the same count; a batch that comes back wrong is redone a paragraph at a time, and a paragraph that still fails is left alone. World names are listed as correct. The app diffs every paragraph itself: spelling, punctuation, spacing and capitals are fixes (ticked); swapped, added or dropped words are wording changes (highlighted differently, unticked: the AI shouldn't make them). Click any change to tick or untick it; Apply keeps the version before in History ("before AI spelling and grammar fixes") and makes the changes as one undoable step, keeping bold, italics and line breaks. A paragraph edited meanwhile is skipped.
+- **Main owns the AI:** one service in the main process (`src/main/ai`) talks to Ollama's API (installed models, streamed chat, JSON mode); windows send requests over IPC and get tokens back as events.
+- **Not built yet (rest of 10):** ChatGPT as a second provider, the per-feature provider choice, continuity checks, the chapter-so-far summary for on-screen reads, and the world side below.
+
 ### The world and the AI
 
 #### Readable by AI (baked in from the start)
@@ -771,7 +779,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
 7b. **Story types:** single books, short stories and collections, worlds optional and unlinkable, smaller worlds. (Done; see Story types.)
 8. **Settings sync:** only the personal dictionary syncs; everything else stays per computer. (Done. Smart Storage dropped: not needed.)
 9. **World extras:** nothing left here; maps moved to 4b and time (the timeline) to 4d.
-10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel. Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
+10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel (10a: done). Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
 12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
 13. **Themes:** done early (after 4e): High Contrast and eighteen more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.

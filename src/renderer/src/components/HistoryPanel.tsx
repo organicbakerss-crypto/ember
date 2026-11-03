@@ -15,6 +15,7 @@ const REASONS: Record<SnapshotInfo['reason'], string> = {
   'before-restore': 'before a restore',
   'before-replace': 'before replace all',
   'before-sync': 'before an update from another computer',
+  'before-ai': 'before AI spelling and grammar fixes',
 }
 
 /** Earlier versions of the open chapter. Preview one, then restore it if wanted. */

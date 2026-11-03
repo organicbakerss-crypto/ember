@@ -89,7 +89,15 @@ const snapshotFileSchema = z.looseObject({
   volumeId: z.string(),
   savedAt: z.iso.datetime(),
   reason: z
-    .enum(['auto', 'manual', 'before-deletion', 'before-restore', 'before-replace', 'before-sync'])
+    .enum([
+      'auto',
+      'manual',
+      'before-deletion',
+      'before-restore',
+      'before-replace',
+      'before-sync',
+      'before-ai',
+    ])
     .catch('auto'),
   title: z.string(),
   wordCount: z.number().int().nonnegative(),
@@ -1473,10 +1481,15 @@ export class Library {
   }
 
   /** Keeps the chapter's current version now (the "Keep this version" button). */
-  async keepSnapshot(seriesId: string, volumeId: string, chapterId: string): Promise<void> {
+  async keepSnapshot(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+    reason: 'manual' | 'before-ai' = 'manual',
+  ): Promise<void> {
     await this.lock.run(`volume:${volumeId}`, async () => {
       const chapter = await this.readChapter(seriesId, volumeId, chapterId)
-      await this.snapshotChapter(volumeId, chapter, 'manual', true)
+      await this.snapshotChapter(volumeId, chapter, reason, true)
     })
     this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId })
   }

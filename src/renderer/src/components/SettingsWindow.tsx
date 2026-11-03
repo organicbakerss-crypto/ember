@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   PAGE_WIDTH,
   PAPER_SIZES,
@@ -38,16 +38,7 @@ const CATEGORIES: Category[] = [
   { id: 'world', label: 'World', render: () => <WorldSettings /> },
   { id: 'import', label: 'Import & export', render: () => <ImportExportSettings /> },
   { id: 'sync', label: 'Sync', render: () => <SyncSettings /> },
-  {
-    id: 'storage',
-    label: 'Smart Storage',
-    later: 'When unopened volumes and worlds are compressed (Milestone 8).',
-  },
-  {
-    id: 'ai',
-    label: 'AI',
-    later: 'Ollama and ChatGPT sign-in, per-feature providers (Milestone 10).',
-  },
+  { id: 'ai', label: 'AI', render: () => <AiSettingsSection /> },
   {
     id: 'companion',
     label: 'Companion',
@@ -401,6 +392,120 @@ function SyncSettings() {
           </div>
         </div>
       </details>
+    </section>
+  )
+}
+
+/** AI on this computer: on or off, where Ollama is, which model. */
+function AiSettingsSection() {
+  const { settings, update } = useSettings()
+  const ai = settings.ai
+  const [status, setStatus] = useState<IpcResult<'ai:status'> | null>(null)
+  const [host, setHost] = useState(ai.host)
+  // Ask about the address as shown (saving it may not have reached the app yet).
+  const asked = useRef(0)
+  const check = () => {
+    const n = ++asked.current
+    api.invoke('ai:status', { host: ai.host }).then(
+      (s) => n === asked.current && setStatus(s),
+      () => {},
+    )
+  }
+  // Check once on opening, and again when the address or switch changes.
+  useEffect(check, [ai.host, ai.enabled])
+  const set = (patch: Partial<typeof ai>) =>
+    update(({ ai: current }) => ({ ai: { ...current, ...patch } }))
+
+  return (
+    <section className="settings-section ai-settings">
+      <h3>AI</h3>
+      <p className="muted small">
+        AI helps, it never writes your prose: chat about the story, brainstorm, ask questions about
+        your chapters and world, and check spelling and grammar (every change shown first, nothing
+        applied until you choose). It runs on this computer with Ollama, so nothing you write leaves
+        it. Off, it leaves no trace in the app.
+      </p>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={ai.enabled}
+          onChange={(e) => set({ enabled: e.target.checked })}
+        />
+        Use AI
+      </label>
+      {ai.enabled && (
+        <>
+          <div className="ai-status small" role="status">
+            {!status ? (
+              <span className="muted">Checking Ollama…</span>
+            ) : status.reachable ? (
+              status.models.length ? (
+                <span>
+                  ✓ Ollama is running, with {status.models.length}{' '}
+                  {status.models.length === 1 ? 'model' : 'models'}.
+                </span>
+              ) : (
+                <span className="error">
+                  Ollama is running but has no models. In a terminal:{' '}
+                  <code>ollama pull llama3.2</code>
+                </span>
+              )
+            ) : (
+              <span className="error">
+                {status.error} Get Ollama from <strong>ollama.com</strong> if it isn’t installed.
+              </span>
+            )}{' '}
+            <button
+              className="link small"
+              onClick={() => {
+                setStatus(null)
+                check()
+              }}
+            >
+              Check again
+            </button>
+          </div>
+          <label>
+            Model
+            <select value={ai.model} onChange={(e) => set({ model: e.target.value })}>
+              <option value="">
+                First installed{status?.models[0] ? ` (${status.models[0]})` : ''}
+              </option>
+              {status?.models.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+              {ai.model && !status?.models.includes(ai.model) && (
+                <option value={ai.model}>{ai.model} (not installed)</option>
+              )}
+            </select>
+          </label>
+          <p className="muted small">
+            Bigger models answer better and slower. A good start on most computers:{' '}
+            <code>ollama pull llama3.2</code> (3B); with 16 GB of memory or more, try{' '}
+            <code>qwen2.5:14b</code>.
+          </p>
+          <label>
+            Ollama address
+            <input
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              onBlur={() => host.trim() && host !== ai.host && set({ host: host.trim() })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && host.trim()) set({ host: host.trim() })
+              }}
+              spellCheck={false}
+            />
+          </label>
+          <h3>Where it is</h3>
+          <p className="muted small">
+            The ✦ AI button on the left of the writing view opens chat, brainstorm and “Ask the
+            story”. Spelling and grammar is in the ⋯ menu above the page and the command palette. AI
+            settings stay on this computer.
+          </p>
+        </>
+      )}
     </section>
   )
 }
