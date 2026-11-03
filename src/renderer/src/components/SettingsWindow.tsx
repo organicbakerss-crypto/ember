@@ -7,6 +7,7 @@ import {
   type PaperSize,
 } from '@shared/settings'
 import { DEFAULT_FILLER_WORDS } from '@shared/analysis/fillers'
+import type { IpcResult } from '@shared/ipc'
 import { api, describeError } from '../api'
 import { STATUS_LABELS } from '../analysisFormat'
 import { loadLocal, saveLocal } from '../storage'
@@ -190,6 +191,11 @@ function ImportExportSettings() {
 function SyncSettings() {
   const status = useSyncStatus()
   const { toast } = useOverlays()
+  const [usage, setUsage] = useState<IpcResult<'sync:usage'>>(null)
+  const connected = status?.connected ?? false
+  useEffect(() => {
+    if (connected) api.invoke('sync:usage').then(setUsage, () => {})
+  }, [connected])
   const [token, setToken] = useState('')
   const [manual, setManual] = useState({ url: '', accessKeyId: '', secretAccessKey: '' })
   const [name, setName] = useState('')
@@ -270,6 +276,15 @@ function SyncSettings() {
             Stop syncing on this computer
           </button>
         </div>
+        {usage && (
+          <p className="small">
+            In the cloud: <strong>{formatBytes(usage.bytes)}</strong>{' '}
+            <span className="muted">
+              ({usage.files.toLocaleString()} files). Old copies nothing uses are cleared out once
+              they’re a month old.
+            </span>
+          </p>
+        )}
         <p className="muted small">
           Stopping keeps every file here and in the cloud; connecting again carries on where it left
           off.
@@ -719,11 +734,26 @@ function WorldSettings() {
   )
 }
 
+/** 1536 → "1.5 KB". */
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} bytes`
+  const units = ['KB', 'MB', 'GB']
+  let v = n / 1024
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`
+}
+
 function LibrarySettings() {
   const [root, setRoot] = useState<string | null>(null)
+  const [size, setSize] = useState<IpcResult<'library:size'> | null>(null)
   const { toast } = useOverlays()
   useEffect(() => {
     void api.invoke('library:status').then((s) => setRoot(s.state === 'open' ? s.root : null))
+    api.invoke('library:size').then(setSize, () => {})
   }, [])
   const choose = async () => {
     try {
@@ -744,6 +774,23 @@ function LibrarySettings() {
         Your series, volumes and worlds are ordinary files in this folder. Choose another folder to
         open (or start) a different library.
       </p>
+      {size && (
+        <div className="library-size">
+          <p>
+            <strong>{formatBytes(size.total)}</strong> on this computer
+          </p>
+          <ul className="small muted">
+            <li>Writing and world notes: {formatBytes(size.writing)}</li>
+            <li>Images (maps, portraits, covers): {formatBytes(size.images)}</li>
+            <li>Version history: {formatBytes(size.history)}</li>
+            {size.trash > 0 && <li>Trash: {formatBytes(size.trash)}</li>}
+            {size.other > 0 && <li>Sync records and other: {formatBytes(size.other)}</li>}
+          </ul>
+          <p className="muted small">
+            A finished book can keep less history: mark it Finished in its ⋯ menu.
+          </p>
+        </div>
+      )}
       <div>
         <button onClick={() => void choose()}>Open a different library…</button>
       </div>

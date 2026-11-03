@@ -1291,14 +1291,91 @@ export class Library {
       .reverse()
   }
 
-  private async pruneSnapshots(volumeId: string, chapterId: string): Promise<void> {
+  private async pruneSnapshots(
+    volumeId: string,
+    chapterId: string,
+    light?: boolean,
+  ): Promise<void> {
     const ids = await this.snapshotIds(volumeId, chapterId)
     const times = ids.map(snapshotTime)
-    const keep = snapshotsToKeep(times, this.now())
+    const keep = snapshotsToKeep(times, this.now(), light ?? (await this.isFinished(volumeId)))
     const dir = this.historyDir(volumeId, chapterId)
     for (const [i, snapshotId] of ids.entries()) {
       if (!keep.has(i)) await fs.promises.rm(join(dir, `${snapshotId}.json`), { force: true })
     }
+  }
+
+  /** A finished book keeps less history (its volume's `finished` setting). */
+  private async isFinished(volumeId: string): Promise<boolean> {
+    for (const seriesId of await listDirs(this.paths.seriesRoot)) {
+      const dir = this.paths.volumeDir(seriesId, volumeId)
+      if (!(await pathExists(dir))) continue
+      const volume = await this.getVolume(seriesId, volumeId).catch(() => null)
+      return volume?.settings['finished'] === true
+    }
+    return false
+  }
+
+  /**
+   * Marks a volume finished (or not). Finished, its chapters keep fewer old
+   * versions: one a week back to 3 months, then one a month. Applied at once.
+   */
+  async setVolumeFinished(
+    seriesId: string,
+    volumeId: string,
+    finished: boolean,
+  ): Promise<VolumeFile> {
+    const volume = await this.updateVolume(seriesId, volumeId, { settings: { finished } })
+    if (finished) {
+      for (const chapterId of await listDirs(join(this.paths.localDir, 'history', volumeId))) {
+        await this.pruneSnapshots(volumeId, chapterId, true)
+      }
+    }
+    return volume
+  }
+
+  /** How much space the library takes on this computer, by kind (bytes). */
+  async diskUsage(): Promise<{
+    total: number
+    writing: number
+    images: number
+    history: number
+    trash: number
+    other: number
+  }> {
+    const sizes = { total: 0, writing: 0, images: 0, history: 0, trash: 0, other: 0 }
+    const local = relative(this.root, this.paths.localDir).split(sep).join('/')
+    const walk = async (dir: string): Promise<void> => {
+      let entries: fs.Dirent[]
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const e of entries) {
+        const full = join(dir, e.name)
+        if (e.isDirectory()) {
+          await walk(full)
+          continue
+        }
+        if (!e.isFile()) continue
+        const size = (await fs.promises.stat(full).catch(() => null))?.size ?? 0
+        const rel = relative(this.root, full).split(sep).join('/')
+        const kind = rel.startsWith(`${local}/history/`)
+          ? 'history'
+          : rel.startsWith(`${local}/trash/`)
+            ? 'trash'
+            : rel.startsWith(`${local}/`)
+              ? 'other'
+              : /\/images\//.test(rel) || /(^|\/)cover\.[a-z]+$/.test(rel)
+                ? 'images'
+                : 'writing'
+        sizes[kind] += size
+        sizes.total += size
+      }
+    }
+    await walk(this.root)
+    return sizes
   }
 
   private readSnapshotFile(volumeId: string, chapterId: string, snapshotId: string) {

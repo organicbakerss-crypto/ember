@@ -511,7 +511,13 @@ Sync is per file and local-first: the local copy is the truth, the cloud is a ma
 
 ## Smart Storage
 
-**Decide after sync, from real sizes.** A novel is about 1 MB of text; images take the space. If libraries stay small, this can shrink to one action, "Remove from this computer (keep in the cloud)", instead of the automatic going-cold below.
+**Measured after sync (Nov 2026): 20 MB, of which about 19 MB is images; all the writing and history is under 1 MB.** Compressing old volumes' text would save almost nothing yet, so the first steps go at what actually grows (below); the full Smart Storage design is still wanted and will be revisited.
+
+**As built (space, before Smart Storage):**
+
+- **Cloud clean-up:** once a week, each computer deletes blobs in the cloud that no manifest points at and that are over a month old (a month covers any computer partway through an upload; history copies are never touched). Re-using an old blob (say, after an undo back to old text) writes it again so it counts as new. The same pass repairs: a manifest pointing at a missing blob gets it uploaded again from a matching local file. A damaged manifest stops the pass with nothing deleted.
+- **Sizes:** Settings → Library shows the library's size on this computer (writing and world notes, images, version history, trash, sync records); Settings → Sync shows its size in the cloud.
+- **Finished books keep less history:** "Finished (keep less history)" in a volume's ⋯ menu (writing view) or its menu on the series page. Its chapters then keep everything from the last 2 weeks, one version a week back to 3 months, then one a month; applied at once when switched on. Off by default.
 
 Volumes and worlds you are working on stay local and sync per file; ones you rarely open are compressed and only downloaded when you open them. It all happens in the background with no manual file management.
 

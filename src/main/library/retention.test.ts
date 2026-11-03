@@ -36,3 +36,23 @@ describe('snapshot retention', () => {
     expect(snapshotsToKeep([], now).size).toBe(0)
   })
 })
+
+describe('history for a finished book', () => {
+  it('keeps one a week back to 3 months, then one a month', () => {
+    const now = new Date('2026-06-30T12:00:00Z')
+    const times: Date[] = []
+    for (let d = 0; d < 200; d++) times.push(new Date(now.getTime() - d * 86_400_000))
+    const full = snapshotsToKeep(times, now)
+    const light = snapshotsToKeep(times, now, true)
+    expect(light.size).toBeLessThan(full.size / 2)
+    // The last two weeks are all kept either way.
+    for (let d = 0; d <= 14; d++) expect(light.has(d)).toBe(true)
+    // About one a week between 2 weeks and 3 months.
+    const weekly = [...light].filter((i) => i > 14 && i <= 90).length
+    expect(weekly).toBeGreaterThanOrEqual(10)
+    expect(weekly).toBeLessThanOrEqual(12)
+    // About one a month after that.
+    const monthly = [...light].filter((i) => i > 90).length
+    expect(monthly).toBeLessThanOrEqual(5)
+  })
+})

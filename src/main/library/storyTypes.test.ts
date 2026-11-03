@@ -84,4 +84,29 @@ describe('story types', () => {
     expect((await buildManuscript(lib, book.id, volumeId, '')).headings).toBe('title')
     expect((await lib.getVolume(book.id, volumeId)).settings).toEqual({ headings: 'title' })
   })
+
+  it('measures the library by kind, and marks a book finished', async () => {
+    const book = await lib.createSeries({
+      name: 'Done',
+      world: { mode: 'new', name: 'W' },
+      kind: 'book',
+    })
+    const volumeId = (await lib.snapshot()).series[0]!.volumes[0]!.id
+    const ch = await lib.createChapter({ seriesId: book.id, volumeId, title: 'One' })
+    await lib.keepSnapshot(book.id, volumeId, ch.id)
+    await fs.promises.mkdir(join(root, 'worlds', book.worldId!, 'images'), { recursive: true })
+    await fs.promises.writeFile(
+      join(root, 'worlds', book.worldId!, 'images', 'a.png'),
+      Buffer.alloc(5000),
+    )
+    const size = await lib.diskUsage()
+    expect(size.images).toBe(5000)
+    expect(size.writing).toBeGreaterThan(0)
+    expect(size.history).toBeGreaterThan(0)
+    expect(size.total).toBe(size.writing + size.images + size.history + size.trash + size.other)
+
+    const done = await lib.setVolumeFinished(book.id, volumeId, true)
+    expect(done.settings['finished']).toBe(true)
+    expect((await lib.listSnapshots(book.id, volumeId, ch.id)).length).toBeGreaterThan(0)
+  })
 })

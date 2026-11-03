@@ -268,6 +268,10 @@ export const ipcInputs = {
   'library:choose': z.void(),
   'library:openDefault': z.void(),
   'library:snapshot': z.void(),
+  /** How much space the library takes on this computer. */
+  'library:size': z.void(),
+  /** How much space the library takes in the cloud. */
+  'sync:usage': z.void(),
   'series:create': z.object({
     name: nameSchema,
     world: z.discriminatedUnion('mode', [
@@ -507,6 +511,8 @@ export const ipcInputs = {
     goals: volumeGoalsSchema.optional(),
     /** This book's chapter headings in exports (overrides Settings). */
     headings: z.enum(['both', 'number', 'title']).nullable().optional(),
+    /** Finished: its chapters keep fewer old versions. */
+    finished: z.boolean().optional(),
   }),
   'volume:stats': z.object(volumeRef),
   /** Every chapter's paragraphs, in reading order (for volume-wide diagnostics). */
@@ -666,6 +672,15 @@ export interface IpcResults {
   'series:create': SeriesFile
   'series:setWorld': SeriesFile
   'series:setKind': SeriesFile
+  'library:size': {
+    total: number
+    writing: number
+    images: number
+    history: number
+    trash: number
+    other: number
+  }
+  'sync:usage': { bytes: number; files: number } | null
   'world:setFeatures': WorldFile
   'series:rename': SeriesFile
   'world:rename': WorldFile

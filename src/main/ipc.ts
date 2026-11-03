@@ -222,12 +222,18 @@ export function registerIpc(
       host.current.readChapter(input.seriesId, input.volumeId, input.chapterId),
     'chapter:save': (input) =>
       host.current.saveChapter(input.seriesId, input.volumeId, input.chapterId, input.patch),
-    'volume:update': (input) =>
-      host.current.updateVolume(input.seriesId, input.volumeId, {
+    'volume:update': async (input) => {
+      const updated = await host.current.updateVolume(input.seriesId, input.volumeId, {
         name: input.name,
         goals: input.goals,
         ...(input.headings !== undefined ? { settings: { headings: input.headings } } : {}),
-      }),
+      })
+      return input.finished === undefined
+        ? updated
+        : host.current.setVolumeFinished(input.seriesId, input.volumeId, input.finished)
+    },
+    'library:size': () => host.current.diskUsage(),
+    'sync:usage': () => sync.usage(),
     'series:setKind': (input) => host.current.setSeriesKind(input.seriesId, input.kind),
     'world:setFeatures': (input) => host.current.setWorldFeatures(input.worldId, input.features),
     'volume:stats': (input) => host.current.volumeStats(input.seriesId, input.volumeId),

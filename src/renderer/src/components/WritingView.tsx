@@ -634,6 +634,17 @@ export function WritingView(props: {
                 })),
               },
               ...(book && props.worlds ? [worldLinkMenu(series, props.worlds, actions.toast)] : []),
+              {
+                label: 'Finished (keep less history)',
+                checked: volume.settings['finished'] === true,
+                onSelect: () =>
+                  void api
+                    .invoke('volume:update', {
+                      ...ref,
+                      finished: volume.settings['finished'] !== true,
+                    })
+                    .catch((err: unknown) => actions.toast(describeError(err).message)),
+              },
             ])
           }
         >

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { SeriesSummary, VolumeSummary, WorldSummary } from '@shared/ipc'
-import { api } from '../api'
+import { api, describeError } from '../api'
 import { formatWords, seriesCover, volumeCover } from '../covers'
 import { Cover, CoverDropZone } from './Cover'
 import { EditableText } from './EditableText'
@@ -32,6 +32,18 @@ export function SeriesPage(props: {
   const volumeMenu = (volume: VolumeSummary): MenuItem[] => [
     { label: 'Rename', hint: 'F3', onSelect: () => setRenaming(volume.id) },
     { label: 'Export… (Word, PDF, EPUB, Markdown)', onSelect: () => setExporting(volume) },
+    {
+      label: 'Finished (keep less history)',
+      checked: volume.settings['finished'] === true,
+      onSelect: () =>
+        void api
+          .invoke('volume:update', {
+            seriesId: series.id,
+            volumeId: volume.id,
+            finished: volume.settings['finished'] !== true,
+          })
+          .catch((err: unknown) => toast(describeError(err).message)),
+    },
     {
       label: 'Change cover',
       onSelect: () =>

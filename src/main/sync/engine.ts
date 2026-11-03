@@ -59,7 +59,7 @@ const cloudFileSchema = z.looseObject({
 })
 export type CloudFile = z.infer<typeof cloudFileSchema>
 
-const cloudManifestSchema = z.looseObject({
+export const cloudManifestSchema = z.looseObject({
   formatVersion: z.number().int().positive(),
   unit: z.string(),
   deleted: z.boolean().catch(false),
@@ -571,11 +571,14 @@ export class SyncEngine {
   }
 
   private async putBlob(hash: string, bytes: Uint8Array) {
+    const body = gzipSync(bytes)
     try {
-      await this.cloud.put(`${BLOBS_PREFIX}${hash}`, gzipSync(bytes), { ifNoneMatch: '*' })
+      await this.cloud.put(`${BLOBS_PREFIX}${hash}`, body, { ifNoneMatch: '*' })
     } catch (err) {
-      // Already there (the same contents, from either computer).
       if (!(err instanceof PreconditionFailed)) throw err
+      // Already there (the same contents, from either computer). Write it again so it
+      // counts as recent: the clean-up only removes copies nothing has used for a month.
+      await this.cloud.put(`${BLOBS_PREFIX}${hash}`, body)
     }
   }
 

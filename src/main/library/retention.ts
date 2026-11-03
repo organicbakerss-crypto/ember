@@ -4,13 +4,16 @@
  * - then the newest snapshot of each day, up to 3 months;
  * - then the newest snapshot of each week.
  * The newest snapshot overall is always kept.
+ *
+ * For a finished book (`light`), fewer: everything from the last 2 weeks,
+ * then one a week up to 3 months, then one a month.
  */
 const DAY = 24 * 60 * 60 * 1000
 export const KEEP_ALL_DAYS = 14
 export const KEEP_DAILY_DAYS = 90
 
 /** Returns the indexes (into `times`) of the snapshots to keep. */
-export function snapshotsToKeep(times: Date[], now: Date): Set<number> {
+export function snapshotsToKeep(times: Date[], now: Date, light = false): Set<number> {
   const keep = new Set<number>()
   const newestPerBucket = new Map<string, number>()
   let newest = -1
@@ -22,7 +25,14 @@ export function snapshotsToKeep(times: Date[], now: Date): Set<number> {
       keep.add(i)
       return
     }
-    const bucket = age <= KEEP_DAILY_DAYS * DAY ? `day:${dayKey(time)}` : `week:${weekKey(time)}`
+    const recent = age <= KEEP_DAILY_DAYS * DAY
+    const bucket = light
+      ? recent
+        ? `week:${weekKey(time)}`
+        : `month:${time.toISOString().slice(0, 7)}`
+      : recent
+        ? `day:${dayKey(time)}`
+        : `week:${weekKey(time)}`
     const current = newestPerBucket.get(bucket)
     if (current === undefined || time > times[current]!) newestPerBucket.set(bucket, i)
   })

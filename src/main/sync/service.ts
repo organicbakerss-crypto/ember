@@ -20,6 +20,7 @@ import type { Library } from '../library/library'
 import { CloudError, PreconditionFailed, type CloudStore } from './cloud'
 import { SyncEngine, UNITS_PREFIX, type SyncHooks } from './engine'
 import { fetchHistory, uploadHistory } from './history'
+import { cleanUpCloud } from './cleanup'
 import { parseBucketUrl, S3Cloud } from './s3'
 import { setupFromToken } from './cloudflare'
 import { localUnits } from './units'
@@ -244,6 +245,7 @@ export class SyncService {
         ).catch((err: unknown) => {
           if (err instanceof CloudError) throw err
         })
+        await this.weeklyCleanUp()
         this.failures = 0
         this.setStatus({
           state: report.problems.length ? 'error' : 'idle',
@@ -272,6 +274,30 @@ export class SyncService {
       }
     })
     return this.running
+  }
+
+  /** At most once a week, from each computer: clear unused copies out of the cloud. */
+  private async weeklyCleanUp() {
+    if (!this.cloud || !this.library) return
+    const record = join(this.library.paths.localDir, 'sync', 'cleanup.json')
+    const last = await fs.promises
+      .readFile(record, 'utf8')
+      .then((t) => Number((JSON.parse(t) as { at?: number }).at) || 0)
+      .catch(() => 0)
+    if (Date.now() - last < 7 * 86_400_000) return
+    try {
+      await cleanUpCloud(this.cloud, this.library.root)
+      await writeFileAtomic(record, serializeJson({ formatVersion: 1, at: Date.now() }))
+    } catch {
+      // Only tidying: try again next time.
+    }
+  }
+
+  /** How much the library takes in the cloud (one listing). */
+  async usage(): Promise<{ bytes: number; files: number } | null> {
+    if (!this.cloud) return null
+    const objects = await this.cloud.list('library/')
+    return { bytes: objects.reduce((n, o) => n + o.size, 0), files: objects.length }
   }
 
   async syncNow(): Promise<SyncStatus> {
