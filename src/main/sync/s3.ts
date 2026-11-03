@@ -179,7 +179,9 @@ export class S3Cloud implements CloudStore {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       })
     } catch (err) {
-      const code = String(((err as { cause?: { code?: string } }).cause ?? {}).code ?? '')
+      const cause = (err as { cause?: { code?: string } }).cause
+      const code =
+        cause?.code ?? /net::(ERR_SSL\w*)/.exec(err instanceof Error ? err.message : '')?.[1] ?? ''
       if (code.startsWith('ERR_SSL')) {
         // Cloudflare refuses the connection itself for an address it doesn't know.
         throw new CloudError(

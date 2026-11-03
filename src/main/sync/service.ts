@@ -59,6 +59,12 @@ export interface SyncServiceOptions {
   onNotice: (message: string) => void
   /** For tests: a cloud instead of R2. */
   makeCloud?: (config: SyncConfig, secret: string) => CloudStore
+  /**
+   * How to make web requests. The app uses Electron's (Chromium's network
+   * stack, like a browser): Cloudflare's storage refuses some connections
+   * from Node's built-in one.
+   */
+  fetchImpl?: typeof fetch
   /** For tests: where the Cloudflare API is. */
   tokenSetup?: Parameters<typeof setupFromToken>[1]
 }
@@ -139,7 +145,8 @@ export class SyncService {
       })
       return
     }
-    this.cloud = this.options.makeCloud?.(config, secret) ?? cloudFor(config, secret)
+    this.cloud =
+      this.options.makeCloud?.(config, secret) ?? cloudFor(config, secret, this.options.fetchImpl)
     const hooks: SyncHooks = {
       lock: (unit, task) => library.lockUnit(unit, task),
       borrow: (_unit, rels) => this.options.leases.borrow(rels.flatMap(docKey)),
@@ -299,7 +306,10 @@ export class SyncService {
     if (!library) throw new AppError('no-library', 'Open a library first.')
     let where: { endpoint: string; bucket: string; accessKeyId: string; secretAccessKey: string }
     if ('token' in input) {
-      where = await setupFromToken(input.token, this.options.tokenSetup)
+      where = await setupFromToken(input.token, {
+        ...(this.options.fetchImpl ? { fetchImpl: this.options.fetchImpl } : {}),
+        ...this.options.tokenSetup,
+      })
     } else {
       const parsed = parseBucketUrl(input.url)
       if (!parsed?.bucket) {
@@ -321,7 +331,7 @@ export class SyncService {
     }
     const cloud =
       this.options.makeCloud?.(config, where.secretAccessKey) ??
-      cloudFor(config, where.secretAccessKey)
+      cloudFor(config, where.secretAccessKey, this.options.fetchImpl)
     await checkCloud(cloud)
 
     // Both sides hold work: say what will happen before putting them together.
@@ -371,13 +381,16 @@ export class SyncService {
   }
 }
 
-function cloudFor(config: SyncConfig, secret: string): CloudStore {
-  return new S3Cloud({
-    endpoint: config.endpoint,
-    bucket: config.bucket,
-    accessKeyId: config.accessKeyId,
-    secretAccessKey: secret,
-  })
+function cloudFor(config: SyncConfig, secret: string, fetchImpl?: typeof fetch): CloudStore {
+  return new S3Cloud(
+    {
+      endpoint: config.endpoint,
+      bucket: config.bucket,
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: secret,
+    },
+    fetchImpl,
+  )
 }
 
 /** The editing lease of a synced file, if it's a document someone could be typing in. */

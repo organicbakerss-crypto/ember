@@ -113,7 +113,7 @@ export async function setupFromToken(
       const setup = { endpoint, bucket, accessKeyId, secretAccessKey }
       if (names.has(bucket)) {
         // Only use it if it holds nothing but this app's library.
-        const cloud = options.makeCloud?.(setup) ?? new S3Cloud(setup)
+        const cloud = options.makeCloud?.(setup) ?? new S3Cloud(setup, fetchImpl)
         let objects
         try {
           objects = await cloud.list('')

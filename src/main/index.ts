@@ -1,4 +1,4 @@
-import { app, BrowserWindow, safeStorage, session, shell } from 'electron'
+import { app, BrowserWindow, net, safeStorage, session, shell } from 'electron'
 import { join } from 'node:path'
 import { appConfig } from '../../app.config'
 import { AppSettingsStore } from './appSettings'
@@ -100,6 +100,7 @@ void app.whenReady().then(async () => {
     },
     onStatus: (status) => broadcast('sync:status', status),
     onNotice: (message) => broadcast('app:notice', message),
+    fetchImpl: ((input: string, init?: RequestInit) => net.fetch(input, init)) as typeof fetch,
     // End-to-end tests point setup at a stand-in for Cloudflare (never in a packaged app).
     ...(!app.isPackaged && process.env['SYNC_TEST_API'] && process.env['SYNC_TEST_S3']
       ? {
