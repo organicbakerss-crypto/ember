@@ -500,4 +500,29 @@ describe('the AI service', () => {
     )
     expect(r.script).toContain('[voice:Narrator] Mara ran to the harbour.')
   })
+
+  it('keeps the writer’s fixes to who says a line, even after the chapter changes', async () => {
+    const ref = await story()
+    await lib.saveChapter(ref.seriesId, ref.volumeId, ref.chapterId, {
+      content: doc('“Ew. Grape.”', 'Mara sighed.'),
+    })
+    fake = await startFakeOllama(() => JSON.stringify({ narrator: '', speakers: { '1': 'Mara' } }))
+    const ai = service({})
+    const first = await ai.chapterSpeakers({ requestId: 's1', ...ref }, () => {})
+    expect(first.lines['ew grape']).toBe('Mara')
+    await lib.fixSpeaker(ref.seriesId, ref.volumeId, ref.chapterId, 'ew grape', {
+      entryId: null,
+      name: 'Ashley',
+    })
+    expect(
+      (await ai.chapterSpeakers({ requestId: 's2', ...ref }, () => {})).lines['ew grape'],
+    ).toBe('Ashley')
+    // The chapter changes: marked again by the AI, the fix still wins.
+    await lib.saveChapter(ref.seriesId, ref.volumeId, ref.chapterId, {
+      content: doc('“Ew. Grape.”', 'Mara sighed loudly.'),
+    })
+    const again = await ai.chapterSpeakers({ requestId: 's3', ...ref }, () => {})
+    expect(fake.requests).toHaveLength(2)
+    expect(again.lines['ew grape']).toBe('Ashley')
+  })
 })

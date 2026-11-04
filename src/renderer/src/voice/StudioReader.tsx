@@ -49,6 +49,8 @@ export function StudioReader(props: {
   const [paused, setPaused] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const ctxRef = useRef<AudioContext | null>(null)
+  const redo = useRef(false)
+  const [redoAsked, setRedoAsked] = useState(false)
   const [requestId] = useState(() => `speakers-${Date.now()}`)
 
   useIpcEvent('ai:progress', (p) => {
@@ -145,6 +147,7 @@ export function StudioReader(props: {
         const p = passages[i]!
         if (p.pauseBefore) await new Promise((r) => setTimeout(r, p.pauseBefore))
         mark(blocks[p.blocks[0]!]?.pos ?? null)
+        setRedoAsked(false)
         setState({ text: 'Reading aloud', at: i + 1, of: passages.length })
         await new Promise<void>((resolve) => {
           const src = ctx.createBufferSource()
@@ -153,6 +156,14 @@ export function StudioReader(props: {
           src.onended = () => resolve()
           src.start()
         })
+        if (redo.current) {
+          // "Redo that bit": make this passage again (it comes out differently) and replay it.
+          redo.current = false
+          setState({ text: 'Making that bit again…', at: i + 1, of: passages.length })
+          made[i] = await make(p, true)
+          i--
+          continue
+        }
         made[i] = undefined
       }
       if (!stopped) onClose()
@@ -184,6 +195,18 @@ export function StudioReader(props: {
           {paused ? 'Paused' : state.text}
           {state.of ? ` · ${state.at} of ${state.of}` : ''}
         </span>
+      )}
+      {!problem && state.text === 'Reading aloud' && (
+        <button
+          title="The bit playing now sounded wrong: make it again and replay it"
+          disabled={redoAsked}
+          onClick={() => {
+            redo.current = true
+            setRedoAsked(true)
+          }}
+        >
+          Redo that bit
+        </button>
       )}
       {!problem && <button onClick={toggle}>{paused ? 'Resume' : 'Pause'}</button>}
       <button onClick={onClose}>{problem ? 'Close' : 'Stop'}</button>

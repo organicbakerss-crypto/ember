@@ -22,6 +22,39 @@ export function CastDialog(props: { seriesId: string; characters: string[]; onCl
     )
   }, [seriesId])
 
+  const [trying, setTrying] = useState<string | null>(null)
+  /** Speaks a short line in a voice, to hear it before (or after) picking it. */
+  const tryVoice = async (voice: string) => {
+    setTrying(voice || '(default)')
+    try {
+      const wav = await api.invoke('voice:speak', {
+        text: 'This is how I sound reading your story. Does it sound right to you?',
+        voice,
+      })
+      const ctx = new AudioContext()
+      const buf = await ctx.decodeAudioData(wav.slice().buffer)
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.connect(ctx.destination)
+      src.onended = () => void ctx.close()
+      src.start()
+    } catch (e) {
+      setError(describeError(e).message)
+    } finally {
+      setTrying(null)
+    }
+  }
+  const tryButton = (voice: string) => (
+    <button
+      className="link small"
+      disabled={trying !== null}
+      title="Hear this voice"
+      onClick={() => void tryVoice(voice)}
+    >
+      {trying === (voice || '(default)') ? 'Making…' : '▶ Try'}
+    </button>
+  )
+
   const save = (next: Cast) => {
     setCast(next)
     api
@@ -74,6 +107,7 @@ export function CastDialog(props: { seriesId: string; characters: string[]; onCl
               <tr>
                 <th>Anyone else</th>
                 <td>{pick(cast.other, (v) => save({ ...cast, other: v }), 'anyone else')}</td>
+                <td>{tryButton(cast.other)}</td>
               </tr>
               {props.characters.map((name) => (
                 <tr key={name}>
@@ -90,6 +124,7 @@ export function CastDialog(props: { seriesId: string; characters: string[]; onCl
                       name,
                     )}
                   </td>
+                  <td>{tryButton(cast.characters[name] ?? '')}</td>
                 </tr>
               ))}
             </tbody>

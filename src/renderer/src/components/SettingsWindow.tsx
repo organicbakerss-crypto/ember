@@ -508,6 +508,26 @@ function StudioSettings() {
             />
           </label>
           <label>
+            Language it speaks
+            <select value={voice.language} onChange={(e) => set({ language: e.target.value })}>
+              {[
+                ['en', 'English'],
+                ['es', 'Spanish'],
+                ['fr', 'French'],
+                ['de', 'German'],
+                ['it', 'Italian'],
+                ['pt', 'Portuguese'],
+                ['nl', 'Dutch'],
+                ['ja', 'Japanese'],
+                ['', 'Each voice’s own'],
+              ].map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Quality
             <select
               value={voice.quality}

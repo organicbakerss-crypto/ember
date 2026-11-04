@@ -16,6 +16,7 @@ import {
   chapterSummaryFileSchema,
   chapterSpeakersFileSchema,
   type ChapterSpeakersFile,
+  type Speaker,
   type ChapterSummaryFile,
   chapterFileSchema,
   emptyDoc,
@@ -863,7 +864,9 @@ export class Library {
   async saveSpeakers(
     seriesId: string,
     volumeId: string,
-    file: Pick<ChapterSpeakersFile, 'chapterId' | 'textHash' | 'narrator' | 'lines'>,
+    file: Pick<ChapterSpeakersFile, 'chapterId' | 'textHash' | 'narrator' | 'lines'> & {
+      fixed?: ChapterSpeakersFile['fixed']
+    },
   ): Promise<void> {
     await this.lock.run(`volume:${volumeId}`, async () => {
       await fs.promises.mkdir(join(this.paths.volumeDir(seriesId, volumeId), 'speakers'), {
@@ -874,6 +877,26 @@ export class Library {
         ...file,
         createdAt: this.timestamp(),
       })
+    })
+  }
+
+  /** The writer fixes who says a line (null: nobody known, "anyone else"). */
+  async fixSpeaker(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+    key: string,
+    speaker: Speaker,
+  ): Promise<void> {
+    const file = await this.readSpeakers(seriesId, volumeId, chapterId)
+    if (!file)
+      throw new AppError('not-found', 'Who says what hasn’t been marked for this chapter yet.')
+    await this.saveSpeakers(seriesId, volumeId, {
+      chapterId,
+      textHash: file.textHash,
+      narrator: file.narrator,
+      lines: { ...file.lines, [key]: speaker },
+      fixed: { ...file.fixed, [key]: speaker },
     })
   }
 

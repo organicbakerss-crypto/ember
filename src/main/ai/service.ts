@@ -863,12 +863,16 @@ export class AiService {
         const who = resolveSpeaker(byNumber.get(n) ?? '', entries, narrator)
         if (who && seg.key) lines[seg.key] = who
       }
+      // The writer's fixes win, and are kept for next time.
+      const fixed = marked?.fixed ?? {}
+      for (const [k, v] of Object.entries(fixed)) lines[k] = v
       marked = {
         formatVersion: 1,
         chapterId,
         textHash: s.textHash,
         narrator,
         lines,
+        fixed,
         createdAt: new Date().toISOString(),
       }
       await library.saveSpeakers(seriesId, volumeId, marked)

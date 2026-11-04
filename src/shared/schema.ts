@@ -536,6 +536,8 @@ export const chapterSpeakersFileSchema = z.looseObject({
   narrator: speakerSchema.nullable().catch(null).default(null),
   /** Who says each line of dialogue, by the line's key (its first words). */
   lines: z.record(z.string(), speakerSchema).catch({}).default({}),
+  /** The writer's own fixes, by line key: they win over the AI's, and survive re-marking. */
+  fixed: z.record(z.string(), speakerSchema).catch({}).default({}),
   createdAt: timestamp,
 })
 export type ChapterSpeakersFile = z.infer<typeof chapterSpeakersFileSchema>

@@ -37,6 +37,7 @@ import type { SyncService } from './sync/service'
 import type { AiService } from './ai/service'
 import { AiJobs } from './ai/jobs'
 import { AutoWorld } from './ai/autoWorld'
+import { docBlocks, segments } from '@shared/voice/script'
 import type { VoiceService } from './voice/service'
 
 type Handlers = {
@@ -268,6 +269,44 @@ export function registerIpc(
           event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, { requestId: input.requestId, text })
         }
       }),
+    'voice:lines': async (input, event) => {
+      const who = await ai.chapterSpeakers(input, (text) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, { requestId: input.requestId, text })
+        }
+      })
+      const lib = host.current
+      const chapter = await lib.readChapter(input.seriesId, input.volumeId, input.chapterId)
+      const file = await lib.readSpeakers(input.seriesId, input.volumeId, input.chapterId)
+      const segs = segments(docBlocks(chapter.content))
+      const lines: IpcResult<'voice:lines'>['lines'] = []
+      const seen = new Set<string>()
+      segs.forEach((seg, i) => {
+        if (seg.kind !== 'quote' || !seg.key || seen.has(seg.key)) return
+        seen.add(seg.key)
+        // The narration just before, for context ("she said").
+        const prev = segs[i - 1]
+        lines.push({
+          key: seg.key,
+          text: seg.text,
+          before: prev && prev.kind === 'narration' ? prev.text.slice(-120) : '',
+          speaker: who.lines[seg.key] ?? null,
+          fixed: !!file?.fixed[seg.key],
+        })
+      })
+      return { narrator: who.narrator, lines }
+    },
+    'voice:fixLine': async (input) => {
+      const lib = host.current
+      const series = await lib.getSeries(input.seriesId)
+      const entries = series.worldId ? (await lib.world.view(series.worldId)).entries : []
+      const entry = entries.find((e) => e.name === input.name)
+      await lib.fixSpeaker(input.seriesId, input.volumeId, input.chapterId, input.key, {
+        entryId: entry?.id ?? null,
+        name: input.name,
+      })
+      return null
+    },
     'voice:setCast': async (input) => {
       await host.current.setSeriesVoices(input.seriesId, input.voices)
       return null

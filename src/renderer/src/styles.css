@@ -1462,6 +1462,29 @@ kbd {
   max-height: 80vh;
   overflow: auto;
 }
+.speakers-dialog {
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.speakers-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  display: grid;
+  gap: 0.35rem;
+}
+.speakers-list li {
+  display: grid;
+  grid-template-columns: 1fr 10rem auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+}
 .cast-table {
   width: 100%;
   border-collapse: collapse;

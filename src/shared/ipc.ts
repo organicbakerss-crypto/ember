@@ -818,6 +818,21 @@ export const ipcInputs = {
     volumeId: id('volume'),
     chapterId: id('chapter'),
   }),
+  /** Every line of dialogue in a chapter with who says it (marked by the AI if needed). */
+  'voice:lines': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    volumeId: id('volume'),
+    chapterId: id('chapter'),
+  }),
+  /** The writer fixes who says a line ('' = anyone else). */
+  'voice:fixLine': z.object({
+    seriesId: id('series'),
+    volumeId: id('volume'),
+    chapterId: id('chapter'),
+    key: z.string().min(1).max(200),
+    name: z.string().max(200),
+  }),
   /** The voices a story is read with. */
   'voice:setCast': z.object({
     seriesId: id('series'),
@@ -1026,6 +1041,11 @@ export interface IpcResults {
   'voice:transcribe': string
   'voice:chapterSpeakers': { narrator: string | null; lines: Record<string, string> }
   'voice:setCast': null
+  'voice:lines': {
+    narrator: string | null
+    lines: { key: string; text: string; before: string; speaker: string | null; fixed: boolean }[]
+  }
+  'voice:fixLine': null
   'voice:cast': { narrator: string; other: string; characters: Record<string, string> }
   'voice:script': { saved: string | null; chapters: number; lines: number }
   'ai:sortNames': { applied: number; suggestions: number; skipped: number }

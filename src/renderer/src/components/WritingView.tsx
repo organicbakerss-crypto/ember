@@ -8,6 +8,7 @@ import { ReadAloud } from '../voice/ReadAloud'
 import { StudioReader } from '../voice/StudioReader'
 import { Dictation } from '../voice/Dictation'
 import { CastDialog } from '../voice/CastDialog'
+import { SpeakersDialog } from '../voice/SpeakersDialog'
 import type {
   WorldSummary,
   CaptureContext,
@@ -141,6 +142,7 @@ export function WritingView(props: {
   } | null>(null)
   const [dictating, setDictating] = useState(false)
   const [castOpen, setCastOpen] = useState(false)
+  const [speakersOpen, setSpeakersOpen] = useState(false)
   const stopDictating = useCallback(() => setDictating(false), [])
   const markReading = useCallback((pos: number | null) => editor.current?.markReading(pos), [])
   const stopReading = useCallback(() => setReading(null), [])
@@ -567,6 +569,15 @@ export function WritingView(props: {
             ]
           : []),
         { id: 'voice-cast', title: 'Voices for this story…', run: () => setCastOpen(true) },
+        ...(selectedId && aiOn
+          ? [
+              {
+                id: 'voice-speakers',
+                title: 'Who’s speaking in this chapter…',
+                run: () => void flushAll().then(() => setSpeakersOpen(true)),
+              },
+            ]
+          : []),
         ...(aiOn
           ? [
               ...(selectedId
@@ -1040,6 +1051,22 @@ export function WritingView(props: {
             />
           ))}
         {dictating && <Dictation seriesId={series.id} onText={dictated} onClose={stopDictating} />}
+        {speakersOpen && selectedId && (
+          <SpeakersDialog
+            seriesId={series.id}
+            volumeId={volume.id}
+            chapterId={selectedId}
+            chapterTitle={liveMeta[selectedId]?.title || view?.chapters[selectedId]?.title || ''}
+            names={[
+              ...new Set(
+                (world?.view.entries ?? [])
+                  .filter((e) => e.template === 'person')
+                  .map((e) => e.name),
+              ),
+            ]}
+            onClose={() => setSpeakersOpen(false)}
+          />
+        )}
         {castOpen && (
           <CastDialog
             seriesId={series.id}
