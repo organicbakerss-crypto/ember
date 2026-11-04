@@ -853,7 +853,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
    - **Typewriter scrolling** and true **full screen**.
    - World: a **search box**, **tags** on entries, a **picture gallery** per entry, free **lore pages**, **export the world** (a series bible).
    - Not wanted: an outline/corkboard view; writing stats and deadline goals.
-   - **Book mode** (one of the last things, after the rest; **read-only**, the cover as page zero too): the Manuscript view as a real open book: two book-sized pages side by side, turned by dragging a page (forward or back) or clicking a bottom corner, with a page-turn animation (skipped in Lighter mode). Built on the Manuscript view's pagination.
+   - **Book mode** (one of the last things, after the rest; **read-only**): it starts closed, showing **only the cover**; clicking it opens the book to a spread with the **title page on the left and Chapter 1 beginning on the right**, then on as a real open book: two book-sized pages side by side, turned by dragging a page (forward or back) or clicking a bottom corner, with a page-turn animation (skipped in Lighter mode). Built on the Manuscript view's pagination.
 13. **Themes:** done early (after 4e): High Contrast and eighteen more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
