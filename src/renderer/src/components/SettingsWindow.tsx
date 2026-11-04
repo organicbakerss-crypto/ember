@@ -658,11 +658,31 @@ function AiSettingsSection() {
               </label>
             </>
           )}
+          <h3>Updating the world</h3>
+          <p className="muted small">When the AI reads a chapter for the world, it should:</p>
+          <label className="radio">
+            <input
+              type="radio"
+              name="world-changes"
+              checked={ai.worldChanges === 'apply'}
+              onChange={() => set({ worldChanges: 'apply' })}
+            />
+            Make the changes itself (each is listed in the inbox, where you can undo it)
+          </label>
+          <label className="radio">
+            <input
+              type="radio"
+              name="world-changes"
+              checked={ai.worldChanges === 'suggest'}
+              onChange={() => set({ worldChanges: 'suggest' })}
+            />
+            Only suggest them (you accept each one)
+          </label>
           <h3>Where it is</h3>
           <p className="muted small">
             The ✦ AI button on the left of the writing view opens chat, brainstorm and “Ask the
-            story”. Spelling and grammar is in the ⋯ menu above the page and the command palette. AI
-            settings stay on this computer.
+            story”. “Edit with AI” and “Update the world from this chapter” are in the ⋯ menu above
+            the page and the command palette. AI settings stay on this computer.
           </p>
         </>
       )}

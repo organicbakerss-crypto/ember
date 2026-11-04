@@ -154,7 +154,7 @@ export function parseFindings(reply: string): RawFindings | null {
 
 /* ---------- checking it against the world ---------- */
 
-export type Finding = Pick<InboxItem, 'kind' | 'text' | 'quote' | 'entryId' | 'suggestion'>
+export type Finding = Pick<InboxItem, 'kind' | 'text' | 'quote' | 'entryId' | 'suggestion' | 'undo'>
 
 export interface WorldFacts {
   entries: EntrySummary[]
@@ -165,7 +165,7 @@ export interface WorldFacts {
   answered: string[]
 }
 
-const norm = (s: string) =>
+export const norm = (s: string) =>
   s
     .toLowerCase()
     .replace(/[‘’`´]/g, "'")
@@ -313,9 +313,16 @@ export function checkFindings(
     }
   }
 
-  const count = { suggestion: 0, continuity: 0, question: 0, captured: 0 }
-  const max = {
+  const count: Record<Finding['kind'], number> = {
+    suggestion: 0,
+    applied: 0,
+    continuity: 0,
+    question: 0,
+    captured: 0,
+  }
+  const max: Record<Finding['kind'], number> = {
     suggestion: LIMITS.suggestions,
+    applied: 0,
     continuity: LIMITS.continuity,
     question: LIMITS.questions,
     captured: 0,
@@ -337,4 +344,45 @@ export function chapterParts(paragraphs: string[], words: number): string[] {
     count += n
   }
   return parts.map((p) => p.join('\n\n')).filter((p) => p.trim())
+}
+
+/* ---------- sorting new names ---------- */
+
+/** Asks what each name is (or that it's not one for the world). */
+export function sortNamesMessages(names: { name: string; quote: string }[]): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content: `These capitalised words keep coming up in a novel. For each, say what it is in the story's world, from the sentence it's in. Reply with JSON only: {"names":[{"name":"","kind":"","about":""}]}
+kind is one of: ${Object.keys(NEW_KINDS).join(', ')}, or none.
+Use none for anything that isn't something in the world: real holidays and festivals (like Halloween or Christmas), days, months, seasons, languages, titles or forms of address on their own, exclamations, ordinary words at the start of a sentence. A holiday or festival made up for the story is an event.
+about: one short line from the sentence (leave it empty for none). Keep each name exactly as given.`,
+    },
+    {
+      role: 'user',
+      content: names.map((n) => `${n.name}: “${n.quote}”`).join('\n'),
+    },
+  ]
+}
+
+/** The AI's sorting, read forgivingly: name → kind (a NEW_KINDS key or 'none') and a line about it. */
+export function parseSortedNames(reply: string): Map<string, { kind: string; about: string }> {
+  const out = new Map<string, { kind: string; about: string }>()
+  const start = reply.indexOf('{')
+  const end = reply.lastIndexOf('}')
+  if (start < 0 || end <= start) return out
+  try {
+    const data = JSON.parse(reply.slice(start, end + 1)) as { names?: unknown }
+    for (const x of Array.isArray(data.names) ? data.names : []) {
+      if (!x || typeof x !== 'object') continue
+      const o = x as Record<string, unknown>
+      const name = typeof o['name'] === 'string' ? o['name'].trim() : ''
+      const kind = typeof o['kind'] === 'string' ? o['kind'].trim().toLowerCase() : ''
+      if (!name || (kind !== 'none' && !NEW_KINDS[kind])) continue
+      out.set(norm(name), { kind, about: typeof o['about'] === 'string' ? o['about'].trim() : '' })
+    }
+  } catch {
+    // Unreadable: nothing sorted.
+  }
+  return out
 }

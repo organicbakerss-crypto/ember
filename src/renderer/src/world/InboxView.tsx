@@ -37,6 +37,7 @@ export function InboxView(props: {
   const worldId = world.view.world.id
   const { settings } = useSettings()
   const withNames = settings.world.nameCatcher
+  const aiOn = settings.ai.enabled
   const { openMenu, toast } = useOverlays()
   const [inbox, setInbox] = useState<WorldInbox | null>(null)
   const [filing, setFiling] = useState<InboxItem | null>(null)
@@ -173,6 +174,56 @@ export function InboxView(props: {
     }
   }
 
+  /** Takes back a change the AI made itself. */
+  const undoApplied = async (item: InboxItem) => {
+    try {
+      await api.invoke('inbox:undo', { worldId, itemId: item.id })
+      toast(`Undone: ${item.text}`)
+    } catch (err) {
+      fail(err)
+    }
+  }
+
+  /** The changes look right: clear them from the list (they stay in the world). */
+  const clearApplied = async (items: InboxItem[]) => {
+    try {
+      for (const item of items) await api.invoke('inbox:dismiss', { worldId, itemId: item.id })
+      record({
+        label: 'Cleared the AI’s changes from the list',
+        undo: async () => {
+          for (const item of items) await api.invoke('inbox:restore', { worldId, item })
+        },
+      })
+    } catch (err) {
+      fail(err)
+    }
+  }
+
+  /** The AI decides what each new name is (or that it isn't one); it runs in the background. */
+  const [sorting, setSorting] = useState(false)
+  const sortNames = async (names: NameSuggestion[]) => {
+    const seriesId = world.index?.chapters[0]?.seriesId
+    if (!seriesId || !names.length) return
+    setSorting(true)
+    try {
+      await api.invoke('ai:sortNames', {
+        requestId: `${Date.now()}-${names.length}`,
+        seriesId,
+        worldId,
+        names: names.slice(0, 300).map((n) => ({
+          name: n.name,
+          quote: n.quote,
+          chapterId: n.chapterId,
+        })),
+      })
+    } catch (err) {
+      const e = describeError(err)
+      if (e.code !== 'cancelled') toast(e.message)
+    } finally {
+      setSorting(false)
+    }
+  }
+
   const answer = async (item: InboxItem, text: string) => {
     try {
       await api.invoke('inbox:answer', { worldId, itemId: item.id, answer: text })
@@ -212,6 +263,37 @@ export function InboxView(props: {
           it here
           {withNames ? '; new names that keep coming up in your chapters appear here too.' : '.'}
         </p>
+      )}
+
+      {byKind('applied').length > 0 && (
+        <section aria-label="Done by the AI">
+          <h2>Done by the AI</h2>
+          <p className="muted small">
+            Changes the AI made to the world from your chapters. Undo any that are wrong; clear the
+            list when they look right.{' '}
+            <button className="link small" onClick={() => void clearApplied(byKind('applied'))}>
+              They look right: clear the list
+            </button>
+          </p>
+          <ul className="inbox-list">
+            {byKind('applied').map((item) => (
+              <li key={item.id} className="inbox-item">
+                <div>
+                  <strong>{item.text}</strong>
+                  {quoteOf(item)}
+                </div>
+                <div className="row">
+                  {item.entryId && world.byId.has(item.entryId) && (
+                    <button onClick={() => props.onOpenEntry(item.entryId!)}>Open</button>
+                  )}
+                  <button className="link" onClick={() => void undoApplied(item)}>
+                    Undo
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {byKind('suggestion').length > 0 && (
@@ -378,11 +460,22 @@ export function InboxView(props: {
           <p className="muted small">
             Capitalised words that keep coming up in your chapters but aren’t in the world yet.
           </p>
+          {aiOn && (
+            <p className="row">
+              <button disabled={sorting} onClick={() => void sortNames(inbox.names)}>
+                {sorting ? 'Sorting with the AI…' : 'Sort these with the AI'}
+              </button>
+              <span className="muted small">
+                It decides what each one is (a person, a place, an event…) and sets aside what isn’t
+                a name, like holidays. You can undo any of it.
+              </span>
+            </p>
+          )}
           {[...byChapter].map(([chapterId, names]) => (
             <div key={chapterId} className="inbox-chapter">
               <h3 className="small">
                 First in {chapterLabel(chapterId)}{' '}
-                {names.length > 1 && (
+                {names.length > 1 && !aiOn && (
                   <>
                     <button
                       className="link small"

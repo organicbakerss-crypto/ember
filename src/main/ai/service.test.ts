@@ -208,7 +208,7 @@ describe('the AI service', () => {
       content: doc('Mara ran to the harbour.', 'Odo waited by the boats.', 'Vela watched.'),
     })
     const progress: string[] = []
-    const ai = service({})
+    const ai = service({ worldChanges: 'suggest' })
     const r = await ai.updateWorld({ requestId: 'u1', ...ref }, (t) => progress.push(t))
     expect(r).toMatchObject({ suggestions: 3, continuity: 0, questions: 1 })
     expect(progress[0]).toBe('Reading the chapter…')
@@ -323,5 +323,87 @@ describe('the AI service', () => {
     expect(system).toContain('The whole world, briefly')
     // Kept for next time.
     expect((await lib.storySummaries(ref.seriesId)).every((x) => x.current)).toBe(true)
+  })
+
+  it('makes the changes itself (new things first, so facts can name them), each undoable', async () => {
+    const ref = await story()
+    await lib.saveChapter(ref.seriesId, ref.volumeId, ref.chapterId, {
+      content: doc('Mara ran to the harbour.', 'Vela watched from the tower.'),
+    })
+    fake = await startFakeOllama(() =>
+      JSON.stringify({
+        summary: 'S.',
+        new: [{ name: 'Vela', kind: 'person', about: 'A watcher.', quote: '' }],
+        // Vela isn't in the world yet when the AI answers: this lands on the second pass.
+        facts: [
+          { entry: 'Vela', field: 'Role', value: 'Watcher', quote: 'Vela watched from the tower.' },
+        ],
+        relationships: [{ from: 'Mara', to: 'Vela', type: 'met', words: '', quote: '' }],
+        questions: [{ question: 'Who sent Vela?', quote: '' }],
+      }),
+    )
+    const r = await service({}).updateWorld({ requestId: 'u1', ...ref }, () => {})
+    expect(r).toMatchObject({ applied: 3, suggestions: 0, questions: 1 })
+    const view = await lib.world.view(ref.worldId)
+    const vela = view.entries.find((e) => e.name === 'Vela')!
+    expect(vela.facts['role']?.map((v) => v.text)).toEqual(['Watcher'])
+    expect(view.relationships).toHaveLength(1)
+    const items = (await lib.world.inbox(ref.worldId, false)).captured
+    expect(items.map((i) => [i.kind, i.text])).toEqual([
+      ['applied', 'New person: Vela — A watcher.'],
+      ['applied', 'Vela: Role → Watcher'],
+      ['applied', 'Mara and Vela: Met'],
+      ['question', 'Who sent Vela?'],
+    ])
+    // Undo takes back exactly what it added.
+    const fact = items[1]!
+    await lib.world.saveEntry(ref.worldId, vela.id, { aliases: ['the Watcher'] }) // the writer's own change
+    await lib.world.undoApplied(ref.worldId, fact.id)
+    const after = await lib.world.readEntry(ref.worldId, vela.id)
+    expect(after.facts['role'] ?? []).toEqual([])
+    expect(after.quotes).toEqual([])
+    expect(after.aliases).toEqual(['the Watcher'])
+    await lib.world.undoApplied(ref.worldId, items[2]!.id)
+    expect((await lib.world.view(ref.worldId)).relationships).toEqual([])
+    await lib.world.undoApplied(ref.worldId, items[0]!.id)
+    expect((await lib.world.view(ref.worldId)).entries.some((e) => e.name === 'Vela')).toBe(false)
+    expect((await lib.listTrash()).map((t) => t.name)).toContain('Vela')
+    // Reading the chapter again keeps nothing it already undid… and doesn't drop the question twice.
+    expect((await lib.world.inbox(ref.worldId, false)).captured.map((i) => i.kind)).toEqual([
+      'question',
+    ])
+  })
+
+  it('sorts new names: entries of the right kind, and what isn’t a name set aside', async () => {
+    const ref = await story()
+    fake = await startFakeOllama(() =>
+      JSON.stringify({
+        names: [
+          { name: 'Halloween', kind: 'none', about: '' },
+          { name: 'Brannoch', kind: 'person', about: 'A captain.' },
+          { name: 'Saltmarch', kind: 'place', about: '' },
+        ],
+      }),
+    )
+    const names = ['Halloween', 'Brannoch', 'Saltmarch', 'Unsorted'].map((name) => ({
+      name,
+      quote: `${name} was there.`,
+      chapterId: ref.chapterId,
+    }))
+    const r = await service({}).sortNames(
+      { requestId: 's1', worldId: ref.worldId, names },
+      () => {},
+    )
+    expect(r).toEqual({ applied: 2, suggestions: 0, skipped: 1 })
+    const view = await lib.world.view(ref.worldId)
+    expect(view.entries.find((e) => e.name === 'Brannoch')?.template).toBe('person')
+    expect(view.entries.find((e) => e.name === 'Saltmarch')?.template).toBe('city')
+    expect(view.entries.some((e) => e.name === 'Halloween')).toBe(false)
+    const items = (await lib.world.inbox(ref.worldId, false)).captured
+    expect(items.map((i) => i.text)).toEqual([
+      'New person: Brannoch — A captain.',
+      'New place: Saltmarch',
+    ])
+    expect(fake.requests[0]!.messages[1]!.content).toContain('Halloween: “Halloween was there.”')
   })
 })

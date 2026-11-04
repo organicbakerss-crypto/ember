@@ -309,7 +309,7 @@ export const inboxItemSchema = z.looseObject({
    * the world), question (something only the writer can answer).
    */
   kind: z
-    .enum(['captured', 'suggestion', 'continuity', 'question'])
+    .enum(['captured', 'suggestion', 'applied', 'continuity', 'question'])
     .catch('captured')
     .default('captured'),
   /** The line in the chapter it comes from. */
@@ -317,6 +317,21 @@ export const inboxItemSchema = z.looseObject({
   /** The entry it's about, when there is one. */
   entryId: id('entry').nullable().catch(null).default(null),
   suggestion: suggestionSchema.optional().catch(undefined),
+  /** A change the AI made itself (`applied`): exactly what to take back out to undo it. */
+  undo: z
+    .looseObject({
+      /** An entry it made (goes to the trash). */
+      created: id('entry').optional(),
+      /** A fact value it added. */
+      fact: z
+        .looseObject({ entryId: id('entry'), field: fieldIdSchema, factId: id('fact') })
+        .optional(),
+      /** The line it kept as a quote. */
+      quote: z.looseObject({ entryId: id('entry'), quoteId: id('quote') }).optional(),
+      relationshipId: id('relationship').optional(),
+    })
+    .optional()
+    .catch(undefined),
 })
 export type InboxItem = z.infer<typeof inboxItemSchema>
 

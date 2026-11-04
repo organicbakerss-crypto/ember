@@ -16,6 +16,7 @@ import {
   inboxItemFileSchema,
   answerFileSchema,
   type AnswerFile,
+  type Suggestion,
   relationshipFileSchema,
   relationshipTypesFileSchema,
   mapFileSchema,
@@ -969,20 +970,26 @@ export class WorldStore {
   async addFindings(
     worldId: string,
     source: ChapterSource,
-    findings: Pick<InboxItem, 'kind' | 'text' | 'quote' | 'entryId' | 'suggestion'>[],
+    findings: Pick<InboxItem, 'kind' | 'text' | 'quote' | 'entryId' | 'suggestion' | 'undo'>[],
+    /** Replace what's still waiting from this chapter (reading it again); off to only add. */
+    replace = true,
   ): Promise<InboxItem[]> {
     await this.host.getWorld(worldId)
-    const time = this.host.timestamp()
-    const items: InboxItem[] = findings.map((f) => ({
+    const time = new Date(this.host.timestamp()).getTime()
+    // A millisecond apart, so they list in the order found.
+    const items: InboxItem[] = findings.map((f, i) => ({
       ...f,
       id: newId('inbox'),
       source,
-      capturedAt: time,
+      capturedAt: new Date(time + i).toISOString(),
     }))
     await this.host.lock.run(`world:${worldId}`, async () => {
       await this.moveOldInbox(worldId)
       for (const old of (await this.readInbox(worldId)).items) {
-        if (old.kind !== 'captured' && old.source.chapterId === source.chapterId) {
+        // Changes it made stay listed (they're in the world): only what's waiting is replaced.
+        const waiting =
+          old.kind === 'suggestion' || old.kind === 'continuity' || old.kind === 'question'
+        if (replace && waiting && old.source.chapterId === source.chapterId) {
           await this.host.removeFile(worldId, unitPaths.inboxItem(old.id))
         }
       }
@@ -1007,26 +1014,31 @@ export class WorldStore {
    * chapter on), with the line it came from kept as a quote. The item goes
    * only after the change is saved.
    */
-  async inboxAccept(
+  /**
+   * Makes one change the AI found (from the chapter it came from on), keeping
+   * the line as a quote. Returns what was made, and exactly how to undo it.
+   */
+  async applySuggestion(
     worldId: string,
-    itemId: string,
-  ): Promise<{ item: InboxItem; entryId: string | null; relationshipId: string | null }> {
-    const item = (await this.readInbox(worldId)).items.find((i) => i.id === itemId)
-    if (!item) throw new AppError('not-found', 'That inbox item is gone.')
-    const s = item.suggestion
-    if (item.kind !== 'suggestion' || !s) {
-      throw new AppError('invalid-input', 'That item has nothing to accept.')
+    s: Suggestion,
+    source: ChapterSource,
+    quote: string | null,
+  ): Promise<{
+    entryId: string | null
+    relationshipId: string | null
+    undo: NonNullable<InboxItem['undo']>
+  }> {
+    const from = { kind: 'chapter' as const, chapterId: source.chapterId }
+    const undo: NonNullable<InboxItem['undo']> = {}
+    const keepQuote = async (entryId: string, field: string | null) => {
+      if (!quote) return
+      const saved = await this.capture(worldId, entryId, field, quote, source)
+      const q = saved.quotes.at(-1)
+      if (q) undo.quote = { entryId, quoteId: q.id }
     }
-    const from = { kind: 'chapter' as const, chapterId: item.source.chapterId }
-    const quote = (entryId: string, field: string | null) =>
-      item.quote
-        ? this.capture(worldId, entryId, field, item.quote, item.source).then(() => {})
-        : Promise.resolve()
-    let entryId: string | null = null
-    let relationshipId: string | null = null
     if (s.type === 'new') {
       const created = await this.createEntry(worldId, { name: s.name, template: s.template })
-      entryId = created.id
+      undo.created = created.id
       if (s.about.trim()) {
         await this.saveEntry(worldId, created.id, {
           body: {
@@ -1035,35 +1047,84 @@ export class WorldStore {
           },
         })
       }
-      await quote(created.id, null)
-    } else if (s.type === 'fact') {
-      const entry = await this.readEntry(worldId, s.entryId)
-      const values = entry.facts[s.field] ?? []
-      const value = {
-        id: newId('fact'),
-        ...(s.link ? { link: s.link } : { text: s.text ?? '' }),
-        from,
-      }
-      await this.saveEntry(worldId, s.entryId, {
-        facts: { ...entry.facts, [s.field]: [...values, value] },
+      await keepQuote(created.id, null)
+      return { entryId: created.id, relationshipId: null, undo }
+    }
+    if (s.type === 'fact') {
+      const factId = newId('fact')
+      await this.host.lock.run(`world:${worldId}`, async () => {
+        const entry = await this.readEntry(worldId, s.entryId)
+        const value = { id: factId, ...(s.link ? { link: s.link } : { text: s.text ?? '' }), from }
+        await this.writeEntry(worldId, s.entryId, {
+          facts: { ...entry.facts, [s.field]: [...(entry.facts[s.field] ?? []), value] },
+        })
       })
-      entryId = s.entryId
-      await quote(s.entryId, s.field)
-    } else {
-      const rel = await this.saveRelationship(worldId, {
-        from: s.from,
-        to: s.to,
-        type: s.relType,
-        label: s.label,
-        kin: null,
-        over: false,
-        start: from,
-        end: null,
-      })
-      relationshipId = rel.id
+      this.host.changed({ kind: 'entry', worldId, entryId: s.entryId })
+      undo.fact = { entryId: s.entryId, field: s.field, factId }
+      await keepQuote(s.entryId, s.field)
+      return { entryId: s.entryId, relationshipId: null, undo }
+    }
+    const rel = await this.saveRelationship(worldId, {
+      from: s.from,
+      to: s.to,
+      type: s.relType,
+      label: s.label,
+      kin: null,
+      over: false,
+      start: from,
+      end: null,
+    })
+    undo.relationshipId = rel.id
+    return { entryId: s.from, relationshipId: rel.id, undo }
+  }
+
+  /** Accepts a suggestion: the change is made; the item goes only after it's saved. */
+  async inboxAccept(
+    worldId: string,
+    itemId: string,
+  ): Promise<{ item: InboxItem; entryId: string | null; relationshipId: string | null }> {
+    const item = (await this.readInbox(worldId)).items.find((i) => i.id === itemId)
+    if (!item) throw new AppError('not-found', 'That inbox item is gone.')
+    if (item.kind !== 'suggestion' || !item.suggestion) {
+      throw new AppError('invalid-input', 'That item has nothing to accept.')
+    }
+    const done = await this.applySuggestion(worldId, item.suggestion, item.source, item.quote)
+    await this.removeInboxItem(worldId, itemId)
+    return { item, entryId: done.entryId, relationshipId: done.relationshipId }
+  }
+
+  /**
+   * Takes back a change the AI made itself: exactly what it added (an entry
+   * it made goes to the trash; anything since changed by the writer stays).
+   */
+  async undoApplied(worldId: string, itemId: string): Promise<InboxItem> {
+    const item = (await this.readInbox(worldId)).items.find((i) => i.id === itemId)
+    if (!item) throw new AppError('not-found', 'That inbox item is gone.')
+    const u = item.undo ?? {}
+    const gone = (err: unknown) => {
+      if (!(err instanceof AppError) || err.code !== 'not-found') throw err
+    }
+    if (u.relationshipId) await this.deleteRelationship(worldId, u.relationshipId).catch(gone)
+    if (u.fact || u.quote) {
+      const entryId = (u.fact ?? u.quote)!.entryId
+      await this.host.lock
+        .run(`world:${worldId}`, async () => {
+          const entry = await this.readEntry(worldId, entryId)
+          const facts = { ...entry.facts }
+          if (u.fact && facts[u.fact.field]) {
+            facts[u.fact.field] = facts[u.fact.field]!.filter((v) => v.id !== u.fact!.factId)
+          }
+          const quotes = entry.quotes.filter((q) => q.id !== u.quote?.quoteId)
+          await this.writeEntry(worldId, entryId, { facts, quotes })
+        })
+        .catch(gone)
+      this.host.changed({ kind: 'entry', worldId, entryId })
+    }
+    if (u.created) {
+      await this.host.moveToTrash({ kind: 'entry', worldId, entryId: u.created }).catch(gone)
     }
     await this.removeInboxItem(worldId, itemId)
-    return { item, entryId, relationshipId }
+    return item
   }
 
   /** The writer answers a question the AI asked: kept, and told to the AI from now on. */

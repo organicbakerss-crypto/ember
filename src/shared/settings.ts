@@ -73,6 +73,11 @@ export interface AiSettings {
   model: string
   /** The ChatGPT model ("" = the first it offers). */
   chatgptModel: string
+  /**
+   * Reading a chapter for the world: make the changes itself (each listed in
+   * the inbox, with Undo), or only suggest them.
+   */
+  worldChanges: 'apply' | 'suggest'
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -81,6 +86,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   host: 'http://127.0.0.1:11434',
   model: '',
   chatgptModel: '',
+  worldChanges: 'apply',
 }
 
 /** How exports look (Word, PDF, EPUB, Markdown, Royal Road). */

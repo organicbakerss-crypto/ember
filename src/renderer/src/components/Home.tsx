@@ -15,7 +15,7 @@ import { WorldView } from '../world/WorldView'
 import { WritingView, type ChapterTarget } from './WritingView'
 import { isBook } from './worldLink'
 import { AiView } from '../ai/AiView'
-import { worldUpdateNote } from '../ai/worldUpdate'
+import { sortNamesNote, worldUpdateNote } from '../ai/worldUpdate'
 import { useOverlays } from './overlays'
 
 interface WriteSide {
@@ -307,6 +307,15 @@ export function Home(props: { detached?: PaneRoute | null }) {
   // AI work runs in the background: say when it's done, wherever the writer is.
   useIpcEvent('ai:jobDone', (job) => {
     const worldId = seriesOf(job.seriesId)?.worldId
+    if (job.kind === 'names') {
+      if (job.state === 'done' && job.result) {
+        toast(
+          sortNamesNote(job.result),
+          worldId ? { label: 'Open the inbox', run: () => openInbox(worldId) } : undefined,
+        )
+      } else if (job.state === 'failed') toast(`Sorting names didn’t work: ${job.error}`)
+      return
+    }
     if (job.kind === 'world') {
       if (job.state === 'done' && job.result) {
         toast(

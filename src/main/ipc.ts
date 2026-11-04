@@ -163,6 +163,21 @@ export function registerIpc(
         },
         (_onToken, onProgress) => ai.updateWorld(input, onProgress),
       ),
+    'ai:sortNames': (input, event) =>
+      jobs.run(
+        {
+          id: input.requestId,
+          kind: 'names',
+          seriesId: input.seriesId,
+          conversation: null,
+          volumeId: null,
+          chapterId: null,
+          chapterTitle: '',
+          sent: null,
+          origin: event.sender.id,
+        },
+        (_onToken, onProgress) => ai.sortNames(input, onProgress),
+      ),
     'ai:jobs': (input) => jobs.list(input.seriesId),
     'ai:jobSeen': (input) => {
       jobs.seen(input.id)
@@ -343,6 +358,7 @@ export function registerIpc(
       host.current.world.inboxFile(input.worldId, input.itemId, input.entryId, input.field),
     'inbox:dismiss': (input) => host.current.world.inboxDismiss(input.worldId, input.itemId),
     'inbox:accept': (input) => host.current.world.inboxAccept(input.worldId, input.itemId),
+    'inbox:undo': (input) => host.current.world.undoApplied(input.worldId, input.itemId),
     'inbox:answer': async (input) => {
       await host.current.world.answerQuestion(input.worldId, input.itemId, input.answer)
       return null

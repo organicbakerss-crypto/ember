@@ -23,7 +23,12 @@ import {
   combineMessages,
   entryNote,
   findingsMessages,
+  NEW_KINDS,
+  norm,
   parseFindings,
+  parseSortedNames,
+  sortNamesMessages,
+  type Finding,
   type RawFindings,
 } from './worldUpdate'
 import { ChatGpt, type SecretBox } from './chatgpt'
@@ -83,6 +88,8 @@ const MAX_OTHER_NAMES = 400
 
 export interface WorldUpdateResult {
   summary: string
+  /** Changes the AI made itself (each in the inbox with Undo). */
+  applied: number
   suggestions: number
   continuity: number
   questions: number
@@ -524,13 +531,39 @@ export class AiService {
         ).trim()
       }
       onProgress('Checking what it found against the world…')
-      const findings = checkFindings(raws, text, {
-        entries: view.entries,
-        templates: view.templates,
-        relationshipTypes: view.relationshipTypes,
-        relationships: view.relationships,
+      const source = {
+        seriesId: input.seriesId,
+        volumeId: input.volumeId,
+        chapterId: input.chapterId,
+        chapterTitle: chapter.title,
+      }
+      const facts = (v: typeof view) => ({
+        entries: v.entries,
+        templates: v.templates,
+        relationshipTypes: v.relationshipTypes,
+        relationships: v.relationships,
         answered: answers.map((a) => a.question),
       })
+      let findings = checkFindings(raws, text, facts(view))
+      let applied = 0
+      if ((await this.options.settings()).worldChanges !== 'suggest') {
+        // The AI makes the changes itself; each is listed in the inbox with Undo.
+        onProgress('Updating the world…')
+        const made: Finding[] = []
+        const apply = async (f: Finding) => {
+          const done = await library.world.applySuggestion(worldId, f.suggestion!, source, f.quote)
+          made.push({ ...f, kind: 'applied', entryId: done.entryId, undo: done.undo })
+        }
+        // New things first, so facts and relationships can name them too.
+        for (const f of findings) if (f.suggestion?.type === 'new') await apply(f)
+        if (made.length)
+          findings = checkFindings(raws, text, facts(await library.world.view(worldId)))
+        for (const f of findings) {
+          if (f.kind === 'suggestion' && f.suggestion?.type !== 'new') await apply(f)
+        }
+        applied = made.length
+        findings = [...made, ...findings.filter((f) => f.kind !== 'suggestion')]
+      }
       if (summary) {
         await library.saveSummary(
           input.seriesId,
@@ -540,22 +573,106 @@ export class AiService {
           chapterTextHash(paragraphs),
         )
       }
-      await library.world.addFindings(
-        worldId,
-        {
-          seriesId: input.seriesId,
-          volumeId: input.volumeId,
-          chapterId: input.chapterId,
-          chapterTitle: chapter.title,
-        },
-        findings,
-      )
+      await library.world.addFindings(worldId, source, findings)
       return {
         summary,
+        applied,
         suggestions: findings.filter((f) => f.kind === 'suggestion').length,
         continuity: findings.filter((f) => f.kind === 'continuity').length,
         questions: findings.filter((f) => f.kind === 'question').length,
       }
+    })
+  }
+
+  /**
+   * Sorts names the name catcher found: each becomes an entry of the right
+   * kind (or a suggestion, if the AI only suggests), and what isn't a name
+   * for the world is turned down. Everything it did is listed in the inbox.
+   */
+  async sortNames(
+    input: {
+      requestId: string
+      worldId: string
+      names: { name: string; quote: string; chapterId: string }[]
+    },
+    onProgress: (text: string) => void,
+  ): Promise<{ applied: number; suggestions: number; skipped: number }> {
+    const provider = await this.client()
+    const library = this.options.host.current
+    const apply = (await this.options.settings()).worldChanges !== 'suggest'
+    const story = await library.worldStory(input.worldId)
+    const chapters = new Map(story.map((s) => [s.chapter.id, s.chapter]))
+    return this.track(input.requestId, async (signal) => {
+      const sorted = new Map<string, { kind: string; about: string }>()
+      const batches: (typeof input.names)[] = []
+      for (let i = 0; i < input.names.length; i += 40) batches.push(input.names.slice(i, i + 40))
+      for (const [i, batch] of batches.entries()) {
+        onProgress(
+          batches.length > 1 ? `Sorting names (${i + 1} of ${batches.length})…` : 'Sorting names…',
+        )
+        const reply = await provider.chat({
+          messages: sortNamesMessages(batch),
+          json: true,
+          temperature: 0.1,
+          signal,
+        })
+        for (const [k, v] of parseSortedNames(reply)) sorted.set(k, v)
+      }
+      const view = await library.world.view(input.worldId)
+      const known = new Set(
+        view.entries.flatMap((e) => [e.name, ...e.aliases]).map((n) => n.toLowerCase()),
+      )
+      const notNames: string[] = []
+      let applied = 0
+      let suggestions = 0
+      for (const n of input.names) {
+        const got = sorted.get(norm(n.name))
+        if (!got) continue // Not sorted: stays in the list.
+        if (got.kind === 'none') {
+          notNames.push(n.name)
+          continue
+        }
+        const kind = NEW_KINDS[got.kind]!
+        if (known.has(n.name.toLowerCase())) continue
+        if (!view.templates.some((t) => t.id === kind.template)) continue
+        const chapter = chapters.get(n.chapterId)
+        if (!chapter) continue
+        const source = {
+          seriesId: chapter.seriesId,
+          volumeId: chapter.volumeId,
+          chapterId: chapter.id,
+          chapterTitle: chapter.title,
+        }
+        const suggestion = {
+          type: 'new' as const,
+          name: n.name,
+          template: kind.template,
+          about: got.about.slice(0, 300),
+        }
+        const text = `New ${kind.label}: ${n.name}${suggestion.about ? ` — ${suggestion.about}` : ''}`
+        const quote = n.quote || null
+        if (apply) {
+          const done = await library.world.applySuggestion(input.worldId, suggestion, source, quote)
+          await library.world.addFindings(
+            input.worldId,
+            source,
+            [{ kind: 'applied', text, quote, entryId: done.entryId, suggestion, undo: done.undo }],
+            false,
+          )
+          applied++
+        } else {
+          await library.world.addFindings(
+            input.worldId,
+            source,
+            [{ kind: 'suggestion', text, quote, entryId: null, suggestion }],
+            false,
+          )
+          suggestions++
+        }
+        known.add(n.name.toLowerCase())
+      }
+      if (notNames.length) await library.world.rejectNames(input.worldId, notNames, true)
+      return { applied, suggestions, skipped: notNames.length }
     })
   }
 }

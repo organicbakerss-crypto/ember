@@ -246,7 +246,7 @@ export interface WorldInbox {
 export interface AiJobInfo {
   /** The request id. */
   id: string
-  kind: 'ask' | 'edit' | 'world'
+  kind: 'ask' | 'edit' | 'world' | 'names'
   seriesId: string
   /** The conversation it belongs to (ask and edit), as it was when asked. */
   conversation: ConversationFile | null
@@ -260,8 +260,16 @@ export interface AiJobInfo {
   text: string
   progress: string
   error: string | null
-  /** Update the world: what it found. */
-  result: { summary: string; suggestions: number; continuity: number; questions: number } | null
+  /** Update the world (and sorting names): what it did. */
+  result: {
+    summary?: string
+    applied: number
+    suggestions: number
+    continuity?: number
+    questions?: number
+    /** Sorting names: names it found weren't names for the world. */
+    skipped?: number
+  } | null
   startedAt: string
   endedAt: string | null
   /** The window that asked (its web contents id). */
@@ -753,6 +761,24 @@ export const ipcInputs = {
   'ai:summaries': z.object({ seriesId: id('series') }),
   /** Accepts an AI suggestion from the inbox: the change is made in the world. */
   'inbox:accept': z.object({ worldId: id('world'), itemId: id('inbox') }),
+  /** Takes back a change the AI made itself. */
+  'inbox:undo': z.object({ worldId: id('world'), itemId: id('inbox') }),
+  /** The AI sorts new names: what each is (an entry made), or not a name (turned down). */
+  'ai:sortNames': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    worldId: id('world'),
+    names: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(200),
+          quote: z.string().max(2000),
+          chapterId: id('chapter'),
+        }),
+      )
+      .min(1)
+      .max(300),
+  }),
   /** Answers a question the AI asked. */
   'inbox:answer': z.object({
     worldId: id('world'),
@@ -935,10 +961,18 @@ export interface IpcResults {
   'ai:cancel': null
   'ai:jobs': AiJobInfo[]
   'ai:jobSeen': null
-  'ai:updateWorld': { summary: string; suggestions: number; continuity: number; questions: number }
+  'ai:updateWorld': {
+    summary: string
+    applied: number
+    suggestions: number
+    continuity: number
+    questions: number
+  }
   'ai:summaries': ChapterSummaryInfo[]
   'inbox:accept': { item: InboxItem; entryId: string | null; relationshipId: string | null }
   'inbox:answer': null
+  'inbox:undo': InboxItem
+  'ai:sortNames': { applied: number; suggestions: number; skipped: number }
   'inbox:restore': null
   'ai:scope': {
     volumeId: string
