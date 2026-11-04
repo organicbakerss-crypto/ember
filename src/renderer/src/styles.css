@@ -1457,6 +1457,23 @@ kbd {
 .page-area {
   position: relative;
 }
+.cast-dialog {
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: 80vh;
+  overflow: auto;
+}
+.cast-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.cast-table th {
+  text-align: left;
+  font-weight: 500;
+  padding: 0.3rem 0.6rem 0.3rem 0;
+}
+.cast-table select {
+  width: 100%;
+}
 /* Reading aloud: the paragraph being read, and the player. */
 .reading-now {
   background: color-mix(in srgb, var(--accent) 14%, transparent);

@@ -10,6 +10,7 @@ import { IPC_EVENT_PREFIX } from '@shared/ipc'
 import { captureMenuItems } from './capture'
 import { attachScreenshotKey } from './screenshot'
 import { broadcast, registerIpc } from './ipc'
+import { VoiceService } from './voice/service'
 import { LibraryHost } from './libraryHost'
 import { handleMediaRequests, registerMediaScheme } from './media'
 import { setAppMenu } from './menu'
@@ -166,7 +167,12 @@ void app.whenReady().then(async () => {
     },
   })
   app.on('before-quit', () => ai.dispose())
-  ipc = registerIpc(host, appSettings, { manager, leases }, syncService, ai)
+  // VoiceStudio is on this computer or the home network: Node's own fetch (it handles forms).
+  const voice = new VoiceService({
+    settings: async () => (await appSettings.read()).voice,
+    host,
+  })
+  ipc = registerIpc(host, appSettings, { manager, leases }, syncService, ai, voice)
   handleMediaRequests(host)
   await manager.start()
 

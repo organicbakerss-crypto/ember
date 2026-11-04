@@ -5,6 +5,9 @@ import { STORY_PROMPTS } from '../ai/storyPrompts'
 import { updateWorld } from '../ai/worldUpdate'
 import { Recap } from '../ai/Recap'
 import { ReadAloud } from '../voice/ReadAloud'
+import { StudioReader } from '../voice/StudioReader'
+import { Dictation } from '../voice/Dictation'
+import { CastDialog } from '../voice/CastDialog'
 import type {
   WorldSummary,
   CaptureContext,
@@ -132,13 +135,42 @@ export function WritingView(props: {
   }
   // Voice: reading aloud (the blocks being read), and the audiobook script for VoiceStudio.
   const voiceOn = settings.voice.enabled
-  const [reading, setReading] = useState<{ pos: number; text: string | null }[] | null>(null)
+  const [reading, setReading] = useState<{
+    studio: boolean
+    blocks: { pos: number; text: string | null }[]
+  } | null>(null)
+  const [dictating, setDictating] = useState(false)
+  const [castOpen, setCastOpen] = useState(false)
+  const stopDictating = useCallback(() => setDictating(false), [])
   const markReading = useCallback((pos: number | null) => editor.current?.markReading(pos), [])
   const stopReading = useCallback(() => setReading(null), [])
-  const readAloud = () => {
+  const readAloud = async () => {
     const blocks = editor.current?.readingBlocks() ?? []
-    if (blocks.some((b) => b.text?.trim())) setReading(blocks)
-    else actions.toast('There’s nothing here to read.')
+    if (!blocks.some((b) => b.text?.trim())) {
+      actions.toast('There’s nothing here to read.')
+      return
+    }
+    // VoiceStudio's voices when it's running; else this computer's.
+    const studio = settings.voice.useStudio
+      ? await api.invoke('voice:status').then(
+          (s) => s.studio,
+          () => false,
+        )
+      : false
+    if (studio) await flushAll()
+    setReading({ studio, blocks })
+  }
+  const dictate = async () => {
+    const studio = await api.invoke('voice:status').then(
+      (s) => s.studio,
+      () => false,
+    )
+    if (studio) setDictating(true)
+    else {
+      actions.toast(
+        'Dictation needs VoiceStudio running (Settings → Voice). On a Mac you can also use the Mac’s own dictation: press Fn twice.',
+      )
+    }
   }
   const audiobookScript = (chapterId: string | null) => {
     actions.toast(
@@ -175,6 +207,13 @@ export function WritingView(props: {
   )
   const [importing, setImporting] = useState(false)
   const actions = useLibraryActions()
+  const toast = actions.toast
+  const dictated = useCallback(
+    (text: string) => {
+      if (!editor.current?.insertText(text)) toast(`Dictated (copy it in): ${text}`)
+    },
+    [toast],
+  )
 
   // A story of one chapter (a short story) opens with the binder out of the way.
   const [sized, setSized] = useState(false)
@@ -522,8 +561,12 @@ export function WritingView(props: {
   const voiceCommands = voiceOn
     ? [
         ...(selectedId
-          ? [{ id: 'voice-read', title: 'Read aloud from here', run: readAloud }]
+          ? [
+              { id: 'voice-read', title: 'Read aloud from here', run: () => void readAloud() },
+              { id: 'voice-dictate', title: 'Dictate (VoiceStudio)', run: () => void dictate() },
+            ]
           : []),
+        { id: 'voice-cast', title: 'Voices for this story…', run: () => setCastOpen(true) },
         ...(aiOn
           ? [
               ...(selectedId
@@ -976,13 +1019,38 @@ export function WritingView(props: {
       <main className="page-area">
         {settingsOpen && <SettingsWindow onClose={() => setSettingsOpen(false)} />}
         {aiOn && !focusMode && <Recap seriesId={series.id} chapterId={selectedId} />}
-        {reading && (
-          <ReadAloud
-            key={selectedId ?? ''}
-            blocks={reading}
-            settings={settings.voice}
-            mark={markReading}
-            onClose={stopReading}
+        {reading &&
+          (reading.studio && selectedId ? (
+            <StudioReader
+              key={selectedId}
+              seriesId={series.id}
+              volumeId={volume.id}
+              chapterId={selectedId}
+              blocks={reading.blocks}
+              mark={markReading}
+              onClose={stopReading}
+            />
+          ) : (
+            <ReadAloud
+              key={selectedId ?? ''}
+              blocks={reading.blocks}
+              settings={settings.voice}
+              mark={markReading}
+              onClose={stopReading}
+            />
+          ))}
+        {dictating && <Dictation seriesId={series.id} onText={dictated} onClose={stopDictating} />}
+        {castOpen && (
+          <CastDialog
+            seriesId={series.id}
+            characters={[
+              ...new Set(
+                (world?.view.entries ?? [])
+                  .filter((e) => e.template === 'person')
+                  .map((e) => e.name),
+              ),
+            ].sort()}
+            onClose={() => setCastOpen(false)}
           />
         )}
         {/* The editor stays loaded behind Settings, keeping undo history and scroll position. */}

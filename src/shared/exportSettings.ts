@@ -26,4 +26,8 @@ export const voiceSettingsSchema = z.object({
   enabled: z.boolean(),
   systemVoice: z.string().max(200).catch('').default(''),
   rate: z.number().min(0.5).max(2).catch(1).default(1),
+  useStudio: z.boolean().catch(true).default(true),
+  studioUrl: z.string().trim().max(300).catch('').default(''),
+  studioKey: z.string().trim().max(300).catch('').default(''),
+  quality: z.enum(['fast', 'balanced', 'best']).catch('balanced').default('balanced'),
 })

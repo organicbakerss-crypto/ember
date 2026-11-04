@@ -16,7 +16,10 @@ import type { AiStatus } from '@shared/ipc'
 import { AppError } from '../errors'
 import type { LibraryHost } from '../libraryHost'
 import { chapterTextHash } from '../library/library'
-import type { Speaker } from '@shared/schema'
+import type { ChapterSpeakersFile, Speaker } from '@shared/schema'
+import type { EntrySummary } from '@shared/ipc'
+import type { Segment } from '@shared/voice/script'
+import type { StorySummary } from '../library/library'
 import { audiobookScript, docBlocks, segments } from '@shared/voice/script'
 import { numberedParts, parseSpeakers, resolveSpeaker, speakersMessages } from './speakers'
 import { Ollama, type ChatMessage } from './ollama'
@@ -703,7 +706,7 @@ export class AiService {
         (!input.volumeId || s.chapter.volumeId === input.volumeId),
     )
     if (!all.length) throw new AppError('invalid-input', 'There are no chapters to read.')
-    let provider: Provider | null = null
+    let provider: Promise<Provider> | null = null
     return this.track(input.requestId, async (signal) => {
       const chapters: Parameters<typeof audiobookScript>[0] = []
       let lineCount = 0
@@ -719,77 +722,12 @@ export class AiService {
           : chapter.pov
             ? { entryId: null, name: chapter.pov }
             : null
-        let marked = await library.readSpeakers(seriesId, volumeId, chapterId)
-        if (!marked || marked.textHash !== s.textHash) {
-          onProgress(`Marking who speaks (chapter ${i + 1} of ${all.length})…`)
-          provider ??= await this.client()
-          const parts = numberedParts(segs, READ_WORDS[provider.kind])
-          let narratorName = ''
-          const byNumber = new Map<number, string>()
-          let offset = 0
-          for (const part of parts) {
-            if (part.count || !narratorName) {
-              const reply = await provider.chat({
-                messages: speakersMessages({
-                  chapterTitle: chapter.title,
-                  text: part.text,
-                  cast: entries.map((e) => e.name).slice(0, 200),
-                  pov: povSpeaker?.name ?? null,
-                }),
-                json: true,
-                temperature: 0.1,
-                signal,
-              })
-              const got = parseSpeakers(reply)
-              narratorName ||= got.narrator
-              // Numbers run through the whole chapter; a part may number from 1 again.
-              for (const [n, name] of got.speakers) {
-                byNumber.set(n > offset ? n : n + offset, name)
-              }
-            }
-            offset += part.count
-          }
-          const aiNarrator = narratorName ? resolveSpeaker(narratorName, entries, null) : null
-          const narrator = povSpeaker && aiNarrator ? povSpeaker : aiNarrator
-          const lines: Record<string, Speaker> = {}
-          let n = 0
-          for (const seg of segs) {
-            if (seg.kind !== 'quote') continue
-            n++
-            const who = resolveSpeaker(byNumber.get(n) ?? '', entries, narrator)
-            if (who && seg.key) lines[seg.key] = who
-          }
-          marked = {
-            formatVersion: 1,
-            chapterId,
-            textHash: s.textHash,
-            narrator,
-            lines,
-            createdAt: new Date().toISOString(),
-          }
-          await library.saveSpeakers(seriesId, volumeId, marked)
-          // Told by someone other than the POV says: say so (nothing is changed).
-          if (
-            series.worldId &&
-            povSpeaker?.entryId &&
-            aiNarrator?.entryId &&
-            aiNarrator.entryId !== povSpeaker.entryId
-          ) {
-            await library.world.addFindings(
-              series.worldId,
-              { seriesId, volumeId, chapterId, chapterTitle: chapter.title },
-              [
-                {
-                  kind: 'continuity',
-                  text: `“${chapter.title || 'Untitled'}” reads as told by ${aiNarrator.name}, but its POV is ${povSpeaker.name}. The audio uses ${povSpeaker.name}; change the POV if that’s wrong.`,
-                  quote: null,
-                  entryId: aiNarrator.entryId,
-                },
-              ],
-              false,
-            )
-          }
-        }
+        const marked = await this.markSpeakers(
+          { series, entries, chapter, summary: s, segs, povSpeaker },
+          () => (provider ??= this.client()),
+          signal,
+          () => onProgress(`Marking who speaks (chapter ${i + 1} of ${all.length})…`),
+        )
         const narratorTag = marked.narrator?.name || 'Narrator'
         const lines = segs.map((seg) => ({
           kind: seg.kind,
@@ -813,5 +751,149 @@ export class AiService {
         lines: lineCount,
       }
     })
+  }
+
+  /**
+   * Who says each line of a chapter, by line key, and who tells it (for
+   * reading aloud). Without the AI, the saved marking if it's current, else
+   * only the POV as narrator.
+   */
+  async chapterSpeakers(
+    input: { requestId: string; seriesId: string; volumeId: string; chapterId: string },
+    onProgress: (text: string) => void,
+  ): Promise<{ narrator: string | null; lines: Record<string, string> }> {
+    const library = this.options.host.current
+    const series = await library.getSeries(input.seriesId)
+    const entries = series.worldId ? (await library.world.view(series.worldId)).entries : []
+    const summary = (await library.storySummaries(input.seriesId)).find(
+      (x) => x.chapter.id === input.chapterId,
+    )
+    if (!summary) throw new AppError('not-found', 'That chapter is gone.')
+    const chapter = await library.readChapter(input.seriesId, input.volumeId, input.chapterId)
+    const pov = chapter.povEntryId ? entries.find((e) => e.id === chapter.povEntryId) : null
+    const povSpeaker = pov
+      ? { entryId: pov.id, name: pov.name }
+      : chapter.pov
+        ? { entryId: null, name: chapter.pov }
+        : null
+    const aiOn = (await this.options.settings()).enabled
+    const saved = await library.readSpeakers(input.seriesId, input.volumeId, input.chapterId)
+    const marked =
+      saved?.textHash === summary.textHash || !aiOn
+        ? saved
+        : await this.track(input.requestId, (signal) =>
+            this.markSpeakers(
+              {
+                series,
+                entries,
+                chapter,
+                summary,
+                segs: segments(docBlocks(chapter.content)),
+                povSpeaker,
+              },
+              () => this.client(),
+              signal,
+              () => onProgress('Marking who speaks…'),
+            ),
+          )
+    const lines: Record<string, string> = {}
+    for (const [k, v] of Object.entries(marked?.lines ?? {})) if (v.name) lines[k] = v.name
+    return { narrator: marked?.narrator?.name ?? null, lines }
+  }
+
+  /**
+   * Who says each line in a chapter, and who tells it: the saved marking, or
+   * the AI asked again when the chapter changed since. A chapter that reads as
+   * told by someone other than its POV is flagged in the inbox.
+   */
+  private async markSpeakers(
+    ctx: {
+      series: { id: string; worldId: string | null }
+      entries: EntrySummary[]
+      chapter: { id: string; title: string }
+      summary: StorySummary
+      segs: Segment[]
+      povSpeaker: Speaker | null
+    },
+    getProvider: () => Promise<Provider>,
+    signal: AbortSignal,
+    onMarking: () => void,
+  ): Promise<ChapterSpeakersFile> {
+    const library = this.options.host.current
+    const { series, entries, chapter, segs, povSpeaker } = ctx
+    const s = ctx.summary
+    const { seriesId, volumeId, id: chapterId } = s.chapter
+    let marked = await library.readSpeakers(seriesId, volumeId, chapterId)
+    if (!marked || marked.textHash !== s.textHash) {
+      onMarking()
+      const provider = await getProvider()
+      const parts = numberedParts(segs, READ_WORDS[provider.kind])
+      let narratorName = ''
+      const byNumber = new Map<number, string>()
+      let offset = 0
+      for (const part of parts) {
+        if (part.count || !narratorName) {
+          const reply = await provider.chat({
+            messages: speakersMessages({
+              chapterTitle: chapter.title,
+              text: part.text,
+              cast: entries.map((e) => e.name).slice(0, 200),
+              pov: povSpeaker?.name ?? null,
+            }),
+            json: true,
+            temperature: 0.1,
+            signal,
+          })
+          const got = parseSpeakers(reply)
+          narratorName ||= got.narrator
+          // Numbers run through the whole chapter; a part may number from 1 again.
+          for (const [n, name] of got.speakers) {
+            byNumber.set(n > offset ? n : n + offset, name)
+          }
+        }
+        offset += part.count
+      }
+      const aiNarrator = narratorName ? resolveSpeaker(narratorName, entries, null) : null
+      const narrator = povSpeaker && aiNarrator ? povSpeaker : aiNarrator
+      const lines: Record<string, Speaker> = {}
+      let n = 0
+      for (const seg of segs) {
+        if (seg.kind !== 'quote') continue
+        n++
+        const who = resolveSpeaker(byNumber.get(n) ?? '', entries, narrator)
+        if (who && seg.key) lines[seg.key] = who
+      }
+      marked = {
+        formatVersion: 1,
+        chapterId,
+        textHash: s.textHash,
+        narrator,
+        lines,
+        createdAt: new Date().toISOString(),
+      }
+      await library.saveSpeakers(seriesId, volumeId, marked)
+      // Told by someone other than the POV says: say so (nothing is changed).
+      if (
+        series.worldId &&
+        povSpeaker?.entryId &&
+        aiNarrator?.entryId &&
+        aiNarrator.entryId !== povSpeaker.entryId
+      ) {
+        await library.world.addFindings(
+          series.worldId,
+          { seriesId, volumeId, chapterId, chapterTitle: chapter.title },
+          [
+            {
+              kind: 'continuity',
+              text: `“${chapter.title || 'Untitled'}” reads as told by ${aiNarrator.name}, but its POV is ${povSpeaker.name}. The audio uses ${povSpeaker.name}; change the POV if that’s wrong.`,
+              quote: null,
+              entryId: aiNarrator.entryId,
+            },
+          ],
+          false,
+        )
+      }
+    }
+    return marked
   }
 }

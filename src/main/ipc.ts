@@ -37,6 +37,7 @@ import type { SyncService } from './sync/service'
 import type { AiService } from './ai/service'
 import { AiJobs } from './ai/jobs'
 import { AutoWorld } from './ai/autoWorld'
+import type { VoiceService } from './voice/service'
 
 type Handlers = {
   [C in IpcChannel]: (
@@ -51,6 +52,7 @@ export function registerIpc(
   windows: { manager: WindowManager; leases: DocLeases },
   sync: SyncService,
   ai: AiService,
+  voice: VoiceService,
 ): { libraryChanged: (change: LibraryChange) => void } {
   const { manager, leases } = windows
   // Asking the other windows what they show (for a torn-off AI window).
@@ -247,6 +249,37 @@ export function registerIpc(
           }
         },
       ) as Promise<{ saved: string | null; chapters: number; lines: number }>,
+    'voice:status': () => voice.status(),
+    'voice:speak': (input) => voice.speak(input),
+    'voice:transcribe': async (input) => {
+      let names: string[] = []
+      if (input.seriesId) {
+        const series = await host.current.getSeries(input.seriesId).catch(() => null)
+        if (series?.worldId) {
+          const view = await host.current.world.view(series.worldId).catch(() => null)
+          names = view ? view.entries.flatMap((e) => [e.name, ...e.aliases]) : []
+        }
+      }
+      return voice.transcribe(input.audio, input.mime, names)
+    },
+    'voice:chapterSpeakers': (input, event) =>
+      ai.chapterSpeakers(input, (text) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, { requestId: input.requestId, text })
+        }
+      }),
+    'voice:setCast': async (input) => {
+      await host.current.setSeriesVoices(input.seriesId, input.voices)
+      return null
+    },
+    'voice:cast': async (input) => {
+      const v = (await host.current.getSeries(input.seriesId)).voices
+      return {
+        narrator: v?.narrator ?? '',
+        other: v?.other ?? '',
+        characters: v?.characters ?? {},
+      }
+    },
     'ai:jobs': (input) => jobs.list(input.seriesId),
     'ai:jobSeen': (input) => {
       jobs.seen(input.id)

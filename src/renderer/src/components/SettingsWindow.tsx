@@ -451,6 +451,83 @@ function SyncSettings() {
 }
 
 /** AI on this computer: on or off, who answers (Ollama or ChatGPT), which model. */
+/** VoiceStudio: whether it's found, where, and how it's used. */
+function StudioSettings() {
+  const { settings, update } = useSettings()
+  const voice = settings.voice
+  const set = (patch: Partial<typeof voice>) =>
+    update(({ voice: current }) => ({ voice: { ...current, ...patch } }))
+  const [status, setStatus] = useState<IpcResult<'voice:status'> | null>(null)
+  const [url, setUrl] = useState(voice.studioUrl)
+  const [key, setKey] = useState(voice.studioKey)
+  const check = useCallback(() => {
+    api.invoke('voice:status').then(setStatus, () => {})
+  }, [])
+  useEffect(check, [check, voice.useStudio, voice.studioUrl, voice.studioKey])
+  return (
+    <>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={voice.useStudio}
+          onChange={(e) => set({ useStudio: e.target.checked })}
+        />
+        Use VoiceStudio’s voices when it’s running (each character in their own voice, and
+        dictation)
+      </label>
+      {voice.useStudio && (
+        <>
+          <p className="small">
+            {status === null
+              ? 'Looking for VoiceStudio…'
+              : status.studio
+                ? `Found at ${status.url}, with ${status.voices.length} saved ${status.voices.length === 1 ? 'voice' : 'voices'}.`
+                : `Not found at ${status.url}. Start VoiceStudio, or set where it is below. Without it, reading aloud uses this computer’s voice.`}{' '}
+            <button className="link small" onClick={check}>
+              Check again
+            </button>
+          </p>
+          <label>
+            Where it is (leave empty for this computer)
+            <input
+              value={url}
+              placeholder="http://127.0.0.1:3900"
+              spellCheck={false}
+              onChange={(e) => setUrl(e.target.value)}
+              onBlur={() => set({ studioUrl: url.trim() })}
+            />
+          </label>
+          <label>
+            Key (only for VoiceStudio on another computer)
+            <input
+              type="password"
+              value={key}
+              autoComplete="off"
+              onChange={(e) => setKey(e.target.value)}
+              onBlur={() => set({ studioKey: key.trim() })}
+            />
+          </label>
+          <label>
+            Quality
+            <select
+              value={voice.quality}
+              onChange={(e) => set({ quality: e.target.value as typeof voice.quality })}
+            >
+              <option value="fast">Fast (rougher)</option>
+              <option value="balanced">Balanced</option>
+              <option value="best">Best (slowest)</option>
+            </select>
+          </label>
+          <p className="muted small">
+            Pick each story’s voices with “Voices for this story…” in the ⋯ menu above the page.
+            Speech it has made is kept on this computer, so reading the same text again is instant.
+          </p>
+        </>
+      )}
+    </>
+  )
+}
+
 /** Voice: reading aloud with the computer's voices, and the audiobook script for VoiceStudio. */
 function VoiceSettingsSection() {
   const { settings, update } = useSettings()
@@ -527,6 +604,8 @@ function VoiceSettingsSection() {
               </span>
             )}
           </p>
+          <h3>VoiceStudio</h3>
+          <StudioSettings />
           <h3>Audiobooks with VoiceStudio</h3>
           <p className="muted small">
             “Audiobook script for VoiceStudio” in the ⋯ menu makes a script of the chapter or the

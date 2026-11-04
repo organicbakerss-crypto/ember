@@ -70,9 +70,28 @@ export interface VoiceSettings {
   systemVoice: string
   /** Reading speed (1 = normal). */
   rate: number
+  /** Use VoiceStudio's voices when it's running (else the computer's). */
+  useStudio: boolean
+  /** Where VoiceStudio is ("" = this computer, http://127.0.0.1:3900). */
+  studioUrl: string
+  /** For another computer's VoiceStudio: its key. */
+  studioKey: string
+  /** VoiceStudio's quality: faster or better sounding. */
+  quality: 'fast' | 'balanced' | 'best'
 }
 
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { enabled: false, systemVoice: '', rate: 1 }
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
+  enabled: false,
+  systemVoice: '',
+  rate: 1,
+  useStudio: true,
+  studioUrl: '',
+  studioKey: '',
+  quality: 'balanced',
+}
+
+/** Where VoiceStudio is by default (on this computer). */
+export const DEFAULT_STUDIO_URL = 'http://127.0.0.1:3900'
 
 /** AI on this computer (never synced). Off until turned on in Settings → AI. */
 export interface AiSettings {

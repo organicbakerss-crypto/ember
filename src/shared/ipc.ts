@@ -796,6 +796,33 @@ export const ipcInputs = {
     volumeId: id('volume').nullable(),
     chapterId: id('chapter').nullable(),
   }),
+  /** Whether VoiceStudio is running (and will be used), and its voices. */
+  'voice:status': z.void(),
+  /** Speech for a passage, in a VoiceStudio voice (by name; '' its default), as WAV. */
+  'voice:speak': z.object({ text: z.string().min(1).max(5000), voice: z.string().max(200) }),
+  /** What was said in a recording (VoiceStudio), tidied with the story's names. */
+  'voice:transcribe': z.object({
+    audio: z.instanceof(Uint8Array).refine((d) => d.byteLength <= 50_000_000),
+    mime: z.string().max(100),
+    seriesId: id('series').nullable(),
+  }),
+  /** Who says each line of a chapter, and who narrates (marked by the AI if needed). */
+  'voice:chapterSpeakers': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    volumeId: id('volume'),
+    chapterId: id('chapter'),
+  }),
+  /** The voices a story is read with. */
+  'voice:setCast': z.object({
+    seriesId: id('series'),
+    voices: z.object({
+      narrator: z.string().max(200),
+      other: z.string().max(200),
+      characters: z.record(z.string().max(200), z.string().max(200)),
+    }),
+  }),
+  'voice:cast': z.object({ seriesId: id('series') }),
   /** Answers a question the AI asked. */
   'inbox:answer': z.object({
     worldId: id('world'),
@@ -989,6 +1016,12 @@ export interface IpcResults {
   'inbox:accept': { item: InboxItem; entryId: string | null; relationshipId: string | null }
   'inbox:answer': null
   'inbox:undo': InboxItem
+  'voice:status': { studio: boolean; voices: { id: string; name: string }[]; url: string }
+  'voice:speak': Uint8Array
+  'voice:transcribe': string
+  'voice:chapterSpeakers': { narrator: string | null; lines: Record<string, string> }
+  'voice:setCast': null
+  'voice:cast': { narrator: string; other: string; characters: Record<string, string> }
   'voice:script': { saved: string | null; chapters: number; lines: number }
   'ai:sortNames': { applied: number; suggestions: number; skipped: number }
   'inbox:restore': null

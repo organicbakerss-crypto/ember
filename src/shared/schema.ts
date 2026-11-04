@@ -53,6 +53,15 @@ export const seriesFileSchema = z.looseObject({
    */
   kind: z.enum(['series', 'book']).catch('series'),
   volumeOrder: z.array(id('volume')),
+  /** Voices for reading aloud: VoiceStudio voice names for the narrator, others, and by character name. */
+  voices: z
+    .looseObject({
+      narrator: z.string().max(200).catch(''),
+      other: z.string().max(200).catch(''),
+      characters: z.record(z.string().max(200), z.string().max(200)).catch({}),
+    })
+    .optional()
+    .catch(undefined),
   createdAt: timestamp,
   updatedAt: timestamp,
 })

@@ -47,6 +47,8 @@ export interface EditorHandle {
   readingBlocks: () => { pos: number; text: string | null }[]
   /** Shows (and scrolls to) the block being read aloud; null clears it. */
   markReading: (pos: number | null) => void
+  /** Puts text in at the cursor (dictation), as one undoable step. Returns whether it did. */
+  insertText: (text: string) => boolean
 }
 
 /** A search match to select once the chapter is open. */
@@ -435,6 +437,14 @@ function EditorPage(
       if (pos === null) return
       const dom = editor.view.nodeDOM(pos)
       if (dom instanceof HTMLElement) dom.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    },
+    insertText(text: string) {
+      if (readOnly || contentError || !text) return false
+      const { from } = editor.state.selection
+      const before = editor.state.doc.textBetween(Math.max(0, from - 1), from)
+      const spaced = before && !/\s$/.test(before) ? ` ${text}` : text
+      editor.chain().focus().insertContent(spaced).run()
+      return true
     },
     getDoc() {
       if (readOnly || contentError) return null
