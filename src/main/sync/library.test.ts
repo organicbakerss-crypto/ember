@@ -6,6 +6,8 @@ import type { LibraryChange } from '@shared/ipc'
 import { Library } from '../library/library'
 import { MemoryCloud } from './memoryCloud'
 import { SyncEngine, type SyncHooks } from './engine'
+import { SyncService } from './service'
+import { DocLeases } from '../docLeases'
 
 const dirs: string[] = []
 afterEach(async () => {
@@ -193,5 +195,42 @@ describe('sync with real libraries', () => {
 
     await linux.lib.deleteConversation(series.id, 'cnv_aaaaaaaaaaaaaaaa')
     expect(await linux.lib.listConversations(series.id)).toEqual([])
+  })
+
+  it('lists what was set aside, and puts it back on request', async () => {
+    const cloud = new MemoryCloud()
+    const mac = await computer('Mac', cloud)
+    const series = await mac.lib.createSeries({
+      name: 'Saga',
+      world: { mode: 'new', name: 'Isles' },
+    })
+    const worldId = series.worldId!
+    await mac.sync()
+    const linux = await computer('Linux', cloud)
+    await linux.sync()
+    await mac.lib.renameWorld(worldId, 'Isles of Mac')
+    await linux.lib.renameWorld(worldId, 'Isles of Linux')
+    await mac.sync()
+    await linux.sync()
+    expect((await linux.lib.getWorld(worldId)).name).toBe('Isles of Linux')
+
+    const service = new SyncService({
+      userData: linux.lib.paths.localDir,
+      leases: new DocLeases('yield'),
+      secrets: { canEncrypt: () => false, encrypt: (t) => t, decrypt: (t) => t },
+      onStatus: () => {},
+      onNotice: () => {},
+    })
+    await service.attach(linux.lib)
+    const [aside] = await service.conflicts()
+    expect(aside).toMatchObject({ what: 'World settings', where: 'Isles of Linux', device: 'Mac' })
+    await service.restoreConflict(aside!.id)
+    expect((await linux.lib.getWorld(worldId)).name).toBe('Isles of Mac')
+    // The version it replaced is set aside in turn.
+    const now = await service.conflicts()
+    expect(now).toHaveLength(1)
+    expect(now[0]).toMatchObject({ reason: 'replaced', device: '' })
+    await service.deleteConflict(now[0]!.id)
+    expect(await service.conflicts()).toEqual([])
   })
 })

@@ -105,6 +105,7 @@ void app.whenReady().then(async () => {
     },
     onStatus: (status) => broadcast('sync:status', status),
     onNotice: (message) => broadcast('app:notice', message),
+    onHold: (worldId, held) => broadcast('sync:hold', { worldId, held }),
     fetchImpl: ((input: string, init?: RequestInit) => net.fetch(input, init)) as typeof fetch,
     dictionary: {
       read: async () => (await appSettings.read()).dictionary,

@@ -132,7 +132,7 @@ export function PeopleBoard(props: {
   const savePositions = async (next: Positions, label: string) => {
     const before = world.view.board
     try {
-      await api.invoke('board:save', { worldId, positions: next })
+      await api.invoke('board:save', { worldId, positions: next, seen: world.view.syncGen })
       record({ label, undo: () => api.invoke('board:save', { worldId, positions: before }) })
     } catch (err) {
       toast(describeError(err).message)

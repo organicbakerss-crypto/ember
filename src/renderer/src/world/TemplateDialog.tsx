@@ -49,6 +49,7 @@ export function TemplateDialog(props: { world: WorldData; onClose: () => void })
       const saved = await api.invoke('template:save', {
         worldId,
         template: { ...draft, fields: draft.fields.filter((f) => f.label.trim()) },
+        seen: world.view.syncGen,
       })
       setSelected(saved.id)
       setDraft(null)
@@ -59,7 +60,11 @@ export function TemplateDialog(props: { world: WorldData; onClose: () => void })
   }
   const reset = async () => {
     try {
-      await api.invoke('template:delete', { worldId, templateId: selected })
+      await api.invoke('template:delete', {
+        worldId,
+        templateId: selected,
+        seen: world.view.syncGen,
+      })
       if (!isBuiltIn(selected)) setSelected(world.view.templates[0]?.id ?? '')
     } catch (err) {
       setError(describeError(err).message)

@@ -9,7 +9,8 @@ import { appConfig } from '../../../app.config'
  *   series/<series-id>/volumes/<volume-id>/{volume,outline,manifest}.json
  *   series/<series-id>/volumes/<volume-id>/chapters/<chapter-id>.json
  *   worlds/<world-id>/{world,manifest}.json
- *   worlds/<world-id>/{templates,inbox,rejected}.json   (only once used)
+ *   worlds/<world-id>/{templates,rejected}.json         (only once used)
+ *   worlds/<world-id>/inbox/<item-id>.json              (one per captured item)
  *   worlds/<world-id>/entries/<entry-id>.json
  *   worlds/<world-id>/images/<sha256>.<ext>             (portraits and maps, stored once)
  *   worlds/<world-id>/maps/<map-id>.json                (region outlines or a travel sketch)
@@ -66,5 +67,8 @@ export const unitPaths = {
   entry: (entryId: string) => `entries/${entryId}.json`,
   map: (mapId: string) => `maps/${mapId}.json`,
   relationship: (relId: string) => `relationships/${relId}.json`,
+  inboxItem: (itemId: string) => `inbox/${itemId}.json`,
+  /** The old single inbox file, moved to `inbox/` when the inbox next changes. */
+  oldInbox: 'inbox.json',
   manifest: 'manifest.json',
 } as const

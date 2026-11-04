@@ -24,6 +24,8 @@ export interface WorldData {
   terms: ReturnType<typeof entryTerms>
   /** A skin's names for built-in kinds of things, by template id (not for customised ones). */
   kindNames: ReadonlyMap<string, string>
+  /** Sync is putting the other computer's map, board or templates in place: wait. */
+  held: boolean
 }
 
 const INDEX_DELAY_MS = 1500
@@ -40,9 +42,10 @@ export function useWorld(worldId: string | null): { data: WorldData | null; erro
   const [error, setError] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
+  const [heldFor, setHeldFor] = useState<string | null>(null)
   const loadView = useCallback(() => {
-    if (!worldId) return
-    api.invoke('world:get', { worldId }).then(
+    if (!worldId) return Promise.resolve()
+    return api.invoke('world:get', { worldId }).then(
       (v) => {
         setView(v)
         setError(null)
@@ -63,6 +66,12 @@ export function useWorld(worldId: string | null): { data: WorldData | null; erro
     loadIndex()
     return () => clearTimeout(timer.current)
   }, [loadView, loadIndex])
+
+  useIpcEvent('sync:hold', (h) => {
+    if (h.worldId !== worldId) return
+    if (h.held) setHeldFor(h.worldId)
+    else void loadView().finally(() => setHeldFor(null))
+  })
 
   useIpcEvent('library:changed', (c) => {
     if (!worldId) return
@@ -99,8 +108,9 @@ export function useWorld(worldId: string | null): { data: WorldData | null; erro
       kindNames: new Map(
         Object.entries(skin?.kinds ?? {}).filter(([id]) => !view.customTemplates.includes(id)),
       ),
+      held: heldFor === worldId,
     }
-  }, [view, index, worldId, skin])
+  }, [view, index, worldId, skin, heldFor])
 
   return { data, error }
 }

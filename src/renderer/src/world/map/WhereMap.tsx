@@ -103,6 +103,9 @@ export function WhereMap(props: {
     if (m && trail.includes(m)) break
   }
 
+  /** The version sync last left this world's maps at (sent with saves). */
+  const seen = world.view.syncGen
+
   /** The map as it is now (the view may be a moment behind a save). */
   const latest = (target: MapFile) => world.view.maps.find((m) => m.id === target.id) ?? target
 
@@ -119,7 +122,7 @@ export function WhereMap(props: {
     const before = latest(target)
     const factsBefore = entry && world.resolve(entry.id)?.facts
     try {
-      await api.invoke('map:save', { worldId, mapId: target.id, patch })
+      await api.invoke('map:save', { worldId, mapId: target.id, patch, seen })
       if (entry) {
         await api.invoke('entry:save', {
           worldId,
@@ -259,7 +262,12 @@ export function WhereMap(props: {
           image: null,
         }))
       const before = target.sketch
-      await api.invoke('map:save', { worldId, mapId: target.id, patch: { sketch: next } })
+      await api.invoke('map:save', {
+        worldId,
+        mapId: target.id,
+        patch: { sketch: next },
+        seen,
+      })
       record({
         label,
         undo: () =>
@@ -340,7 +348,7 @@ export function WhereMap(props: {
 
   const [renaming, setRenaming] = useState(false)
   const renameMap = (target: MapFile, name: string) =>
-    api.invoke('map:save', { worldId, mapId: target.id, patch: { name } })
+    api.invoke('map:save', { worldId, mapId: target.id, patch: { name }, seen })
 
   const parentPlace = map?.placeId ? world.resolve(map.placeId) : undefined
 

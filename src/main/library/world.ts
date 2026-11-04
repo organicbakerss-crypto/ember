@@ -13,6 +13,7 @@ import {
   emptyDoc,
   boardFileSchema,
   inboxFileSchema,
+  inboxItemFileSchema,
   relationshipFileSchema,
   relationshipTypesFileSchema,
   mapFileSchema,
@@ -21,7 +22,6 @@ import {
   worldEntryFileSchema,
   type ChapterSource,
   type FactValue,
-  type InboxFile,
   type BoardFile,
   type InboxItem,
   type RelationshipFile,
@@ -145,7 +145,33 @@ export class WorldStore {
   /** Mentions per world, dropped whenever the manuscript or the entries change. */
   private readonly indexCache = new Map<string, Promise<WorldIndex>>()
 
+  /**
+   * Per world, how many times sync has replaced its map, board or templates
+   * since the app started. Screens send the number they loaded with; a save
+   * made from a version sync has since replaced is refused (it would undo the
+   * other computer's changes), and the screen reloads.
+   */
+  private readonly syncGens = new Map<string, number>()
+
   constructor(private readonly host: WorldHost) {}
+
+  /** Sync replaced some of a world's layout files (maps, board, templates, relationship types). */
+  syncReplaced(worldId: string): void {
+    this.syncGens.set(worldId, this.syncGen(worldId) + 1)
+  }
+
+  syncGen(worldId: string): number {
+    return this.syncGens.get(worldId) ?? 0
+  }
+
+  /** Refuses a save made from a version sync has since replaced (call holding the lock). */
+  private assertSeen(worldId: string, seen: number | undefined): void {
+    if (seen === undefined || seen === this.syncGen(worldId)) return
+    throw new AppError(
+      'conflict',
+      'This just changed on your other computer, so it was updated here. Please do that again.',
+    )
+  }
 
   /** Forgets derived data that a change makes stale. */
   invalidate(change: LibraryChange): void {
@@ -165,10 +191,13 @@ export class WorldStore {
   /* ---------- reading ---------- */
 
   async view(worldId: string): Promise<WorldView> {
+    // Before reading: a save is checked against the version this view was read from.
+    const syncGen = this.syncGen(worldId)
     const world = await this.host.getWorld(worldId)
     const { entries, problems } = await this.readAll(worldId)
     const custom = await this.customTemplates(worldId)
     const inbox = await this.readInbox(worldId)
+    problems.push(...inbox.problems)
     const { maps, problems: mapProblems } = await this.readMaps(worldId)
     const { relationships, problems: relProblems } = await this.readRelationships(worldId)
     // Names typed on a page link to their entries, like `@` links do.
@@ -191,6 +220,7 @@ export class WorldStore {
       relationships,
       relationshipTypes: relationshipTypes(await this.customRelationshipTypes(worldId)),
       board: (await this.readBoard(worldId)).positions,
+      syncGen,
     }
   }
 
@@ -576,8 +606,10 @@ export class WorldStore {
     worldId: string,
     mapId: string,
     patch: Partial<Pick<MapFile, 'name' | 'regions' | 'pins' | 'sketch' | 'placeId'>>,
+    seen?: number,
   ): Promise<MapFile> {
     const saved = await this.host.lock.run(`world:${worldId}`, async () => {
+      this.assertSeen(worldId, seen)
       const map = await this.readMap(worldId, mapId)
       const next: MapFile = { ...map, formatVersion: FORMAT_VERSION }
       if (patch.name !== undefined) next.name = patch.name.trim()
@@ -731,15 +763,17 @@ export class WorldStore {
   async saveRelationshipTypes(
     worldId: string,
     types: RelationshipType[],
+    seen?: number,
   ): Promise<RelationshipType[]> {
     await this.host.getWorld(worldId)
-    await this.host.lock.run(`world:${worldId}`, () =>
-      this.host.writeFile(worldId, 'relationship-types.json', {
+    await this.host.lock.run(`world:${worldId}`, () => {
+      this.assertSeen(worldId, seen)
+      return this.host.writeFile(worldId, 'relationship-types.json', {
         formatVersion: FORMAT_VERSION,
         worldId,
         types,
-      }),
-    )
+      })
+    })
     this.host.changed({ kind: 'world', worldId })
     return relationshipTypes(types)
   }
@@ -760,16 +794,21 @@ export class WorldStore {
   }
 
   /** Saves where portraits sit on the board. Layout only: the people themselves never change. */
-  async saveBoard(worldId: string, positions: BoardFile['positions']): Promise<void> {
+  async saveBoard(
+    worldId: string,
+    positions: BoardFile['positions'],
+    seen?: number,
+  ): Promise<void> {
     await this.host.getWorld(worldId)
-    await this.host.lock.run(`world:${worldId}`, () =>
-      this.host.writeFile(worldId, 'board.json', {
+    await this.host.lock.run(`world:${worldId}`, () => {
+      this.assertSeen(worldId, seen)
+      return this.host.writeFile(worldId, 'board.json', {
         formatVersion: FORMAT_VERSION,
         worldId,
         positions,
         updatedAt: this.host.timestamp(),
-      }),
-    )
+      })
+    })
     this.host.changed({ kind: 'world', worldId })
   }
 
@@ -802,35 +841,77 @@ export class WorldStore {
     return saved
   }
 
-  private async readInbox(worldId: string): Promise<InboxFile> {
-    const path = join(this.dir(worldId), 'inbox.json')
+  /**
+   * The inbox: one file per item in `inbox/`, plus any items still in the old
+   * single `inbox.json`. Damaged files are reported and left alone.
+   */
+  private async readInbox(
+    worldId: string,
+  ): Promise<{ items: InboxItem[]; problems: LibraryProblem[]; old: InboxItem[] | null }> {
+    const dir = join(this.dir(worldId), 'inbox')
+    let names: string[] = []
     try {
-      return await readJsonFile(path, inboxFileSchema)
+      names = await fs.promises.readdir(dir)
     } catch (err) {
-      // Missing is normal. A damaged inbox is never overwritten: it reads as empty
-      // and writes are refused (see changeInbox).
-      if (err instanceof AppError && err.code === 'not-found') {
-        return { formatVersion: FORMAT_VERSION, worldId, items: [] }
-      }
-      if (err instanceof AppError) return { formatVersion: FORMAT_VERSION, worldId, items: [] }
-      throw err
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
     }
+    const byId = new Map<string, InboxItem>()
+    const problems: LibraryProblem[] = []
+    for (const name of names.filter((n) => n.endsWith('.json') && !isTempFileName(n))) {
+      const rel = `inbox/${name}`
+      try {
+        const file = await readJsonFile(join(this.dir(worldId), rel), inboxItemFileSchema)
+        const item: Record<string, unknown> = { ...file }
+        delete item['formatVersion']
+        delete item['worldId']
+        byId.set(file.id, item as InboxItem)
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+        problems.push({ path: `worlds/${worldId}/${rel}`, message: 'Not a readable inbox item.' })
+      }
+    }
+    // The old single file: missing is normal; damaged is reported and never overwritten.
+    let old: InboxItem[] | null = null
+    try {
+      old = (await readJsonFile(join(this.dir(worldId), unitPaths.oldInbox), inboxFileSchema)).items
+      for (const item of old) if (!byId.has(item.id)) byId.set(item.id, item)
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err
+      if (err.code !== 'not-found') {
+        problems.push({
+          path: `worlds/${worldId}/${unitPaths.oldInbox}`,
+          message: 'The old inbox file can’t be read; it was left as it is.',
+        })
+      }
+    }
+    const items = [...byId.values()].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
+    return { items, problems, old }
   }
 
-  private async changeInbox(
-    worldId: string,
-    change: (items: InboxItem[]) => InboxItem[],
-  ): Promise<void> {
+  /**
+   * Moves the old single inbox file's items to their own files (call while
+   * holding the world's lock). Each item is written before the old file goes,
+   * so a crash part-way leaves an item in both places, never in neither.
+   */
+  private async moveOldInbox(worldId: string): Promise<void> {
+    const { old } = await this.readInbox(worldId)
+    if (!old) return
+    for (const item of old) await this.writeInboxItem(worldId, item)
+    await this.host.removeFile(worldId, unitPaths.oldInbox)
+  }
+
+  private writeInboxItem(worldId: string, item: InboxItem): Promise<void> {
+    return this.host.writeFile(worldId, unitPaths.inboxItem(item.id), {
+      formatVersion: FORMAT_VERSION,
+      worldId,
+      ...item,
+    })
+  }
+
+  private async removeInboxItem(worldId: string, itemId: string): Promise<void> {
     await this.host.lock.run(`world:${worldId}`, async () => {
-      const path = join(this.dir(worldId), 'inbox.json')
-      let inbox: InboxFile
-      try {
-        inbox = await readJsonFile(path, inboxFileSchema)
-      } catch (err) {
-        if (!(err instanceof AppError) || err.code !== 'not-found') throw err
-        inbox = { formatVersion: FORMAT_VERSION, worldId, items: [] }
-      }
-      await this.host.writeFile(worldId, 'inbox.json', { ...inbox, items: change(inbox.items) })
+      await this.moveOldInbox(worldId)
+      await this.host.removeFile(worldId, unitPaths.inboxItem(itemId))
     })
     this.host.changed({ kind: 'inbox', worldId })
   }
@@ -843,14 +924,18 @@ export class WorldStore {
       source,
       capturedAt: this.host.timestamp(),
     }
-    await this.changeInbox(worldId, (items) => [...items, item])
+    await this.host.lock.run(`world:${worldId}`, async () => {
+      await this.moveOldInbox(worldId)
+      await this.writeInboxItem(worldId, item)
+    })
+    this.host.changed({ kind: 'inbox', worldId })
     return item
   }
 
   async inboxDismiss(worldId: string, itemId: string): Promise<InboxItem> {
     const item = (await this.readInbox(worldId)).items.find((i) => i.id === itemId)
     if (!item) throw new AppError('not-found', 'That inbox item is gone.')
-    await this.changeInbox(worldId, (items) => items.filter((i) => i.id !== itemId))
+    await this.removeInboxItem(worldId, itemId)
     return item
   }
 
@@ -865,7 +950,7 @@ export class WorldStore {
     if (!item) throw new AppError('not-found', 'That inbox item is gone.')
     // Entry first: if the inbox write fails, the quote is kept twice, never lost.
     const saved = await this.capture(worldId, entryId, field, item.text, item.source)
-    await this.changeInbox(worldId, (items) => items.filter((i) => i.id !== itemId))
+    await this.removeInboxItem(worldId, itemId)
     return saved
   }
 
@@ -958,8 +1043,10 @@ export class WorldStore {
   private async changeTemplates(
     worldId: string,
     change: (templates: Template[]) => Template[],
+    seen?: number,
   ): Promise<void> {
     await this.host.lock.run(`world:${worldId}`, async () => {
+      this.assertSeen(worldId, seen)
       const path = join(this.dir(worldId), 'templates.json')
       let templates: Template[] = []
       try {
@@ -977,7 +1064,7 @@ export class WorldStore {
   }
 
   /** Saves a customised or new template into the world folder (so it travels with the world). */
-  async saveTemplate(worldId: string, input: TemplateInput): Promise<Template> {
+  async saveTemplate(worldId: string, input: TemplateInput, seen?: number): Promise<Template> {
     await this.host.getWorld(worldId)
     const ids = new Set<string>()
     const template: Template = {
@@ -991,15 +1078,16 @@ export class WorldStore {
         return { ...f, id, label: f.label.trim() }
       }),
     }
-    await this.changeTemplates(worldId, (list) => [
-      ...list.filter((t) => t.id !== template.id),
-      template,
-    ])
+    await this.changeTemplates(
+      worldId,
+      (list) => [...list.filter((t) => t.id !== template.id), template],
+      seen,
+    )
     return template
   }
 
   /** Removes a world's own template; a customised built-in goes back to the original. */
-  async deleteTemplate(worldId: string, templateId: string): Promise<void> {
+  async deleteTemplate(worldId: string, templateId: string, seen?: number): Promise<void> {
     const custom = await this.customTemplates(worldId)
     if (!custom.some((t) => t.id === templateId)) {
       throw new AppError(
@@ -1007,7 +1095,7 @@ export class WorldStore {
         isBuiltIn(templateId) ? 'This template is already the original.' : 'No such template.',
       )
     }
-    await this.changeTemplates(worldId, (list) => list.filter((t) => t.id !== templateId))
+    await this.changeTemplates(worldId, (list) => list.filter((t) => t.id !== templateId), seen)
   }
 
   /* ---------- derived data ---------- */

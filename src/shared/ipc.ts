@@ -217,6 +217,11 @@ export interface WorldView {
   relationshipTypes: RelationshipType[]
   /** Where portraits sit on the board (0–1 across and down). */
   board: BoardFile['positions']
+  /**
+   * Which version of the map, board and templates this was read from (sync
+   * changes it). Saves send it back; one made from a replaced version is refused.
+   */
+  syncGen: number
 }
 
 /** A chapter where an entry is mentioned (or told from its point of view). */
@@ -234,6 +239,19 @@ export interface WorldInbox {
   captured: InboxItem[]
   /** New names from the name catcher (empty when it is turned off). */
   names: NameSuggestion[]
+}
+
+/** A version set aside when both computers changed something. */
+export interface ConflictInfo {
+  id: string
+  /** What it is ("Chapter order", "Map “Coast”"). */
+  what: string
+  /** The story, book or world it belongs to. */
+  where: string
+  /** The computer it came from ('' for this one's, set aside by a restore). */
+  device: string
+  savedAt: string
+  reason: 'both-changed' | 'replaced'
 }
 
 /** What an action changed, so it can be undone. */
@@ -345,6 +363,8 @@ export const ipcInputs = {
   'world:pin': z.object({ worldId: id('world'), entryId: id('entry'), pinned: z.boolean() }),
   'template:save': z.object({
     worldId: id('world'),
+    /** The world view's `syncGen` the change was made from. */
+    seen: z.number().int().nonnegative().optional(),
     template: z.object({
       /** Leave out for a new template. */
       id: z
@@ -356,7 +376,11 @@ export const ipcInputs = {
       fields: z.array(templateFieldSchema.extend({ id: fieldIdSchema.optional() })).max(40),
     }),
   }),
-  'template:delete': z.object({ worldId: id('world'), templateId: z.string().min(1).max(60) }),
+  'template:delete': z.object({
+    worldId: id('world'),
+    templateId: z.string().min(1).max(60),
+    seen: z.number().int().nonnegative().optional(),
+  }),
   'entry:create': z.object({
     worldId: id('world'),
     name: nameSchema,
@@ -443,6 +467,8 @@ export const ipcInputs = {
   }),
   'map:save': z.object({
     worldId: id('world'),
+    /** The world view's `syncGen` the change was made from. */
+    seen: z.number().int().nonnegative().optional(),
     mapId: id('map'),
     patch: z.object({
       name: nameSchema.optional(),
@@ -465,10 +491,14 @@ export const ipcInputs = {
   'relationship:delete': z.object({ worldId: id('world'), relationshipId: id('relationship') }),
   'relationship:types': z.object({
     worldId: id('world'),
+    /** The world view's `syncGen` the change was made from. */
+    seen: z.number().int().nonnegative().optional(),
     types: z.array(relationshipTypeSchema).max(60),
   }),
   'board:save': z.object({
     worldId: id('world'),
+    /** The world view's `syncGen` the change was made from. */
+    seen: z.number().int().nonnegative().optional(),
     positions: boardFileSchema.shape.positions,
   }),
   'capture:context': z.object({
@@ -695,6 +725,11 @@ export const ipcInputs = {
   /** Stops syncing on this computer (nothing is deleted anywhere). */
   'sync:disconnect': z.void(),
   'sync:now': z.void(),
+  /** Versions set aside when both computers changed something. */
+  'sync:conflicts': z.void(),
+  /** Puts a set-aside version back (the one it replaces is set aside instead). */
+  'sync:conflictRestore': z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/) }),
+  'sync:conflictDelete': z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/) }),
   /** Brings a chapter's versions saved by other computers into its history. */
   'history:fetchCloud': z.object({ volumeId: id('volume'), chapterId: id('chapter') }),
   /** Adds imported chapters at the end of a volume, in order. */
@@ -847,6 +882,9 @@ export interface IpcResults {
   'ai:chatgptSignIn': null
   'ai:chatgptSignOut': null
   'sync:now': SyncStatus
+  'sync:conflicts': ConflictInfo[]
+  'sync:conflictRestore': null
+  'sync:conflictDelete': null
   'history:fetchCloud': { added: number }
   'window:dropped': boolean
   'window:dock': null
@@ -895,6 +933,8 @@ export interface IpcEvents {
   /** Sync has written the other computer's version: reload this document and carry on editing. */
   'doc:returned': { key: string; pane: string }
   'sync:status': SyncStatus
+  /** Sync is replacing (held) or has replaced a world's map, board or templates. */
+  'sync:hold': { worldId: string; held: boolean }
   /** Another window asks what this one's writing view shows (reply with `ai:scopeReply`). */
   'ai:scopeRequest': { requestId: string; seriesId: string }
   /** More of an AI answer. */

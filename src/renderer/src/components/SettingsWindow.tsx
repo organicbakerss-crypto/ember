@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   PAGE_WIDTH,
   PAPER_SIZES,
@@ -178,6 +178,68 @@ function ImportExportSettings() {
   )
 }
 
+/**
+ * Versions set aside when both computers changed the same thing and the
+ * changes couldn't all be combined. Each can be put back or deleted.
+ */
+function SyncConflicts({ refresh }: { refresh: string | null }) {
+  const { toast } = useOverlays()
+  const [list, setList] = useState<IpcResult<'sync:conflicts'>>([])
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(() => {
+    api.invoke('sync:conflicts').then(setList, () => {})
+  }, [])
+  useEffect(() => {
+    load()
+  }, [load, refresh])
+  if (!list.length) return null
+  const act = async (channel: 'sync:conflictRestore' | 'sync:conflictDelete', id: string) => {
+    setBusy(true)
+    try {
+      await api.invoke(channel, { id })
+      if (channel === 'sync:conflictRestore')
+        toast('Put back. The version it replaced is in this list.')
+    } catch (err) {
+      toast(describeError(err).message)
+    } finally {
+      setBusy(false)
+      load()
+    }
+  }
+  return (
+    <div className="sync-conflicts">
+      <h4>Conflicts</h4>
+      <p className="muted small">
+        These changed in the same place on both computers. This computer’s version is in use; the
+        other is kept here until you put it back or delete it.
+      </p>
+      <ul>
+        {list.map((c) => (
+          <li key={c.id}>
+            <div>
+              <strong>{c.what}</strong> <span className="muted">in {c.where}</span>
+              <div className="muted small">
+                {c.reason === 'replaced'
+                  ? 'This computer’s version, replaced when you put another back'
+                  : `From ${c.device || 'another computer'}`}
+                {c.savedAt && ` · ${new Date(c.savedAt).toLocaleString()}`}
+              </div>
+            </div>
+            <div className="row">
+              <button disabled={busy} onClick={() => void act('sync:conflictRestore', c.id)}>
+                Put back
+              </button>
+              <button disabled={busy} onClick={() => void act('sync:conflictDelete', c.id)}>
+                Delete
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /** Connecting to the cloud (Cloudflare R2), and how sync is doing. */
 function SyncSettings() {
   const status = useSyncStatus()
@@ -256,8 +318,8 @@ function SyncSettings() {
         <p className="muted small">
           This computer is “{status.device}”, syncing with the bucket “{status.bucket}”. Changes go
           up about 30 seconds after you stop typing, and the other computer’s changes come down when
-          a window comes back into focus, every few minutes, and when the app starts. If a chapter
-          changed on both computers, both versions are kept.
+          a window comes back into focus, every few minutes, and when the app starts. If something
+          changed on both computers, the changes are combined; a chapter or entry is kept twice.
         </p>
         <div className="row">
           <button disabled={busy} onClick={() => void run('sync:now')}>
@@ -280,6 +342,7 @@ function SyncSettings() {
           Stopping keeps every file here and in the cloud; connecting again carries on where it left
           off.
         </p>
+        <SyncConflicts refresh={status.lastSyncedAt} />
       </section>
     )
   }

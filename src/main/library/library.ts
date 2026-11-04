@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
-import { join, relative, sep } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import {
   FORMAT_VERSION,
   chapterFileSchema,
@@ -1956,7 +1956,8 @@ export class Library {
       for (const rel of rels) {
         const entryId = /^entries\/([^/]+)\.json$/.exec(rel)?.[1]
         if (entryId) this.onChange({ kind: 'entry', worldId: world, entryId })
-        if (rel === 'inbox.json') this.onChange({ kind: 'inbox', worldId: world })
+        if (rel === 'inbox.json' || rel.startsWith('inbox/'))
+          this.onChange({ kind: 'inbox', worldId: world })
       }
     }
   }
@@ -2029,6 +2030,7 @@ export class Library {
     rel: string,
     value: unknown,
   ): Promise<void> {
+    if (rel.includes('/')) await fs.promises.mkdir(dirname(join(unitDir, rel)), { recursive: true })
     const written = await writeJsonFile(join(unitDir, rel), value)
     await this.recordInManifest({ type: unitType, dir: unitDir, id: unitId }, rel, written)
   }

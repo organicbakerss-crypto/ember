@@ -23,6 +23,7 @@ export function RelationshipTypesDialog(props: { world: WorldData; onClose: () =
     try {
       await api.invoke('relationship:types', {
         worldId: world.view.world.id,
+        seen: world.view.syncGen,
         types: types.map((t) => ({ ...t, label: t.label.trim() || t.id })),
       })
       props.onClose()

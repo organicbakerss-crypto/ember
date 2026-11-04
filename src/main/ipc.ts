@@ -116,6 +116,15 @@ export function registerIpc(
       return null
     },
     'sync:now': () => sync.syncNow(),
+    'sync:conflicts': () => sync.conflicts(),
+    'sync:conflictRestore': async (input) => {
+      await sync.restoreConflict(input.id)
+      return null
+    },
+    'sync:conflictDelete': async (input) => {
+      await sync.deleteConflict(input.id)
+      return null
+    },
     'history:fetchCloud': async (input) => ({
       added: await sync.fetchHistory(input.volumeId, input.chapterId),
     }),
@@ -211,9 +220,10 @@ export function registerIpc(
     'world:index': (input) => host.current.world.index(input.worldId),
     'world:digest': (input) => host.current.world.digest(input.worldId),
     'world:pin': (input) => host.current.world.pin(input.worldId, input.entryId, input.pinned),
-    'template:save': (input) => host.current.world.saveTemplate(input.worldId, input.template),
+    'template:save': (input) =>
+      host.current.world.saveTemplate(input.worldId, input.template, input.seen),
     'template:delete': async (input) => {
-      await host.current.world.deleteTemplate(input.worldId, input.templateId)
+      await host.current.world.deleteTemplate(input.worldId, input.templateId, input.seen)
       return null
     },
     'entry:create': (input) => host.current.world.createEntry(input.worldId, input),
@@ -247,15 +257,16 @@ export function registerIpc(
       return null
     },
     'map:create': (input) => host.current.world.createMap(input.worldId, input),
-    'map:save': (input) => host.current.world.saveMap(input.worldId, input.mapId, input.patch),
+    'map:save': (input) =>
+      host.current.world.saveMap(input.worldId, input.mapId, input.patch, input.seen),
     'relationship:save': (input) =>
       host.current.world.saveRelationship(input.worldId, input.relationship),
     'relationship:delete': (input) =>
       host.current.world.deleteRelationship(input.worldId, input.relationshipId),
     'relationship:types': (input) =>
-      host.current.world.saveRelationshipTypes(input.worldId, input.types),
+      host.current.world.saveRelationshipTypes(input.worldId, input.types, input.seen),
     'board:save': async (input) => {
-      await host.current.world.saveBoard(input.worldId, input.positions)
+      await host.current.world.saveBoard(input.worldId, input.positions, input.seen)
       return null
     },
     'capture:context': (input, event) => {

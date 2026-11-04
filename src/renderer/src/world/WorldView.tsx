@@ -444,7 +444,12 @@ export function WorldView(props: {
           )}
         </aside>
 
-        <main className="page-area world-main">
+        <main className={world.held ? 'page-area world-main held' : 'page-area world-main'}>
+          {world.held && (
+            <div className="sync-hold" role="status">
+              Updating from your other computer…
+            </div>
+          )}
           <div className="page-scroll">
             {place.kind === 'entry' ? (
               entry ? (

@@ -296,16 +296,68 @@ describe('capture and the inbox', () => {
     expect(changes).toContainEqual({ kind: 'inbox', worldId })
   })
 
-  it('never overwrites a damaged inbox', async () => {
+  it('keeps each inbox item in its own file', async () => {
+    const worldId = await world()
+    const s = await story(worldId, [['x']])
+    const a = await lib.world.inboxCapture(worldId, 'One.', s.source(0))
+    const b = await lib.world.inboxCapture(worldId, 'Two.', s.source(0))
+    const dir = join(lib.paths.worldDir(worldId), 'inbox')
+    expect((await fs.promises.readdir(dir)).sort()).toEqual([`${a.id}.json`, `${b.id}.json`].sort())
+    await lib.world.inboxDismiss(worldId, a.id)
+    expect(await fs.promises.readdir(dir)).toEqual([`${b.id}.json`])
+  })
+
+  it('moves the old single inbox file to one file per item', async () => {
+    const worldId = await world()
+    const s = await story(worldId, [['x']])
+    const oldPath = join(lib.paths.worldDir(worldId), 'inbox.json')
+    const old = {
+      formatVersion: 1,
+      worldId,
+      items: [
+        {
+          id: 'inb_aaaaaaaaaaaaaaa1',
+          text: 'Old one.',
+          source: s.source(0),
+          capturedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'inb_aaaaaaaaaaaaaaa2',
+          text: 'Old two.',
+          source: s.source(0),
+          capturedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    }
+    await fs.promises.writeFile(oldPath, JSON.stringify(old))
+    // Reading never writes: the old file stays until the inbox changes.
+    expect((await lib.world.inbox(worldId, false)).captured.map((i) => i.text)).toEqual([
+      'Old one.',
+      'Old two.',
+    ])
+    expect(fs.existsSync(oldPath)).toBe(true)
+    const added = await lib.world.inboxCapture(worldId, 'New.', s.source(0))
+    expect(fs.existsSync(oldPath)).toBe(false)
+    expect((await lib.world.inbox(worldId, false)).captured.map((i) => i.id)).toEqual([
+      'inb_aaaaaaaaaaaaaaa1',
+      'inb_aaaaaaaaaaaaaaa2',
+      added.id,
+    ])
+    expect((await lib.world.view(worldId)).inboxCount).toBe(3)
+  })
+
+  it('never overwrites a damaged inbox file', async () => {
     const worldId = await world()
     const s = await story(worldId, [['x']])
     const path = join(lib.paths.worldDir(worldId), 'inbox.json')
     await fs.promises.writeFile(path, '{ damaged')
     expect((await lib.world.inbox(worldId, false)).captured).toEqual([])
-    await expect(lib.world.inboxCapture(worldId, 'Hello.', s.source(0))).rejects.toMatchObject({
-      code: 'corrupt',
-    })
+    await lib.world.inboxCapture(worldId, 'Hello.', s.source(0))
     expect(await fs.promises.readFile(path, 'utf8')).toBe('{ damaged')
+    expect((await lib.world.inbox(worldId, false)).captured.map((i) => i.text)).toEqual(['Hello.'])
+    expect((await lib.world.view(worldId)).problems.map((p) => p.path)).toContain(
+      `worlds/${worldId}/inbox.json`,
+    )
   })
 
   it('suggests new names from the manuscript, minus known and rejected ones', async () => {
@@ -574,6 +626,24 @@ describe('relationships and the board', () => {
     await expect(
       lib.world.saveRelationship(worldId, tie(mara.id, mara.id, 'met')),
     ).rejects.toMatchObject({ code: 'invalid-input' })
+  })
+
+  it('refuses a layout save made from a version sync has since replaced', async () => {
+    const worldId = await world()
+    const mara = await lib.world.createEntry(worldId, { name: 'Mara', template: 'person' })
+    const seen = (await lib.world.view(worldId)).syncGen
+    await lib.world.saveBoard(worldId, { [mara.id]: { x: 0.1, y: 0.1 } }, seen)
+    lib.world.syncReplaced(worldId)
+    await expect(
+      lib.world.saveBoard(worldId, { [mara.id]: { x: 0.9, y: 0.9 } }, seen),
+    ).rejects.toMatchObject({ code: 'conflict' })
+    await expect(lib.world.saveRelationshipTypes(worldId, [], seen)).rejects.toMatchObject({
+      code: 'conflict',
+    })
+    expect((await lib.world.view(worldId)).board).toEqual({ [mara.id]: { x: 0.1, y: 0.1 } })
+    const now = (await lib.world.view(worldId)).syncGen
+    expect(now).not.toBe(seen)
+    await lib.world.saveBoard(worldId, { [mara.id]: { x: 0.9, y: 0.9 } }, now)
   })
 
   it('saves the board layout and the world’s own relationship types', async () => {

@@ -9,9 +9,9 @@
  */
 import fs from 'node:fs'
 import os from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import type { SyncStatus } from '@shared/ipc'
+import type { ConflictInfo, SyncStatus } from '@shared/ipc'
 import { writeFileAtomic } from '../fs/atomicWrite'
 import { serializeJson } from '../fs/jsonFile'
 import { AppError } from '../errors'
@@ -24,7 +24,8 @@ import { cleanUpCloud } from './cleanup'
 import { syncDictionary } from './dictionary'
 import { parseBucketUrl, S3Cloud } from './s3'
 import { setupFromToken } from './cloudflare'
-import { localUnits } from './units'
+import { ConflictStore, type ConflictMeta } from './conflictStore'
+import { isSyncablePath, isUnitKey, localUnits } from './units'
 
 const START_DELAY_MS = 2_000
 const PAUSE_MS = 30_000
@@ -59,6 +60,8 @@ export interface SyncServiceOptions {
   secrets: SecretBox
   onStatus: (status: SyncStatus) => void
   onNotice: (message: string) => void
+  /** Sync is replacing (true) or has replaced (false) a world's map, board or templates. */
+  onHold?: (worldId: string, held: boolean) => void
   /** For tests: a cloud instead of R2. */
   makeCloud?: (config: SyncConfig, secret: string) => CloudStore
   /**
@@ -153,7 +156,7 @@ export class SyncService {
       this.options.makeCloud?.(config, secret) ?? cloudFor(config, secret, this.options.fetchImpl)
     const hooks: SyncHooks = {
       lock: (unit, task) => library.lockUnit(unit, task),
-      borrow: (_unit, rels) => this.options.leases.borrow(rels.flatMap(docKey)),
+      borrow: (unit, rels) => this.borrow(unit, rels),
       beforeReplace: (unit, rel) => library.keepBeforeSync(unit, rel),
       trashFile: (unit, rel) => library.trashSyncedFile(unit, rel),
       trashUnit: (unit) => library.trashSyncedUnit(unit),
@@ -311,6 +314,108 @@ export class SyncService {
     return { bytes: objects.reduce((n, o) => n + o.size, 0), files: objects.length }
   }
 
+  /* ---------- versions set aside ---------- */
+
+  private conflictStore(): { library: Library; store: ConflictStore } {
+    const library = this.library
+    if (!library) throw new AppError('invalid-input', 'No library is open.')
+    return { library, store: new ConflictStore(join(library.paths.localDir, 'sync', 'conflicts')) }
+  }
+
+  /** Versions set aside when both computers changed something (newest first). */
+  async conflicts(): Promise<ConflictInfo[]> {
+    if (!this.library) return []
+    const { library, store } = this.conflictStore()
+    const out: ConflictInfo[] = []
+    for (const meta of await store.list()) {
+      const bytes = await store
+        .read(meta.id)
+        .then((r) => r.bytes)
+        .catch(() => null)
+      out.push({
+        id: meta.id,
+        what: describeFile(meta.rel, bytes),
+        where: await describeUnit(library, meta.unit),
+        device: meta.device,
+        savedAt: meta.savedAt,
+        reason: meta.reason,
+      })
+    }
+    return out
+  }
+
+  /**
+   * Puts a set-aside version back. The version it replaces is set aside in
+   * its place (so restoring is undone by restoring that one), and kept in
+   * history for a chapter.
+   */
+  async restoreConflict(id: string): Promise<void> {
+    const { library, store } = this.conflictStore()
+    const { meta, bytes } = await store.read(id)
+    if (!isUnitKey(meta.unit) || !isSyncablePath(meta.unit, meta.rel)) {
+      throw new AppError('invalid-input', 'That version can’t be put back.')
+    }
+    const dir = join(library.root, meta.unit)
+    if (!fs.existsSync(dir)) {
+      throw new AppError('not-found', 'What it belonged to has been deleted.')
+    }
+    const path = join(dir, meta.rel)
+    const release = await this.borrow(meta.unit, [meta.rel])
+    try {
+      await library.lockUnit(meta.unit, async () => {
+        const current = await fs.promises.readFile(path).catch((err: NodeJS.ErrnoException) => {
+          if (err.code === 'ENOENT') return null
+          throw err
+        })
+        if (current) {
+          await store.save({
+            unit: meta.unit,
+            rel: meta.rel,
+            device: '',
+            at: new Date().toISOString(),
+            reason: 'replaced',
+            bytes: current,
+          })
+          await library.keepBeforeSync(meta.unit, meta.rel)
+        }
+        await fs.promises.mkdir(dirname(path), { recursive: true })
+        await writeFileAtomic(path, bytes)
+      })
+    } finally {
+      release()
+    }
+    await store.remove(id)
+    await library.syncedChanges(meta.unit, [meta.rel], false)
+    this.noteChange()
+  }
+
+  async deleteConflict(id: string): Promise<void> {
+    await this.conflictStore().store.remove(id)
+  }
+
+  /**
+   * Before sync replaces files: whoever edits a chapter or an entry page saves
+   * and waits; a world's map, board and template screens pause, and saves
+   * they make from the version being replaced are refused (they reload).
+   */
+  private async borrow(unit: string, rels: string[]): Promise<() => void> {
+    const worldId = /^worlds\/([^/]+)$/.exec(unit)?.[1]
+    const layout = worldId ? rels.some(isLayoutFile) : false
+    if (worldId && layout) {
+      this.library?.world.syncReplaced(worldId)
+      this.options.onHold?.(worldId, true)
+    }
+    const release = await this.options.leases.borrow(rels.flatMap(docKey))
+    return () => {
+      release()
+      if (worldId && layout) {
+        // Again once written: a view read meanwhile showed the old version.
+        this.library?.world.syncReplaced(worldId)
+        this.options.onHold?.(worldId, false)
+      }
+    }
+  }
+
   async syncNow(): Promise<SyncStatus> {
     if (!this.engine) throw new AppError('invalid-input', 'Sync isn’t set up for this library.')
     clearTimeout(this.timer)
@@ -431,6 +536,57 @@ function cloudFor(config: SyncConfig, secret: string, fetchImpl?: typeof fetch):
 }
 
 /** The editing lease of a synced file, if it's a document someone could be typing in. */
+/** What a set-aside file is, in words. */
+function describeFile(rel: string, bytes: Uint8Array | null): string {
+  let data: Record<string, unknown> = {}
+  try {
+    if (bytes) data = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
+  } catch {
+    // Not JSON (an image): described by its path.
+  }
+  const named = (key: string) =>
+    typeof data[key] === 'string' && data[key] ? `“${String(data[key])}”` : ''
+  if (rel === 'outline.json') return 'Chapter order'
+  if (rel === 'board.json') return 'People board layout'
+  if (rel === 'templates.json') return 'Templates'
+  if (rel === 'relationship-types.json') return 'Relationship types'
+  if (rel === 'rejected.json') return 'Turned-down name suggestions'
+  if (rel === 'world.json') return 'World settings'
+  if (rel === 'series.json') return 'Story settings'
+  if (rel === 'volume.json') return 'Book settings'
+  if (rel === 'inbox.json' || rel.startsWith('inbox/')) return 'Inbox'
+  if (rel.startsWith('maps/')) return `Map ${named('name')}`.trim()
+  if (rel.startsWith('ai/')) return `AI conversation ${named('title')}`.trim()
+  if (rel.startsWith('relationships/')) return 'A relationship'
+  if (rel.startsWith('chapters/')) return `Chapter ${named('title')}`.trim()
+  if (rel.startsWith('entries/')) return `Entry ${named('name')}`.trim()
+  if (rel.startsWith('images/')) return 'An image'
+  return rel
+}
+
+/** Which story, book or world a unit is. */
+async function describeUnit(library: Library, unit: ConflictMeta['unit']): Promise<string> {
+  const parts = unit.split('/')
+  try {
+    if (parts[0] === 'worlds') return (await library.getWorld(parts[1]!)).name
+    const series = await library.getSeries(parts[1]!)
+    if (parts.length < 4) return series.name
+    return `${series.name} › ${(await library.getVolume(parts[1]!, parts[3]!)).name}`
+  } catch {
+    return 'Something since deleted'
+  }
+}
+
+/** A world file shown in the map, board or template screens. */
+function isLayoutFile(rel: string): boolean {
+  return (
+    rel.startsWith('maps/') ||
+    rel === 'board.json' ||
+    rel === 'templates.json' ||
+    rel === 'relationship-types.json'
+  )
+}
+
 function docKey(rel: string): string[] {
   const chapter = /^chapters\/([^/]+)\.json$/.exec(rel)?.[1]
   if (chapter) return [`chapter:${chapter}`]

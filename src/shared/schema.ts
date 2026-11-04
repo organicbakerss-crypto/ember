@@ -265,21 +265,30 @@ export const templatesFileSchema = z.looseObject({
 })
 export type TemplatesFile = z.infer<typeof templatesFileSchema>
 
-/** Captured sentences not yet filed under an entry. */
+const inboxItemSchema = z.looseObject({
+  id: id('inbox'),
+  text: z.string().min(1).max(5000),
+  source: chapterSourceSchema,
+  capturedAt: timestamp,
+})
+export type InboxItem = z.infer<typeof inboxItemSchema>
+
+/** One captured sentence not yet filed under an entry: `inbox/<id>.json`. */
+export const inboxItemFileSchema = inboxItemSchema.extend({
+  formatVersion,
+  worldId: id('world'),
+})
+
+/**
+ * The old single inbox file (`inbox.json`), still read: its items move to
+ * their own files the first time the inbox changes.
+ */
 export const inboxFileSchema = z.looseObject({
   formatVersion,
   worldId: id('world'),
-  items: z.array(
-    z.looseObject({
-      id: id('inbox'),
-      text: z.string().min(1).max(5000),
-      source: chapterSourceSchema,
-      capturedAt: timestamp,
-    }),
-  ),
+  items: z.array(inboxItemSchema),
 })
 export type InboxFile = z.infer<typeof inboxFileSchema>
-export type InboxItem = InboxFile['items'][number]
 
 /** Suggestions the writer turned down; they never come back. */
 export const rejectedFileSchema = z.looseObject({

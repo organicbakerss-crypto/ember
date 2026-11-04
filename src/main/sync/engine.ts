@@ -29,6 +29,8 @@ import { KeyedLock } from '../fs/keyedLock'
 import { AppError } from '../errors'
 import { CloudError, PreconditionFailed, type CloudStore } from './cloud'
 import { conflictCopy } from './conflicts'
+import { ConflictStore } from './conflictStore'
+import { mergeFile } from './merge'
 import {
   HashCache,
   isSyncablePath,
@@ -160,6 +162,8 @@ export class SyncEngine {
   private readonly hooks: SyncHooks
   private readonly now: () => Date
   readonly hashes: HashCache
+  /** Versions set aside when both computers changed a file. */
+  readonly conflicts: ConflictStore
   device: string
   private loaded = false
 
@@ -171,6 +175,7 @@ export class SyncEngine {
     this.device = options.device
     this.now = options.now ?? (() => new Date())
     this.hashes = new HashCache(join(this.stateDir, 'hashes.json'))
+    this.conflicts = new ConflictStore(join(this.stateDir, 'conflicts'))
   }
 
   /**
@@ -355,7 +360,7 @@ export class SyncEngine {
     const downloads: { rel: string; hash: string; expect: string | null }[] = []
     const removals: { rel: string; expect: string }[] = []
     const markers: string[] = []
-    const conflicts: { rel: string; hash: string; expect: string }[] = []
+    const conflicts: { rel: string; hash: string; expect: string; base: string | null }[] = []
     const rels = new Set([...localFiles.keys(), ...Object.keys(cloudFiles), ...Object.keys(base)])
     for (const rel of [...rels].sort()) {
       const b = base[rel] ?? null
@@ -377,14 +382,19 @@ export class SyncEngine {
         // Changed here, deleted there: keep it.
         uploads.push(rel)
       } else {
-        conflicts.push({ rel, hash: c, expect: l })
+        conflicts.push({ rel, hash: c, expect: l, base: b })
       }
     }
 
     // Bring the other computer's changes here.
     if (downloads.length || removals.length || conflicts.length) {
       const blobs = new Map<string, Uint8Array>()
-      for (const { hash } of [...downloads, ...conflicts]) {
+      const wanted = [
+        ...[...downloads, ...conflicts].map((x) => x.hash),
+        // The version both last agreed on, to combine the two (may be gone: then without it).
+        ...conflicts.flatMap((k) => (k.base ? [k.base] : [])),
+      ]
+      for (const hash of wanted) {
         if (blobs.has(hash)) continue
         const bytes = await this.fetchBlob(hash)
         if (bytes) blobs.set(hash, bytes)
@@ -425,9 +435,19 @@ export class SyncEngine {
               report.problems.push(`${unit}/${k.rel}: its contents are missing in the cloud`)
               continue
             }
+            const path = join(this.root, unit, k.rel)
+            let mine: Uint8Array
+            try {
+              mine = await fs.promises.readFile(path)
+            } catch (err) {
+              if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue
+              throw err
+            }
+            if (sha256(mine) !== k.expect) continue // Changed here meanwhile: next round.
             const from = cloudFiles[k.rel]!
-            const copy = await this.keepBoth(unit, k.rel, bytes, from)
-            if (copy) applied.push(copy)
+            const agreed = k.base ? (blobs.get(k.base) ?? null) : null
+            const written = await this.keepBoth(unit, k.rel, agreed, mine, bytes, from)
+            applied.push(...written.filter((rel) => rel !== k.rel))
             // This computer's version now counts as the newer one: it goes up next.
             base[k.rel] = k.hash
             applied.push(k.rel)
@@ -496,35 +516,65 @@ export class SyncEngine {
     return false
   }
 
-  /** Both computers changed a file: keep this one, and the other one beside it or aside. */
+  /**
+   * Both computers changed a file. Chapters and entries: the other version
+   * becomes a copy beside this one. Other files: the two are combined where
+   * possible; whatever can't be is set aside (Settings → Sync → Conflicts).
+   * Returns the files written here.
+   */
   private async keepBoth(
     unit: string,
     rel: string,
+    base: Uint8Array | null,
+    mine: Uint8Array,
     theirs: Uint8Array,
     from: CloudFile,
-  ): Promise<string | null> {
-    const at = new Date(from.at || this.timestamp())
-    const copy = conflictCopy(rel, theirs, {
-      device: from.by,
-      at: Number.isNaN(at.getTime()) ? this.now() : at,
-    })
+  ): Promise<string[]> {
+    const parsed = new Date(from.at || this.timestamp())
+    const at = Number.isNaN(parsed.getTime()) ? this.now() : parsed
+    const copy = conflictCopy(rel, theirs, { device: from.by, at })
     if (copy) {
-      const path = join(this.root, unit, copy.rel)
-      await fs.promises.mkdir(dirname(path), { recursive: true })
-      await writeFileAtomic(path, copy.bytes)
+      await this.writeHere(unit, copy.rel, copy.bytes)
       this.hooks.notice(
         `“${copy.original}” changed on both computers. Both versions are kept; the other one is “${copy.name}”.`,
       )
-      return copy.rel
+      return [copy.rel]
     }
-    const stamp = this.timestamp().replace(/[:.]/g, '-')
-    const aside = join(this.stateDir, 'conflicts', stamp, unit, rel)
-    await fs.promises.mkdir(dirname(aside), { recursive: true })
-    await writeFileAtomic(aside, theirs)
+    const merged = mergeFile(unit, rel, base, mine, theirs, { device: from.by })
+    const written: string[] = []
+    if (merged) {
+      await this.hooks.beforeReplace(unit, rel)
+      await this.writeHere(unit, rel, merged.bytes)
+      written.push(rel)
+      if (merged.copy) {
+        await this.writeHere(unit, merged.copy.rel, merged.copy.bytes)
+        written.push(merged.copy.rel)
+        this.hooks.notice(
+          `A conversation went on differently on each computer. Both are kept; the other one is “${merged.copy.name}”.`,
+        )
+      }
+      if (merged.clean) return written
+    }
+    await this.conflicts.save({
+      unit,
+      rel,
+      device: from.by,
+      at: at.toISOString(),
+      reason: 'both-changed',
+      bytes: theirs,
+    })
     this.hooks.notice(
-      `A file changed on both computers; this computer’s version is kept and the other is saved in the sync folder.`,
+      merged
+        ? 'Something changed in the same place on both computers. The changes were combined, keeping this computer’s where they clashed; the other version is in Settings → Sync → Conflicts.'
+        : 'A file changed on both computers. This computer’s version is kept; the other is in Settings → Sync → Conflicts.',
     )
-    return null
+    return written
+  }
+
+  private async writeHere(unit: string, rel: string, bytes: Uint8Array) {
+    const path = join(this.root, unit, rel)
+    await fs.promises.mkdir(dirname(path), { recursive: true })
+    await writeFileAtomic(path, bytes)
   }
 
   /* ---------- cloud pieces ---------- */
