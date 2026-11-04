@@ -821,8 +821,13 @@ Build in this order. Each milestone ends with a working app the user can actuall
      - saves a **chapter summary** (a few sentences, kept with the chapter's volume and synced), which makes possible **Ask the whole story** (questions answered across every chapter's summary, pointing to the chapter) and **Where did I leave off** (a short recap of the last few chapters when opening one after a break);
      - runs a **continuity check**: anything that contradicts the world (an eye colour that changed, someone in two places at once, the dead talking) goes to the inbox with its quote. Nothing changes by itself.
    - **10e: Small extras.** Blurb and synopsis drafts (book blurb, Royal Road description) from the summaries; one-click prompts in the AI pane ("Read this as a beta reader", "Names that fit this world"). Not planned: autocomplete or "continue writing for me".
-11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
-12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
+11. **Voice** (optional module, off by default; replaces the companion, which was cut: too fiddly, and voices for a character never sound right). Uses **VoiceStudio** (github.com/debpalash/voicestudio, a local ElevenLabs alternative) when it's running on the computer, found at `http://127.0.0.1:3900/.well-known/voicestudio-speech`; it's only talked to, never bundled (AGPL). Optionally another computer's VoiceStudio on the home network (address + its PIN), so the Intel Mac can use the Linux computer's voices. Without it, the fallback:
+   - **Read aloud:** a play button that reads from the cursor and highlights as it goes. With VoiceStudio it makes the next paragraph while one plays (it makes speech about 4× faster than it plays, so only the first few seconds wait); the fallback is the system's voices (Mac "Enhanced/Premium" voices are decent).
+   - **Dictation:** speak and the words go in at the cursor. VoiceStudio's speech-to-text (`/v1/audio/transcriptions`, OpenAI-compatible; it handles names better); the fallback is the Mac's own dictation, which already works in the editor.
+   - **Audiobook export:** a book (or volume) to audio files, chapter by chapter, as a background job that resumes where it stopped (about 2–3 hours for 100,000 words at the measured speed). VoiceStudio only.
+   - Later, maybe: talk to the AI pane and hear the answer (first sentence first, so it starts in a couple of seconds).
+   - To check when building: VoiceStudio's speech generation is offered as an MCP tool (`generate_speech` at `/mcp/`, WAV/OGG/Opus); confirm its request format against the installed copy.
+12. *(Merged into 11.)*
 13. **Themes:** done early (after 4e): High Contrast and eighteen more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
