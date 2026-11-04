@@ -4429,3 +4429,57 @@ kbd {
 .binder-row.selected .binder-label {
   box-shadow: 0 0 0 1.5px currentColor;
 }
+
+/* Comments on the text */
+.comment-mark {
+  background: rgba(240, 190, 40, 0.22);
+  border-bottom: 2px solid rgba(220, 160, 20, 0.65);
+  border-radius: 2px;
+}
+.comments-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.comments-panel h2 {
+  margin-bottom: 0;
+}
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.comment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid rgba(220, 160, 20, 0.65);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.comment-card.active {
+  border-color: rgba(220, 160, 20, 0.9);
+  box-shadow: 0 0 0 1px rgba(220, 160, 20, 0.5);
+}
+.comment-passage {
+  all: unset;
+  cursor: pointer;
+  font-style: italic;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+.comment-passage:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+.comment-card textarea {
+  resize: vertical;
+}
+.comment-card > .link {
+  align-self: flex-end;
+}

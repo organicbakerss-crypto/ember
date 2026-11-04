@@ -81,6 +81,15 @@ export function attachTextMenu(
         { type: 'separator' },
       )
     }
+    if (params.isEditable && selected) {
+      items.push(
+        {
+          label: 'Add a comment',
+          click: () => window.webContents.send(`${IPC_EVENT_PREFIX}text:comment`, null),
+        },
+        { type: 'separator' },
+      )
+    }
     const extra = extraItems(params)
     if (extra.length) items.push(...extra, { type: 'separator' })
     if (params.isEditable) {

@@ -1118,6 +1118,8 @@ export interface IpcEvents {
   'library:changed': LibraryChange
   /** "Add to world" was chosen on selected text (from the right-click menu). */
   'text:quickAdd': string
+  /** "Add a comment" was chosen on selected text (from the right-click menu). */
+  'text:comment': null
   /** Something was captured from the right-click menu (a short confirmation to show). */
   'text:captured': string
   'settings:changed': AppSettings

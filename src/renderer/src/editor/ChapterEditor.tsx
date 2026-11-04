@@ -12,6 +12,13 @@ import { chapterExtensions } from './extensions'
 import { NameCards, type NameIndex } from './NameCards'
 import { docWords, findScenes, type Scene } from './scenes'
 import { Toolbar } from './Toolbar'
+import {
+  addCommentTr,
+  listComments,
+  removeCommentTr,
+  setNoteTr,
+  type CommentInfo,
+} from './comments'
 import { PAGE_GAP, usePages } from './usePages'
 import { useChapterSaver, type SaveState } from './useChapterSaver'
 
@@ -49,6 +56,13 @@ export interface EditorHandle {
   markReading: (pos: number | null) => void
   /** Puts text in at the cursor (dictation), as one undoable step. Returns whether it did. */
   insertText: (text: string) => boolean
+  /** Puts a comment on the selected text; its id, or null when there's no selection. */
+  addComment: () => string | null
+  setCommentNote: (id: string, note: string) => void
+  /** Takes a comment off (one undoable step; the text stays). */
+  removeComment: (id: string) => void
+  /** Selects and shows a comment's passage. */
+  showComment: (id: string) => void
 }
 
 /** A search match to select once the chapter is open. */
@@ -75,6 +89,10 @@ interface Props {
   onMeta: (meta: ChapterMeta) => void
   onWords: (words: number) => void
   onScenes: (scenes: Scene[]) => void
+  /** The chapter's comments, whenever they change. */
+  onComments?: (comments: CommentInfo[]) => void
+  /** The comment the cursor is in (null: none). */
+  onActiveComment?: (id: string | null) => void
   onSaveState: (state: SaveState, error: string | null) => void
   reveal?: Reveal | null
   /** Focus mode: just the page, no toolbar. */
@@ -224,9 +242,15 @@ function EditorPage(
       if (unreadable.current || readOnly) e.setEditable(false)
       onWords(docWords(e.state.doc))
       onScenes(findScenes(e.state.doc))
+      props.onComments?.(listComments(e.state.doc))
       props.onParagraphs(editorParagraphs(e.state.doc))
     },
     onSelectionUpdate: ({ editor: e }) => {
+      const { $from } = e.state.selection
+      const inside = [...$from.marks(), ...($from.nodeAfter?.marks ?? [])].find(
+        (m) => m.type.name === 'comment',
+      )
+      props.onActiveComment?.(inside ? String(inside.attrs['id']) : null)
       clearTimeout(selectionTimer.current)
       selectionTimer.current = setTimeout(() => {
         if (e.isDestroyed) return
@@ -239,6 +263,7 @@ function EditorPage(
       saver.changeContent()
       onWords(docWords(e.state.doc))
       onScenes(findScenes(e.state.doc))
+      props.onComments?.(listComments(e.state.doc))
       // Stats recalculate a moment after typing stops, not on every key.
       clearTimeout(paragraphTimer.current)
       paragraphTimer.current = setTimeout(() => {
@@ -310,6 +335,7 @@ function EditorPage(
     editor.commands.setContent(editableContent(shown.content), { emitUpdate: false })
     onWords(docWords(editor.state.doc))
     onScenes(findScenes(editor.state.doc))
+    props.onComments?.(listComments(editor.state.doc))
     props.onParagraphs(editorParagraphs(editor.state.doc))
     // Only when another save arrives; the callbacks are stable enough not to matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -409,6 +435,28 @@ function EditorPage(
       const spaced = before && !/\s$/.test(before) ? ` ${text}` : text
       editor.chain().focus().insertContent(spaced).run()
       return true
+    },
+    addComment() {
+      if (readOnly || contentError) return null
+      const made = addCommentTr(editor.state)
+      if (!made) return null
+      editor.view.dispatch(made.tr)
+      return made.id
+    },
+    setCommentNote(id: string, note: string) {
+      if (readOnly || contentError) return
+      const tr = setNoteTr(editor.state, id, note)
+      if (tr) editor.view.dispatch(tr)
+    },
+    removeComment(id: string) {
+      if (readOnly || contentError) return
+      const tr = removeCommentTr(editor.state, id)
+      if (tr) editor.view.dispatch(tr)
+    },
+    showComment(id: string) {
+      const c = listComments(editor.state.doc).find((x) => x.id === id)
+      if (c)
+        editor.chain().focus().setTextSelection({ from: c.from, to: c.to }).scrollIntoView().run()
     },
     getDoc() {
       if (readOnly || contentError) return null

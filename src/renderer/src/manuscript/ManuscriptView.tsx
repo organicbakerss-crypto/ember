@@ -10,6 +10,7 @@ import { Cover } from '../components/Cover'
 import { volumeCover } from '../covers'
 import { Toolbar } from '../editor/Toolbar'
 import { SceneBreak } from '../editor/sceneBreak'
+import { CommentMark } from '../editor/comments'
 import { Pagination } from '../editor/pagination'
 import { PAGE_GAP, usePages } from '../editor/usePages'
 import { usePane } from '../panes/PaneContext'
@@ -197,6 +198,7 @@ function ManuscriptEditor(props: {
       Color,
       FontFamily,
       SceneBreak,
+      CommentMark,
       ManuscriptDocument,
       ChapterSection,
       Pagination,

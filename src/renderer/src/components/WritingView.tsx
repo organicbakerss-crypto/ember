@@ -37,6 +37,8 @@ import { loadLocal, saveLocal } from '../storage'
 import { MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { ChapterNotesPanel } from './ChapterNotesPanel'
+import { CommentsPanel } from './CommentsPanel'
+import type { CommentInfo } from '../editor/comments'
 import { ManuscriptView } from '../manuscript/ManuscriptView'
 import { QuickAddDialog } from '../world/QuickAddDialog'
 import { nameMatcher } from '@shared/names'
@@ -58,7 +60,7 @@ import { copyChapterForRoyalRoad, ExportDialog } from '../io/ExportDialog'
 import { ImportDialog } from '../io/ImportDialog'
 import { usePane } from '../panes/PaneContext'
 
-type Panel = 'binder' | 'search' | 'notes' | 'history' | 'diagnostics' | 'world' | 'ai'
+type Panel = 'binder' | 'search' | 'notes' | 'comments' | 'history' | 'diagnostics' | 'world' | 'ai'
 
 /** A chapter to open, optionally showing the first use of a name. */
 export interface ChapterTarget {
@@ -102,6 +104,9 @@ export function WritingView(props: {
   const [liveMeta, setLiveMeta] = useState<Record<string, ChapterMeta>>({})
   const [liveWords, setLiveWords] = useState<Record<string, number>>({})
   const [scenes, setScenes] = useState<Scene[]>([])
+  const [comments, setComments] = useState<CommentInfo[]>([])
+  const [activeComment, setActiveComment] = useState<string | null>(null)
+  const [newComment, setNewComment] = useState<string | null>(null)
   const [save, setSave] = useState<{ state: SaveState; error: string | null }>({
     state: 'saved',
     error: null,
@@ -353,6 +358,21 @@ export function WritingView(props: {
     // Remembered for the full-width view only; a split pane always starts with it closed.
     if (!pane.split) saveLocal('writing.panel', next ? 'open' : 'closed')
   }
+
+  /** Comments on the selected text, then opens the comments with its note box ready. */
+  const addComment = () => {
+    const id = editor.current?.addComment() ?? null
+    if (!id) {
+      actions.toast('Select some text first, then add a comment to it.')
+      return
+    }
+    setNewComment(id)
+    openPanel('comments')
+  }
+  useIpcEvent('text:comment', () => {
+    if (pane.active) addComment()
+  })
+
   const togglePanel = (which: Panel) => openPanel(panel === which ? null : which)
 
   const renameOpenChapter = () => {
@@ -379,6 +399,7 @@ export function WritingView(props: {
       else if (modKey(e) && e.altKey && e.code === 'KeyR') toggleRhythm()
       else if (modKey(e) && e.altKey && e.code === 'KeyE') toggleEcho()
       else if (modKey(e) && e.altKey && e.code === 'KeyN') startQuickAdd()
+      else if (modKey(e) && e.altKey && e.code === 'KeyM') addComment()
       else if (e.key === 'Escape' && focusMode) setFocusMode(false)
       else return
       e.preventDefault()
@@ -652,6 +673,13 @@ export function WritingView(props: {
     },
     { id: 'diagnostics', title: 'Diagnostics', run: () => openPanel('diagnostics') },
     { id: 'notes', title: 'Chapter synopsis and notes', run: () => openPanel('notes') },
+    {
+      id: 'comment',
+      title: 'Comment on the selected text',
+      shortcut: `${MOD}Alt+M`,
+      run: addComment,
+    },
+    { id: 'comments', title: 'Show the comments', run: () => openPanel('comments') },
     ...(selectedId
       ? (['draft', 'revised', 'done'] as const).map((status) => ({
           id: `status-${status}`,
@@ -979,6 +1007,13 @@ export function WritingView(props: {
           <path d="M9 10h7M9 14h7M9 18h4" />
         </RailButton>
         <RailButton
+          label="Comments"
+          active={panel === 'comments'}
+          onClick={() => togglePanel('comments')}
+        >
+          <path d="M4 5h16v11H9l-5 4z" />
+        </RailButton>
+        <RailButton
           label="History"
           active={panel === 'history'}
           onClick={() => togglePanel('history')}
@@ -1079,6 +1114,18 @@ export function WritingView(props: {
               chapterId={selectedId}
               chapterTitle={current?.title ?? ''}
               aiOn={aiOn}
+            />
+          )}
+          {panel === 'comments' && (
+            <CommentsPanel
+              comments={comments}
+              activeId={activeComment}
+              focusId={newComment}
+              readOnly={false}
+              onAdd={addComment}
+              onNote={(id, note) => editor.current?.setCommentNote(id, note)}
+              onRemove={(id) => editor.current?.removeComment(id)}
+              onShow={(id) => editor.current?.showComment(id)}
             />
           )}
           {panel === 'history' && (
@@ -1200,6 +1247,8 @@ export function WritingView(props: {
               onMeta={onMeta}
               onWords={onWords}
               onScenes={setScenes}
+              onComments={setComments}
+              onActiveComment={setActiveComment}
               onSaveState={onSaveState}
               reveal={reveal?.chapterId === selectedId ? reveal : null}
               bare={focusMode}

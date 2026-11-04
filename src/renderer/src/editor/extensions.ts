@@ -7,6 +7,7 @@ import { ReadingMark } from './readingMark'
 import { LinkedNames } from './linkedNames'
 import { Pagination } from './pagination'
 import { SceneBreak } from './sceneBreak'
+import { CommentMark } from './comments'
 
 /** The editor's schema. Changing it changes what chapter files can contain. */
 export function chapterExtensions(placeholder = 'Start writing…'): Extensions {
@@ -23,6 +24,7 @@ export function chapterExtensions(placeholder = 'Start writing…'): Extensions 
     Color,
     FontFamily,
     SceneBreak,
+    CommentMark,
     AnalysisDecorations,
     ReadingMark,
     Pagination,
