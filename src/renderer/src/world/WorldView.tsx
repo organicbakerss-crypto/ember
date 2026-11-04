@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { SettingsWindow } from '../components/SettingsWindow'
 import type { Appearance, EntrySummary, SeriesSummary } from '@shared/ipc'
 import { LENSES } from '@shared/world/lenses'
@@ -13,6 +13,7 @@ import { InboxView } from './InboxView'
 import { LensView } from './LensView'
 import { lensOf, loadRecent, pushRecent, shownTemplates, templateName } from './model'
 import { Portrait } from './Portrait'
+import { searchEntries } from './search'
 import { QuickAddDialog } from './QuickAddDialog'
 import { TemplateDialog } from './TemplateDialog'
 import { TextFormDialog } from './TextFormDialog'
@@ -119,6 +120,10 @@ export function WorldView(props: {
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [digest, setDigest] = useState<string | null>(null)
+  // The side panel's search (a tag clicked on an entry fills it with "#tag").
+  const [query, setQuery] = useState('')
+  const [picked, setPicked] = useState(0)
+  const searchBox = useRef<HTMLInputElement>(null)
 
   const go = useCallback(
     (next: Place) => {
@@ -178,7 +183,10 @@ export function WorldView(props: {
       if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowLeft') back()
       else if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowRight') forward()
       else if (modKey(e) && e.altKey && e.code === 'KeyN') setQuickAdd({})
-      else return
+      else if (modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        searchBox.current?.focus()
+        searchBox.current?.select()
+      } else return
       e.preventDefault()
     }
     const onMouse = (e: MouseEvent) => {
@@ -271,6 +279,7 @@ export function WorldView(props: {
     .filter((e): e is EntrySummary => !!e && !view.world.pinned.includes(e.id))
     .slice(0, 6)
 
+  const matches = searchEntries(view.entries, query)
   const sideItem = (e: EntrySummary) => (
     <li key={e.id}>
       <button
@@ -412,6 +421,58 @@ export function WorldView(props: {
         </header>
 
         <aside className="side-panel world-panel">
+          <input
+            ref={searchBox}
+            type="search"
+            className="world-search"
+            aria-label="Search the world"
+            placeholder={`Search the world (${MOD}F)`}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setPicked(0)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') setPicked((p) => Math.min(p + 1, matches.length - 1))
+              else if (e.key === 'ArrowUp') setPicked((p) => Math.max(p - 1, 0))
+              else if (e.key === 'Enter' && matches[picked]) openEntry(matches[picked].entry.id)
+              else if (e.key === 'Escape') setQuery('')
+              else return
+              e.preventDefault()
+            }}
+          />
+          {query.trim() && (
+            <section aria-label="Search results" className="world-search-results">
+              <h3 className="panel-heading small muted">
+                {matches.length === 0
+                  ? 'Nothing found'
+                  : `${matches.length} ${matches.length === 1 ? 'entry' : 'entries'}`}
+              </h3>
+              <ul className="world-side-list">
+                {matches.map((m, i) => (
+                  <li key={m.entry.id}>
+                    <button
+                      className={`world-nav-item ${i === picked ? 'picked' : ''} ${place.kind === 'entry' && place.entryId === m.entry.id ? 'active' : ''}`}
+                      onClick={() => openEntry(m.entry.id)}
+                    >
+                      <Portrait
+                        worldId={worldId}
+                        name={m.entry.name}
+                        portrait={m.entry.portrait}
+                        size="small"
+                      />
+                      <span className="world-nav-label">
+                        {m.entry.name}
+                        <span className="world-nav-hint">
+                          {m.why ?? templateName(world, m.entry.template)}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <nav className="world-lenses" aria-label="Lenses">
             {LENSES.map((lens) => (
               <button
@@ -490,6 +551,10 @@ export function WorldView(props: {
                   onSaveState={onSaveState}
                   onDeleted={back}
                   onOpenMap={(mapId) => openMap(mapId)}
+                  onShowTag={(tag) => {
+                    setQuery(`#${tag}`)
+                    setPicked(0)
+                  }}
                 />
               ) : (
                 <div className="page-message">

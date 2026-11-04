@@ -27,7 +27,8 @@
     "religion": "Faith",
     "law": "Regulation",
     "technology": "Gizmo",
-    "custom": "Etiquette"
+    "custom": "Etiquette",
+    "page": "Bulletin"
   },
   "cast": {
     "story": "On the air",

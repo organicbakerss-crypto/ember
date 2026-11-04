@@ -27,7 +27,8 @@
     "religion": "Creed",
     "law": "Directive",
     "technology": "Tech",
-    "custom": "Protocol"
+    "custom": "Protocol",
+    "page": "Archive log"
   },
   "cast": {
     "story": "On board",

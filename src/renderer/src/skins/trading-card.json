@@ -27,7 +27,8 @@
     "religion": "Order",
     "law": "Ruling",
     "technology": "Artifact",
-    "custom": "House rule"
+    "custom": "House rule",
+    "page": "Rulebook page"
   },
   "cast": {
     "story": "In play",

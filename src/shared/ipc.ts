@@ -30,6 +30,8 @@ import {
   id,
   lensSchema,
   portraitSchema,
+  pictureSchema,
+  tagSchema,
   quoteSchema,
   boardFileSchema,
   pinSchema,
@@ -203,6 +205,9 @@ export interface EntrySummary {
   /** The start of the entry's page. */
   snippet: string
   portrait: Portrait | null
+  tags: string[]
+  /** How many pictures it has (besides the portrait). */
+  pictures: number
   mergedFrom: string[]
   /** Entries linked from the page: with `@`, or by typing their name. */
   links: string[]
@@ -467,6 +472,8 @@ export const ipcInputs = {
       body: richTextDocSchema.optional(),
       quotes: z.array(quoteSchema).max(2000).optional(),
       portrait: portraitSchema.nullable().optional(),
+      tags: z.array(tagSchema).max(100).optional(),
+      gallery: z.array(pictureSchema).max(500).optional(),
       mergedFrom: z.array(id('entry')).max(500).optional(),
       when: timelinePlaceSchema.nullable().optional(),
     }),
@@ -482,6 +489,14 @@ export const ipcInputs = {
     unlink: z.boolean(),
   }),
   'entry:portrait': z.object({
+    worldId: id('world'),
+    entryId: id('entry'),
+    data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_COVER_BYTES, {
+      message: 'That image is too large (20 MB at most).',
+    }),
+  }),
+  /** Adds a picture to an entry's gallery. */
+  'entry:addPicture': z.object({
     worldId: id('world'),
     entryId: id('entry'),
     data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_COVER_BYTES, {
@@ -1031,6 +1046,7 @@ export interface IpcResults {
   'entry:merge': EntryChangeResult & { kept: WorldEntryFile }
   'entry:delete': EntryChangeResult
   'entry:portrait': WorldEntryFile
+  'entry:addPicture': WorldEntryFile
   'entry:capture': WorldEntryFile
   'inbox:get': WorldInbox
   'inbox:capture': InboxItem

@@ -33,6 +33,8 @@ import {
   valueLabel,
 } from './model'
 import { Portrait } from './Portrait'
+import { EntryGallery } from './EntryGallery'
+import { EntryTags } from './EntryTags'
 import { mapOfPlace } from './map/mapModel'
 import { RelationshipEditor } from './board/RelationshipEditor'
 import { useRelationships } from './board/useRelationships'
@@ -59,6 +61,8 @@ export function EntryPage(props: {
   onDeleted: () => void
   /** Opens a place's own map. */
   onOpenMap?: (mapId: string) => void
+  /** Lists every entry with a tag (World mode's search). */
+  onShowTag?: (tag: string) => void
 }) {
   const { world, entryId } = props
   const worldId = world.view.world.id
@@ -208,7 +212,7 @@ function EntryView(
   }
   const createLinked = async (name: string, templateId: string) => {
     const created = await actions.create(name, templateId)
-    return created && { ...created, snippet: '', links: [] }
+    return created && { ...created, snippet: '', links: [], pictures: 0 }
   }
 
   const quick = shownFacts(world, entry, world.at, true).slice(0, MAX_QUICK_FACTS)
@@ -500,6 +504,12 @@ function EntryView(
               />
             )}
           </div>
+          <EntryTags
+            entry={entry}
+            allTags={[...new Set(world.view.entries.flatMap((e) => e.tags))].sort()}
+            onChange={(tags, label) => void save({ tags }, label)}
+            onShowTag={props.onShowTag}
+          />
         </div>
         <button className="icon entry-more" aria-label="More actions" onClick={moreMenu}>
           ⋯
@@ -596,6 +606,31 @@ function EntryView(
           </div>
         )}
       </section>
+
+      <EntryGallery
+        worldId={worldId}
+        entry={entry}
+        onAdded={(saved, file) => {
+          setEntry(saved)
+          record({
+            label: `Added a picture to ${entry.name}`,
+            undo: () =>
+              api.invoke('entry:save', {
+                worldId,
+                entryId: entry.id,
+                patch: { gallery: saved.gallery.filter((p) => p.file !== file) },
+              }),
+          })
+        }}
+        onChange={(gallery, label) => void save({ gallery }, label)}
+        onMakePortrait={(file) =>
+          void save(
+            { portrait: { file, crop: { x: 0.5, y: 0.5, size: 1 } } },
+            `Changed the portrait of ${entry.name}`,
+          )
+        }
+        onError={toast}
+      />
 
       {quotesByField.size > 0 && (
         <section className="entry-section" aria-label="From the story">

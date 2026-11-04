@@ -504,6 +504,8 @@ export function registerIpc(
       host.current.world.deleteEntry(input.worldId, input.entryId, input.unlink),
     'entry:portrait': (input) =>
       host.current.world.setPortrait(input.worldId, input.entryId, input.data),
+    'entry:addPicture': (input) =>
+      host.current.world.addPicture(input.worldId, input.entryId, input.data),
     'entry:capture': (input) =>
       host.current.world.capture(
         input.worldId,

@@ -27,7 +27,8 @@
     "religion": "Belief",
     "law": "House rule",
     "technology": "Gadget",
-    "custom": "Habit"
+    "custom": "Habit",
+    "page": "Notebook page"
   },
   "cast": {
     "story": "Around",

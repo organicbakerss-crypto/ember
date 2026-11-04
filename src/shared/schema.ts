@@ -233,6 +233,16 @@ export const portraitSchema = z.looseObject({
 })
 export type Portrait = z.infer<typeof portraitSchema>
 
+/** A picture kept with an entry (stored once in the world's images, by its hash). */
+export const pictureSchema = z.looseObject({
+  file: z.string().regex(/^[0-9a-f]{64}\.(png|jpg|gif|webp)$/),
+  caption: z.string().max(500).catch('').default(''),
+})
+export type Picture = z.infer<typeof pictureSchema>
+
+/** A tag on an entry: short, as the writer typed it. */
+export const tagSchema = z.string().trim().min(1).max(60)
+
 export const worldEntryFileSchema = z.looseObject({
   formatVersion,
   id: id('entry'),
@@ -247,6 +257,10 @@ export const worldEntryFileSchema = z.looseObject({
   body: richTextDocSchema,
   quotes: z.array(quoteSchema).default([]),
   portrait: portraitSchema.nullable().default(null),
+  /** The writer's own labels ("noble houses", "dead", "book 2"). */
+  tags: z.array(tagSchema).catch([]).default([]),
+  /** More pictures than the portrait: outfits, house plans, reference art. */
+  gallery: z.array(pictureSchema).catch([]).default([]),
   /** Entries merged into this one; links and POV tags to them now mean this entry. */
   mergedFrom: z.array(id('entry')).default([]),
   /** For eras and events: their place on the timeline (null: not placed yet). */

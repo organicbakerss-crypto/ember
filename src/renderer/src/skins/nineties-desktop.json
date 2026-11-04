@@ -27,7 +27,8 @@
     "religion": "Protocol",
     "law": "Policy",
     "technology": "Hardware",
-    "custom": "Preference"
+    "custom": "Preference",
+    "page": "Text file"
   },
   "cast": {
     "story": "Online",

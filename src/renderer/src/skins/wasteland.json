@@ -27,7 +27,8 @@
     "religion": "Cult",
     "law": "Code",
     "technology": "Scrap tech",
-    "custom": "Ritual"
+    "custom": "Ritual",
+    "page": "Salvaged page"
   },
   "cast": {
     "story": "Alive",

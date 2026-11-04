@@ -27,7 +27,8 @@
     "religion": "Cult",
     "law": "Code",
     "technology": "Gadget",
-    "custom": "Tradition"
+    "custom": "Tradition",
+    "page": "Backstory page"
   },
   "cast": {
     "story": "In this issue",

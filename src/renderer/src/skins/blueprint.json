@@ -27,7 +27,8 @@
     "religion": "Doctrine",
     "law": "Regulation",
     "technology": "Component",
-    "custom": "Standard"
+    "custom": "Standard",
+    "page": "Spec sheet"
   },
   "cast": {
     "story": "Active",

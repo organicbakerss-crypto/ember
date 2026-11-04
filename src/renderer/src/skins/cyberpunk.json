@@ -27,7 +27,8 @@
     "religion": "Cult",
     "law": "Policy",
     "technology": "Chrome",
-    "custom": "Street code"
+    "custom": "Street code",
+    "page": "Data shard"
   },
   "cast": {
     "story": "Online",

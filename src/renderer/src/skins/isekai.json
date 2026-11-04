@@ -27,7 +27,8 @@
     "religion": "Faith",
     "law": "System rule",
     "technology": "Item",
-    "custom": "Custom"
+    "custom": "Custom",
+    "page": "Wiki page"
   },
   "cast": {
     "story": "Active",

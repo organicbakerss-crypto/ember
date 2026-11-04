@@ -27,7 +27,8 @@
     "religion": "Shrine",
     "law": "Rules",
     "technology": "Gadget",
-    "custom": "Easter egg"
+    "custom": "Easter egg",
+    "page": "Lore screen"
   },
   "cast": {
     "story": "Playing",

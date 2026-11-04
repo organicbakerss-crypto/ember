@@ -27,7 +27,8 @@
     "religion": "Church",
     "law": "Law",
     "technology": "Gear",
-    "custom": "Code"
+    "custom": "Code",
+    "page": "Case file"
   },
   "cast": {
     "story": "On the case",

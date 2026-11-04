@@ -27,7 +27,8 @@
     "religion": "Creed",
     "law": "Statute",
     "technology": "Invention",
-    "custom": "Custom"
+    "custom": "Custom",
+    "page": "Almanac page"
   },
   "cast": {
     "story": "In service",

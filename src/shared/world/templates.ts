@@ -178,6 +178,7 @@ export const BUILT_IN_TEMPLATES: readonly Template[] = [
       ['custom', 'Custom'],
     ] as const
   ).map(([id, name]): Template => ({ id, name, lens: 'how', fields: systemFields() })),
+  { id: 'page', name: 'Lore page', lens: 'how', fields: [] },
 ]
 
 /** Used for an entry whose template no longer exists: its facts are still shown. */

@@ -27,7 +27,8 @@
     "religion": "Faith",
     "law": "Pact",
     "technology": "Contraption",
-    "custom": "Rite"
+    "custom": "Rite",
+    "page": "Journal page"
   },
   "cast": {
     "story": "Among the living",

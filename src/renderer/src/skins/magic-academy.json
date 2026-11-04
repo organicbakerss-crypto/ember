@@ -27,7 +27,8 @@
     "religion": "Order",
     "law": "School rule",
     "technology": "Artifact",
-    "custom": "Tradition"
+    "custom": "Tradition",
+    "page": "Tome page"
   },
   "cast": {
     "story": "In class",

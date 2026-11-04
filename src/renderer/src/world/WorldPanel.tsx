@@ -122,7 +122,7 @@ export function WorldPanel(props: {
               onCancel={() => setEditing(null)}
               onCreateEntry={async (name, template) => {
                 const created = await props.actions.create(name, template)
-                return created && { ...created, snippet: '', links: [] }
+                return created && { ...created, snippet: '', links: [], pictures: 0 }
               }}
             />
           )}

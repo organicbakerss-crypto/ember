@@ -118,6 +118,8 @@ export type EntryPatch = Partial<
     | 'body'
     | 'quotes'
     | 'portrait'
+    | 'tags'
+    | 'gallery'
     | 'mergedFrom'
     | 'when'
   >
@@ -283,6 +285,8 @@ export class WorldStore {
       body: emptyDoc(),
       quotes: [],
       portrait: null,
+      tags: [],
+      gallery: [],
       mergedFrom: [],
       when: null,
       createdAt: time,
@@ -322,6 +326,14 @@ export class WorldStore {
     if (patch.body !== undefined) next.body = patch.body
     if (patch.quotes !== undefined) next.quotes = patch.quotes
     if (patch.portrait !== undefined) next.portrait = patch.portrait
+    if (patch.tags !== undefined) {
+      // One of each (ignoring case), as typed first.
+      const seen = new Set<string>()
+      next.tags = patch.tags
+        .map((t) => t.trim())
+        .filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+    }
+    if (patch.gallery !== undefined) next.gallery = patch.gallery
     if (patch.mergedFrom !== undefined) {
       next.mergedFrom = [...new Set(patch.mergedFrom.filter((id) => id !== entryId))]
     }
@@ -397,6 +409,11 @@ export class WorldStore {
         body,
         quotes: [...keep.quotes, ...gone.quotes],
         portrait: keep.portrait ?? gone.portrait,
+        tags: [...new Set([...keep.tags, ...gone.tags])],
+        gallery: [
+          ...keep.gallery,
+          ...gone.gallery.filter((p) => !keep.gallery.some((k) => k.file === p.file)),
+        ],
         mergedFrom: [...keep.mergedFrom, mergeId, ...gone.mergedFrom],
       })
       // Links to the duplicate now point at the entry kept.
@@ -487,6 +504,22 @@ export class WorldStore {
       const file = await this.storeImage(worldId, data, 'Portraits')
       return this.writeEntry(worldId, entryId, {
         portrait: { file, crop: { x: 0.5, y: 0.5, size: 1 } },
+      })
+    })
+    this.host.changed({ kind: 'entry', worldId, entryId })
+    return saved
+  }
+
+  /** Stores a picture once (named by its hash) and adds it to the entry's gallery. */
+  async addPicture(worldId: string, entryId: string, data: Uint8Array): Promise<WorldEntryFile> {
+    if (!detectImageType(data))
+      throw new AppError('invalid-input', 'Pictures must be PNG, JPEG, WebP or GIF images.')
+    const saved = await this.host.lock.run(`world:${worldId}`, async () => {
+      const file = await this.storeImage(worldId, data, 'Pictures')
+      const entry = await this.readEntry(worldId, entryId)
+      if (entry.gallery.some((p) => p.file === file)) return entry
+      return this.writeEntry(worldId, entryId, {
+        gallery: [...entry.gallery, { file, caption: '' }],
       })
     })
     this.host.changed({ kind: 'entry', worldId, entryId })
@@ -1448,6 +1481,8 @@ function toSummary(entry: WorldEntryFile): EntrySummary {
     facts: entry.facts,
     snippet: clip(text, SNIPPET_LENGTH),
     portrait: entry.portrait,
+    tags: entry.tags,
+    pictures: entry.gallery.length,
     mergedFrom: entry.mergedFrom,
     links: bodyLinks(entry.body),
     when: entry.when,

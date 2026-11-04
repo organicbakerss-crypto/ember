@@ -74,6 +74,33 @@ describe('entries', () => {
     expect(view.templates.some((t) => t.id === 'person')).toBe(true)
   })
 
+  it('keeps tags (one of each) and pictures; a merge keeps both entries’ tags and pictures', async () => {
+    const worldId = await world()
+    const mara = await lib.world.createEntry(worldId, { name: 'Mara', template: 'person' })
+    const saved = await lib.world.saveEntry(worldId, mara.id, {
+      tags: [' noble houses ', 'Noble Houses', 'dead'],
+    })
+    expect(saved.tags).toEqual(['noble houses', 'dead'])
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+    const withPic = await lib.world.addPicture(worldId, mara.id, png)
+    expect(withPic.gallery).toEqual([{ file: expect.stringMatching(/\.png$/), caption: '' }])
+    // The same picture twice is kept once.
+    expect((await lib.world.addPicture(worldId, mara.id, png)).gallery).toHaveLength(1)
+    await expect(
+      lib.world.addPicture(worldId, mara.id, new Uint8Array([1, 2, 3])),
+    ).rejects.toThrow()
+    const fox = await lib.world.createEntry(worldId, { name: 'The Fox', template: 'person' })
+    await lib.world.saveEntry(worldId, fox.id, { tags: ['dead', 'spy'] })
+    await lib.world.merge(worldId, mara.id, fox.id)
+    const merged = await lib.world.readEntry(worldId, mara.id)
+    expect(merged.tags).toEqual(['noble houses', 'dead', 'spy'])
+    expect(merged.gallery).toHaveLength(1)
+    expect((await lib.world.view(worldId)).entries[0]).toMatchObject({
+      tags: merged.tags,
+      pictures: 1,
+    })
+  })
+
   it('saves only the fields given, keeps unknown fields, and never links an entry to itself', async () => {
     const worldId = await world()
     const mara = await lib.world.createEntry(worldId, { name: 'Mara', template: 'person' })

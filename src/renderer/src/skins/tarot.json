@@ -27,7 +27,8 @@
     "religion": "Faith",
     "law": "Decree",
     "technology": "Instrument",
-    "custom": "Rite"
+    "custom": "Rite",
+    "page": "Reading"
   },
   "cast": {
     "story": "In the spread",

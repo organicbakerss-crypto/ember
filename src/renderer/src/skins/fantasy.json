@@ -27,7 +27,8 @@
     "religion": "Faith",
     "law": "Decree",
     "technology": "Craft",
-    "custom": "Tradition"
+    "custom": "Tradition",
+    "page": "Lore scroll"
   },
   "cast": {
     "story": "In the tale",

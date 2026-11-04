@@ -27,7 +27,8 @@
     "religion": "Belief",
     "law": "Royal rule",
     "technology": "Contraption",
-    "custom": "Tradition"
+    "custom": "Tradition",
+    "page": "Story page"
   },
   "cast": {
     "story": "On the page",
