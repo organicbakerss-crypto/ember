@@ -48,6 +48,7 @@ import { CommentsPanel } from './CommentsPanel'
 import { PublishingPanel } from './PublishingPanel'
 import type { CommentInfo } from '../editor/comments'
 import { ManuscriptView } from '../manuscript/ManuscriptView'
+import { BookView } from '../book/BookView'
 import { QuickAddDialog } from '../world/QuickAddDialog'
 import { nameMatcher } from '@shared/names'
 import { guessTemplate } from '@shared/world/guess'
@@ -152,6 +153,7 @@ export function WritingView(props: {
   }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [manuscriptOpen, setManuscriptOpen] = useState(false)
+  const [bookOpen, setBookOpen] = useState(false)
   // Bumped to reload the open chapter from disk (after a restore or replace-all).
   const [reloadToken, setReloadToken] = useState(0)
   const [reveal, setReveal] = useState<(Reveal & { chapterId: string }) | null>(null)
@@ -722,6 +724,10 @@ export function WritingView(props: {
     ownHeadings === 'both' || ownHeadings === 'number' || ownHeadings === 'title'
       ? ownHeadings
       : settings.export.headings
+  const bookStyle = useMemo(
+    () => ({ headings, sceneBreak: settings.export.sceneBreak, paragraphs: 'indented' as const }),
+    [headings, settings.export.sceneBreak],
+  )
   const arc = view?.outline.items.find(
     (i) => i.type === 'arc' && selectedId && i.chapterIds.includes(selectedId),
   )
@@ -807,6 +813,11 @@ export function WritingView(props: {
       run: addComment,
     },
     { id: 'comments', title: 'Show the comments', run: () => openPanel('comments') },
+    {
+      id: 'book-mode',
+      title: 'Book mode (read it as a printed book)',
+      run: () => void flushAll().then(() => setBookOpen(true)),
+    },
     publishingOn
       ? { id: 'publishing', title: 'Publishing tracker', run: () => openPanel('publishing') }
       : {
@@ -1121,6 +1132,15 @@ export function WritingView(props: {
             onClick={() => setManuscriptOpen((open) => !open)}
           >
             Manuscript
+          </button>
+        )}
+        {view && manuscriptIds.length > 0 && (
+          <button
+            className="small"
+            title="Read it as a printed book, two pages at a time (read-only)"
+            onClick={() => void flushAll().then(() => setBookOpen(true))}
+          >
+            Book
           </button>
         )}
         {props.onOpenWorldBeside && (
@@ -1483,6 +1503,16 @@ export function WritingView(props: {
         </div>
       </main>
 
+      {bookOpen && (
+        <BookView
+          series={series}
+          volume={volume}
+          chapterIds={manuscriptIds}
+          style={bookStyle}
+          author={settings.export.author}
+          onClose={() => setBookOpen(false)}
+        />
+      )}
       <StatusBar
         seriesId={series.id}
         volume={volume}

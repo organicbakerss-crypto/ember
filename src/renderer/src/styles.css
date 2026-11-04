@@ -4645,3 +4645,196 @@ kbd {
 .notes-panel .notes-copy {
   align-self: flex-end;
 }
+
+/* Book mode: the book read as a printed book, two pages at a time. */
+.book-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--desk);
+}
+.book-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+}
+.book-stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  perspective: 2400px;
+  overflow: hidden;
+}
+.book {
+  position: relative;
+  width: calc(2 * var(--book-w));
+  height: var(--book-h);
+  transition: transform 0.45s ease-in-out;
+  transform-style: preserve-3d;
+}
+/* Closed, the cover sits in the middle. */
+.book.closed {
+  transform: translateX(calc(-0.5 * var(--book-w)));
+}
+.book-side {
+  position: absolute;
+  top: 0;
+  width: var(--book-w);
+  height: var(--book-h);
+  touch-action: none;
+  user-select: none;
+}
+.book-side.left {
+  left: 0;
+}
+.book-side.right {
+  left: var(--book-w);
+}
+.book-page {
+  position: relative;
+  width: var(--book-w);
+  height: var(--book-h);
+  padding: var(--book-pad);
+  box-sizing: border-box;
+  background: var(--page);
+  color: var(--page-text);
+  font-family: var(--page-font);
+  font-size: var(--book-font);
+  line-height: 1.5;
+  box-shadow: var(--page-shadow);
+  overflow: hidden;
+}
+.book-side.left .book-page {
+  border-radius: 4px 0 0 4px;
+  background-image: linear-gradient(to left, rgba(0, 0, 0, 0.08), transparent 8%);
+}
+.book-side.right .book-page {
+  border-radius: 0 4px 4px 0;
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.08), transparent 8%);
+}
+.book-side.right .book-page:not(.book-cover-page)::after {
+  /* The corner to click. */
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1.6rem;
+  height: 1.6rem;
+  background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.07) 50%);
+  cursor: pointer;
+}
+.book-cover-page {
+  padding: 0;
+  cursor: pointer;
+}
+.book-cover-page .cover {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+}
+.book-title-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.book-title-page h1 {
+  font-size: 2em;
+  font-weight: normal;
+  margin: 0 0 0.4em;
+}
+.book-series {
+  font-style: italic;
+}
+.book-author {
+  margin-top: 3em;
+}
+.book-viewport {
+  width: calc(var(--book-w) - 2 * var(--book-pad));
+  height: calc(var(--book-h) - 2 * var(--book-pad) - 1.5em);
+  overflow: hidden;
+}
+.book-columns {
+  width: calc(var(--book-w) - 2 * var(--book-pad));
+  height: 100%;
+  column-width: calc(var(--book-w) - 2 * var(--book-pad));
+  column-gap: calc(2 * var(--book-pad));
+  column-fill: auto;
+  text-align: justify;
+  hyphens: auto;
+}
+.book-columns p {
+  margin: 0;
+  text-indent: 1.4em;
+}
+.book-columns h1 + p,
+.book-columns .scene-break + p {
+  text-indent: 0;
+}
+.book-columns h1.chapter-title {
+  font-size: 1.5em;
+  font-weight: normal;
+  text-align: center;
+  margin: 2.5em 0 1.5em;
+}
+.book-columns .scene-break {
+  text-align: center;
+  margin: 0.8em 0;
+  text-indent: 0;
+}
+.book-number {
+  position: absolute;
+  bottom: calc(var(--book-pad) * 0.5);
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.8em;
+  opacity: 0.6;
+}
+.book-leaf {
+  position: absolute;
+  top: 0;
+  width: var(--book-w);
+  height: var(--book-h);
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+.book-leaf.forward {
+  left: var(--book-w);
+  transform-origin: left center;
+}
+.book-leaf.backward {
+  left: 0;
+  transform-origin: right center;
+}
+.leaf-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+.leaf-face.back {
+  transform: rotateY(180deg);
+}
+.book-measure {
+  position: absolute;
+  left: -100000px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.book-measure .book-viewport {
+  font-family: var(--page-font);
+  font-size: var(--book-font);
+  line-height: 1.5;
+}
+.book-bar select {
+  width: auto;
+  max-width: 16rem;
+}
+.book-bar strong {
+  white-space: nowrap;
+}
