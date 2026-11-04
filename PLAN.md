@@ -843,6 +843,16 @@ Build in this order. Each milestone ends with a working app the user can actuall
    - The status bar: items added later appear on the right instead of the left.
    - The people board: dragging portraits isn't smooth.
    - (More to come from the writer.)
+12b. **From the audit** (`docs/audit-2026-11.md`; the writer agreed to all the broken and clutter items, and these additions):
+   - **Manuscript view**: the whole book (or volume) as one continuous book, chapter titles as headings the way a printed book shows them (the export heading settings), scene breaks, a title page. Opened by a **Manuscript** button, and by clicking the book/volume name above the chapter list in the binder.
+   - Chapter **synopsis and notes** (the stored notes shown; synopsis filled from the AI summary when there is one).
+   - Chapter **status** (draft / revised / done) and colour labels.
+   - **Comments** on the text (highlight a passage, leave a note to self).
+   - **Story-wide search and replace** (all volumes); **split** a chapter at the cursor, **merge** two, **duplicate** one.
+   - **Backups to a folder** (a zip now and then; sync isn't a backup).
+   - **Typewriter scrolling** and true **full screen**.
+   - World: a **search box**, **tags** on entries, a **picture gallery** per entry, free **lore pages**, **export the world** (a series bible).
+   - Not wanted: an outline/corkboard view; writing stats and deadline goals.
 13. **Themes:** done early (after 4e): High Contrast and eighteen more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
