@@ -3692,6 +3692,16 @@ kbd {
   flex: 1;
   padding-inline: 0.3rem;
 }
+.ai-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.ai-quick-button {
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.8rem;
+}
 .ai-scope {
   display: flex;
   flex-wrap: wrap;

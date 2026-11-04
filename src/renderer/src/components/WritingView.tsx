@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isBook, worldLinkMenu } from './worldLink'
-import { offerScope, requestEdit, useScopeAnswers } from '../ai/scope'
+import { offerScope, requestEdit, requestPrompt, useScopeAnswers } from '../ai/scope'
+import { STORY_PROMPTS } from '../ai/storyPrompts'
 import { updateWorld } from '../ai/worldUpdate'
 import { Recap } from '../ai/Recap'
 import type {
@@ -126,6 +127,11 @@ export function WritingView(props: {
   /** "Edit with AI": opens the AI beside the page with Edit chapter ticked. */
   const editWithAi = (draft: string) => {
     requestEdit(series.id, draft)
+    if (!props.aiBeside) props.onToggleAi?.()
+  }
+  /** Asks the AI (beside the page) for something about the whole story: a blurb, a synopsis. */
+  const askAboutStory = (text: string) => {
+    requestPrompt(series.id, text, 'story')
     if (!props.aiBeside) props.onToggleAi?.()
   }
   /** Reads the chapter for the world, in the background; what it finds waits in the world's inbox. */
@@ -556,6 +562,11 @@ export function WritingView(props: {
                   title: 'Edit this chapter with AI (fix spelling and grammar, add a scene…)',
                   run: () => editWithAi('Fix the spelling, grammar and punctuation.'),
                 },
+                ...STORY_PROMPTS.map((p) => ({
+                  id: `ai-${p.id}`,
+                  title: `${p.label} (AI)`,
+                  run: () => askAboutStory(p.text),
+                })),
                 ...(series.worldId
                   ? [
                       {
@@ -688,6 +699,10 @@ export function WritingView(props: {
                       disabled: !selectedId,
                       onSelect: () => editWithAi('Fix the spelling, grammar and punctuation.'),
                     },
+                    ...STORY_PROMPTS.map((p) => ({
+                      label: `${p.label} (AI)…`,
+                      onSelect: () => askAboutStory(p.text),
+                    })),
                     ...(series.worldId
                       ? [
                           {

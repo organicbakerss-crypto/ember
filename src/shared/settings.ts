@@ -78,6 +78,10 @@ export interface AiSettings {
    * the inbox, with Undo), or only suggest them.
    */
   worldChanges: 'apply' | 'suggest'
+  /** Read changed chapters for the world by itself (after you've left them alone a while). */
+  autoWorld: boolean
+  /** The writer's own one-click prompts in the AI pane. */
+  prompts: string[]
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -87,6 +91,8 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   model: '',
   chatgptModel: '',
   worldChanges: 'apply',
+  autoWorld: false,
+  prompts: [],
 }
 
 /** How exports look (Word, PDF, EPUB, Markdown, Royal Road). */

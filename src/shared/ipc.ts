@@ -274,6 +274,8 @@ export interface AiJobInfo {
   endedAt: string | null
   /** The window that asked (its web contents id). */
   origin: number
+  /** Started by itself (keeping the world up to date), not asked for. */
+  auto?: boolean
 }
 
 /** A chapter in reading order with the AI's summary of it. */

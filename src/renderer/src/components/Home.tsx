@@ -317,6 +317,8 @@ export function Home(props: { detached?: PaneRoute | null }) {
       return
     }
     if (job.kind === 'world') {
+      // Started by itself: quiet, unless something needs the writer.
+      if (job.auto && !(job.result?.questions || job.result?.continuity)) return
       if (job.state === 'done' && job.result) {
         toast(
           worldUpdateNote(job.chapterTitle, job.result),

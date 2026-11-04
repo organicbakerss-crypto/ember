@@ -46,6 +46,34 @@ export function editRequest(seriesId: string): { id: number; draft: string } | n
     : null
 }
 
+/** Asked from elsewhere (the ⋯ menu): open the AI and send this prompt, reading this much. */
+let pendingPrompt: {
+  id: number
+  seriesId: string
+  text: string
+  reach: 'here' | 'chapter' | 'story'
+} | null = null
+export function requestPrompt(
+  seriesId: string,
+  text: string,
+  reach: 'here' | 'chapter' | 'story',
+): void {
+  pendingPrompt = { id: (pendingPrompt?.id ?? 0) + 1, seriesId, text, reach }
+  version++
+  for (const l of listeners) l()
+}
+/** Takes the waiting prompt for a story (so it's sent once). */
+export function takePrompt(seriesId: string): NonNullable<typeof pendingPrompt> | null {
+  if (pendingPrompt?.seriesId !== seriesId) return null
+  const p = pendingPrompt
+  pendingPrompt = null
+  return p
+}
+/** The latest such request for a story (each has its own id, to act on once). */
+export function promptRequest(seriesId: string): NonNullable<typeof pendingPrompt> | null {
+  return pendingPrompt?.seriesId === seriesId ? pendingPrompt : null
+}
+
 const providers = new Map<string, Provider>()
 const listeners = new Set<() => void>()
 let version = 0

@@ -21,6 +21,7 @@ import {
   type IpcEnvelope,
   type IpcEvents,
   type IpcResult,
+  type LibraryChange,
 } from '@shared/ipc'
 import type { z } from 'zod'
 import type { AppSettingsStore } from './appSettings'
@@ -32,6 +33,7 @@ import type { LibraryHost } from './libraryHost'
 import type { SyncService } from './sync/service'
 import type { AiService } from './ai/service'
 import { AiJobs } from './ai/jobs'
+import { AutoWorld } from './ai/autoWorld'
 
 type Handlers = {
   [C in IpcChannel]: (
@@ -46,7 +48,7 @@ export function registerIpc(
   windows: { manager: WindowManager; leases: DocLeases },
   sync: SyncService,
   ai: AiService,
-): void {
+): { libraryChanged: (change: LibraryChange) => void } {
   const { manager, leases } = windows
   // Asking the other windows what they show (for a torn-off AI window).
   const scopeAsks = new Map<string, (scope: IpcResult<'ai:scope'>) => void>()
@@ -65,6 +67,45 @@ export function registerIpc(
       }
     },
   })
+  /** Reads a chapter for the world, as a background job (`auto`: started by itself). */
+  const updateWorld = async (
+    input: { requestId: string; seriesId: string; volumeId: string; chapterId: string },
+    origin: number,
+    auto: boolean,
+  ) =>
+    jobs.run(
+      {
+        id: input.requestId,
+        kind: 'world',
+        seriesId: input.seriesId,
+        conversation: null,
+        volumeId: input.volumeId,
+        chapterId: input.chapterId,
+        chapterTitle:
+          (
+            await host.current
+              .readChapter(input.seriesId, input.volumeId, input.chapterId)
+              .catch(() => null)
+          )?.title ?? '',
+        sent: null,
+        origin,
+        auto,
+      },
+      (_onToken, onProgress) => ai.updateWorld(input, onProgress),
+    )
+  // Keeping the world up to date by itself, when that's switched on.
+  const auto = new AutoWorld({
+    settings: async () => (await settings.read()).ai,
+    host,
+    run: (ref) =>
+      updateWorld(
+        { ...ref, requestId: `auto-${Date.now()}` },
+        BrowserWindow.getAllWindows()[0]?.webContents.id ?? 0,
+        true,
+      ),
+  })
+  auto.start()
+
   const handlers: Handlers = {
     'ai:scope': (input, event) =>
       new Promise((resolve) => {
@@ -143,26 +184,7 @@ export function registerIpc(
         (onToken) => ai.editChapter(input, onToken),
       )
     },
-    'ai:updateWorld': async (input, event) =>
-      jobs.run(
-        {
-          id: input.requestId,
-          kind: 'world',
-          seriesId: input.seriesId,
-          conversation: null,
-          volumeId: input.volumeId,
-          chapterId: input.chapterId,
-          chapterTitle:
-            (
-              await host.current
-                .readChapter(input.seriesId, input.volumeId, input.chapterId)
-                .catch(() => null)
-            )?.title ?? '',
-          sent: null,
-          origin: event.sender.id,
-        },
-        (_onToken, onProgress) => ai.updateWorld(input, onProgress),
-      ),
+    'ai:updateWorld': (input, event) => updateWorld(input, event.sender.id, false),
     'ai:sortNames': (input, event) =>
       jobs.run(
         {
@@ -454,6 +476,7 @@ export function registerIpc(
       runHandler(channel, raw, event, handlers),
     )
   }
+  return { libraryChanged: (change) => auto.changed(change) }
 }
 
 async function runHandler<C extends IpcChannel>(

@@ -11,7 +11,14 @@ import { docToMarkdown, editedDoc, type DocNode } from '@shared/ai/chapterEdit'
 import { flushAll } from '../saving'
 import { CompareDialog, type EditResult } from './CompareDialog'
 import { worldUpdateNote } from './worldUpdate'
-import { editRequest, fetchScope, localEditor, useLocalScope } from './scope'
+import {
+  editRequest,
+  fetchScope,
+  localEditor,
+  promptRequest,
+  takePrompt,
+  useLocalScope,
+} from './scope'
 
 type Mode = 'chat' | 'brainstorm' | 'ask'
 type Message = Pick<ConversationMessage, 'role' | 'content' | 'at' | 'read'>
@@ -41,6 +48,32 @@ const CONTEXT_MESSAGES = 20
 const STICK_PX = 48
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length
+/** How much the AI reads: what's selected or on screen, the whole chapter, or the whole story. */
+type Reach = 'here' | 'chapter' | 'story'
+
+/** One-click prompts above the message box (they read what the "Reads" choice says). */
+const QUICK: { label: string; mode: Mode; text: string }[] = [
+  {
+    label: 'Beta read',
+    mode: 'chat',
+    text: 'Read this as a beta reader: what works, what’s confusing, and where it drags. For each problem, give a specific fix.',
+  },
+  {
+    label: 'Pacing',
+    mode: 'chat',
+    text: 'Check the pacing of this: where it rushes, where it drags, and what to change.',
+  },
+  {
+    label: 'What happens next?',
+    mode: 'brainstorm',
+    text: 'What could happen next? Give several distinct options that fit what has happened so far.',
+  },
+  {
+    label: 'Names that fit',
+    mode: 'brainstorm',
+    text: 'Suggest names that fit this world for a new character, place or group (say which each is for), in the style of the names already in it.',
+  },
+]
 /** An id for one request to the AI. */
 const newRequestId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 const empty = (): Thread => ({ id: null, createdAt: null, messages: [] })
@@ -142,7 +175,7 @@ export function AiView(props: {
   const [draft, setDraft] = useState('')
   const [quote, setQuote] = useState<string | null>(null)
   /** How much the AI reads: what's selected or on screen, the whole chapter, or the whole story. */
-  const [reach, setReach] = useState<'here' | 'chapter' | 'story'>('here')
+  const [reach, setReach] = useState<Reach>('here')
   /** What a long job is doing now ("Summarising chapters…"). */
   const [progress, setProgress] = useState('')
   /** Reading a chapter for the world: the job, and what it found. */
@@ -515,21 +548,25 @@ export function AiView(props: {
     }
   }
 
-  const send = async (text: string) => {
+  /** Sends a message (a one-click prompt may pick the mode and how much is read). */
+  const send = async (text: string, as?: { mode?: Mode; reach?: Reach }) => {
     const question = text.trim()
     if (!question || busy || worldJob) return
-    if (editMode) {
+    if (editMode && !as) {
       await runEdit(question)
       return
     }
-    const into = mode
-    const current = thread
+    const into = as?.mode ?? mode
+    const reads = as?.reach ?? reach
+    if (into !== mode) setMode(into)
+    if (as?.reach && as.reach !== reach) setReach(as.reach)
+    const current = threads[into]
     const requestId = newRequestId()
     const scope = await fetchScope(seriesId)
     const kind =
-      reach === 'story'
+      reads === 'story'
         ? 'story'
-        : reach === 'chapter'
+        : reads === 'chapter'
           ? 'chapter'
           : scope?.selection
             ? 'selection'
@@ -699,6 +736,13 @@ export function AiView(props: {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesId])
+  // A prompt asked for from the ⋯ menu (a blurb, a synopsis): sent once, here.
+  const promptId = promptRequest(seriesId)?.id ?? 0
+  useEffect(() => {
+    const p = takePrompt(seriesId)
+    if (p) queueMicrotask(() => void send(p.text, { mode: 'chat', reach: p.reach }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptId, seriesId])
   useIpcEvent('ai:job', (job) => {
     if (job.seriesId !== seriesId) return
     // Work started elsewhere (the ⋯ menu), or finished while this pane only watched it.
@@ -930,6 +974,29 @@ export function AiView(props: {
               >
                 ✕
               </button>
+            </div>
+          )}
+          {!editMode && (
+            <div className="ai-quick small" aria-label="One-click prompts">
+              {[
+                ...QUICK,
+                ...settings.ai.prompts.map((text) => ({
+                  label: text.length > 28 ? `${text.slice(0, 26)}…` : text,
+                  mode,
+                  text,
+                })),
+              ].map((q) => (
+                <button
+                  key={q.label + q.text}
+                  type="button"
+                  className="ai-quick-button"
+                  title={q.text}
+                  disabled={!!busy || !!worldJob}
+                  onClick={() => void send(q.text, { mode: q.mode })}
+                >
+                  {q.label}
+                </button>
+              ))}
             </div>
           )}
           <div className="ai-scope small">

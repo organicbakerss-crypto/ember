@@ -678,6 +678,36 @@ function AiSettingsSection() {
             />
             Only suggest them (you accept each one)
           </label>
+          <label className="radio">
+            <input
+              type="checkbox"
+              checked={ai.autoWorld}
+              onChange={(e) => set({ autoWorld: e.target.checked })}
+            />
+            Keep the world up to date by itself: a chapter you changed is read a few minutes after
+            you leave it alone (you’re only told when there’s a question or something that may not
+            fit)
+          </label>
+          <h3>Your one-click prompts</h3>
+          <label>
+            One per line; they appear as buttons above the AI’s message box.
+            <textarea
+              rows={4}
+              defaultValue={ai.prompts.join('\n')}
+              placeholder={
+                'Is this dialogue natural?\nWhat would a skeptical reader question here?'
+              }
+              onBlur={(e) =>
+                set({
+                  prompts: e.target.value
+                    .split('\n')
+                    .map((l) => l.trim())
+                    .filter(Boolean)
+                    .slice(0, 20),
+                })
+              }
+            />
+          </label>
           <h3>Where it is</h3>
           <p className="muted small">
             The ✦ AI button on the left of the writing view opens chat, brainstorm and “Ask the

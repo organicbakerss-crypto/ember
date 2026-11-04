@@ -127,12 +127,14 @@ void app.whenReady().then(async () => {
       : {}),
   })
   const syncService = sync
+  let ipc: ReturnType<typeof registerIpc> | null = null
   const host = new LibraryHost(
     settings,
     defaultPath,
     (change) => {
       broadcast('library:changed', change)
       if (change.kind !== 'trash') syncService.noteChange()
+      ipc?.libraryChanged(change)
     },
     (library) => void syncService.attach(library),
   )
@@ -161,7 +163,7 @@ void app.whenReady().then(async () => {
     },
   })
   app.on('before-quit', () => ai.dispose())
-  registerIpc(host, appSettings, { manager, leases }, syncService, ai)
+  ipc = registerIpc(host, appSettings, { manager, leases }, syncService, ai)
   handleMediaRequests(host)
   await manager.start()
 
