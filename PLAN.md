@@ -834,6 +834,12 @@ Build in this order. Each milestone ends with a working app the user can actuall
      - **Dictate (VoiceStudio)** (⋯ menu): listens until "Stop and write it down", then inserts at the cursor; "quote … end quote" become quote marks; capitalised near-misses of the world's names are fixed ("Bran Ock" → Brannoch); the world's names are also passed to VoiceStudio as words to expect. Without VoiceStudio, the Mac's own dictation (Fn twice).
      - Still to do: a "Who's speaking" view to fix lines; making the audiobook from the app (VoiceStudio's audiobook route isn't in its API yet: the script export covers it); talking to the AI pane by voice (maybe).
 12. *(Merged into 11.)*
+12. **Layout round** (after the voice leftovers; the writer's list, Nov 2026):
+   - The Settings gear only shows in the writing view; it should be reachable everywhere (bookshelf, World mode, the AI pane).
+   - The ⋯ menu is getting cluttered (export, import, voice ×5, AI ×6, headings, Finished): group it (submenus like "AI ▸", "Voice ▸", "Export & import ▸") or move some to better places.
+   - The status bar: items added later appear on the right instead of the left.
+   - The people board: dragging portraits isn't smooth.
+   - (More to come from the writer.)
 13. **Themes:** done early (after 4e): High Contrast and eighteen more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
