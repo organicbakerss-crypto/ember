@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { EditorContent, useEditor, type JSONContent } from '@tiptap/react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { EditorContent, useEditor, type Editor, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style'
 import type { SeriesSummary, VolumeSummary } from '@shared/ipc'
@@ -10,6 +10,8 @@ import { Cover } from '../components/Cover'
 import { volumeCover } from '../covers'
 import { Toolbar } from '../editor/Toolbar'
 import { SceneBreak } from '../editor/sceneBreak'
+import { Pagination } from '../editor/pagination'
+import { PAGE_GAP, usePages } from '../editor/usePages'
 import { usePane } from '../panes/PaneContext'
 import { registerFlusher } from '../saving'
 import {
@@ -197,6 +199,7 @@ function ManuscriptEditor(props: {
       SceneBreak,
       ManuscriptDocument,
       ChapterSection,
+      Pagination,
       SectionGuard(() => readOnly.current),
     ],
     content,
@@ -311,30 +314,70 @@ function ManuscriptEditor(props: {
   return (
     <>
       <Toolbar editor={editor} />
-      <div className="page-scroll">
-        <div className="manuscript-front">
-          <div className="manuscript-cover" aria-label="Cover">
-            <Cover source={volumeCover(series, volume)} />
-          </div>
-          <div className="page manuscript-title-page" aria-label="Title page">
-            <h1>{volume.name}</h1>
-            {series.kind !== 'book' && <p className="muted">{series.name}</p>}
-            {props.author && <p>{props.author}</p>}
-          </div>
-        </div>
-        <div className="page manuscript-page">
-          <EditorContent editor={editor} onBlur={() => void flush()} />
-        </div>
-        <p className="muted small manuscript-save" role="status">
-          {saveState === 'saved'
-            ? 'Saved'
-            : saveState === 'saving'
-              ? 'Saving…'
-              : saveState === 'error'
-                ? 'Couldn’t save; trying again…'
-                : 'Editing…'}
-        </p>
-      </div>
+      <ManuscriptPages
+        editor={editor}
+        series={series}
+        volume={volume}
+        author={props.author}
+        onBlur={() => void flush()}
+        saveState={saveState}
+      />
     </>
+  )
+}
+
+/** The book as sheets of paper: the cover, the title page, then the chapters, each from a new page. */
+function ManuscriptPages(props: {
+  editor: Editor
+  series: SeriesSummary
+  volume: VolumeSummary
+  author: string
+  onBlur: () => void
+  saveState: 'saved' | 'unsaved' | 'saving' | 'error'
+}) {
+  const { editor, series, volume, saveState } = props
+  const { stackRef, pageHeight, pages } = usePages(editor, true)
+  return (
+    <div className="page-scroll">
+      <div
+        className="manuscript-sheets"
+        style={
+          { '--page-height': `${pageHeight}px`, '--page-gap': `${PAGE_GAP}px` } as CSSProperties
+        }
+      >
+        <div className="manuscript-cover" aria-label="Cover">
+          <Cover source={volumeCover(series, volume)} />
+        </div>
+        <div className="manuscript-title-page" aria-label="Title page">
+          <h1>{volume.name}</h1>
+          {series.kind !== 'book' && <p className="muted">{series.name}</p>}
+          {props.author && <p>{props.author}</p>}
+        </div>
+        <div ref={stackRef} className="page-stack paged">
+          {Array.from({ length: pages }, (_, i) => (
+            <div key={i} className="page-sheet" style={{ top: i * (pageHeight + PAGE_GAP) }}>
+              <span className="page-number" aria-label={`Page ${i + 1} of ${pages}`}>
+                {i + 1}
+              </span>
+            </div>
+          ))}
+          <article
+            className="page-content manuscript-page"
+            style={{ minHeight: pages * (pageHeight + PAGE_GAP) - PAGE_GAP }}
+          >
+            <EditorContent editor={editor} onBlur={props.onBlur} />
+          </article>
+        </div>
+      </div>
+      <p className="muted small manuscript-save" role="status">
+        {saveState === 'saved'
+          ? 'Saved'
+          : saveState === 'saving'
+            ? 'Saving…'
+            : saveState === 'error'
+              ? 'Couldn’t save; trying again…'
+              : 'Editing…'}
+      </p>
+    </div>
   )
 }

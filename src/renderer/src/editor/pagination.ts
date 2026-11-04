@@ -158,7 +158,19 @@ function measureLines(view: EditorView, origin: number): { line: Line; pos: numb
   const out: { line: Line; pos: number }[] = []
   const range = document.createRange()
   view.state.doc.descendants((node, pos) => {
-    if (!node.isTextblock && !node.isAtom) return true
+    if (!node.isTextblock && !node.isAtom) {
+      // A block marked data-starts-page begins a new page, its drawn heading too.
+      const dom = view.nodeDOM(pos)
+      if (dom instanceof HTMLElement && dom.dataset['startsPage'] !== undefined) {
+        const r = dom.getBoundingClientRect()
+        const head = dom.firstElementChild?.getBoundingClientRect()
+        out.push({
+          line: { top: r.top - origin, bottom: (head?.bottom ?? r.top) - origin, startsPage: true },
+          pos,
+        })
+      }
+      return true
+    }
     const dom = view.nodeDOM(pos)
     if (!(dom instanceof HTMLElement)) return false
     if (node.isAtom || node.content.size === 0) {

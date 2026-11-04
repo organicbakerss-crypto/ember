@@ -53,4 +53,13 @@ describe('planPageBreaks', () => {
   it('handles no lines', () => {
     expect(planPageBreaks([], geometry)).toEqual({ breaks: [], pages: 1 })
   })
+
+  it('starts a marked line on a new page, unless it already starts one', () => {
+    const ls = lines(3)
+    ls[1] = { ...ls[1]!, startsPage: true }
+    expect(planPageBreaks(ls, geometry)).toEqual({ breaks: [{ line: 1, space: 170 }], pages: 2 })
+    const first = lines(2)
+    first[0] = { ...first[0]!, startsPage: true }
+    expect(planPageBreaks(first, geometry)).toEqual({ breaks: [], pages: 1 })
+  })
 })

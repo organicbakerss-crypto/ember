@@ -32,13 +32,15 @@ export const ChapterSection = Node.create({
       mergeAttributes(HTMLAttributes, {
         class: 'ms-chapter',
         'data-chapter': node.attrs['chapterId'] as string,
-        'data-heading': node.attrs['heading'] as string,
+        // Each chapter begins on a new page (see pagination).
+        'data-starts-page': '',
       }),
-      0,
+      ['div', { class: 'ms-heading', contenteditable: 'false' }, node.attrs['heading'] as string],
+      ['div', { class: 'ms-body' }, 0],
     ]
   },
   parseHTML() {
-    return [{ tag: 'section.ms-chapter' }]
+    return [{ tag: 'section.ms-chapter', contentElement: '.ms-body' }]
   },
 })
 

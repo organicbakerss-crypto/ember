@@ -7,6 +7,8 @@
 export interface Line {
   top: number
   bottom: number
+  /** Always starts a new page (a chapter in the Manuscript view). */
+  startsPage?: boolean
 }
 
 export interface PageGeometry {
@@ -34,6 +36,16 @@ export function planPageBreaks(
   lines.forEach((line, index) => {
     const top = line.top + shift
     const bottom = line.bottom + shift
+    if (line.startsPage) {
+      const at = Math.max(page, Math.floor(top / pitch))
+      if (top > at * pitch + 0.5) {
+        const space = (at + 1) * pitch - top
+        breaks.push({ line: index, space })
+        shift += space
+        page = at + 1
+        return
+      }
+    }
     const pageEnd = page * pitch + contentHeight
     // A line that would cross the bottom of the text area moves to the next page.
     // (A line taller than a whole page stays put rather than looping.)

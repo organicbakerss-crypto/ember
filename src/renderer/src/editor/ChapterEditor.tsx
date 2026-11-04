@@ -7,12 +7,12 @@ import { ReadOnlyNote } from '../panes/ReadOnlyNote'
 import { useDocLease } from '../panes/useDocLease'
 import { markReadingTr } from './readingMark'
 import { RECALC_DELAY_MS, type ActiveEcho, type AnalysisOptions } from './analysisDecorations'
-import { PAPER_SIZES } from '@shared/settings'
 import { useSettings } from '../useTheme'
 import { chapterExtensions } from './extensions'
 import { NameCards, type NameIndex } from './NameCards'
 import { docWords, findScenes, type Scene } from './scenes'
 import { Toolbar } from './Toolbar'
+import { PAGE_GAP, usePages } from './usePages'
 import { useChapterSaver, type SaveState } from './useChapterSaver'
 
 export interface ChapterMeta {
@@ -144,8 +144,6 @@ function editableContent(content: ChapterFile['content']): JSONContent {
 }
 
 const SELECTION_DELAY_MS = 300
-/** Space between sheets in the page view. */
-const PAGE_GAP = 28
 
 /** Paragraph texts of the document (or of a range of it), for stats. */
 function editorParagraphs(doc: PMNode, from = 0, to = doc.content.size): string[] {
@@ -274,41 +272,7 @@ function EditorPage(
   // Page view: sheets of a fixed paper shape. Height follows the page's width.
   const { settings } = useSettings()
   const paged = settings.pageView === 'pages'
-  const ratio = PAPER_SIZES[settings.paperSize].ratio
-  const stackRef = useRef<HTMLDivElement>(null)
-  const [geometry, setGeometry] = useState({ width: 0, marginBlock: 0 })
-  const [pages, setPages] = useState(1)
-  useEffect(() => {
-    const stack = stackRef.current
-    if (!stack) return
-    const measure = () => {
-      const content = stack.querySelector('.page-content')
-      const marginBlock = content ? parseFloat(getComputedStyle(content).paddingTop) : 0
-      setGeometry((g) =>
-        g.width === stack.clientWidth && g.marginBlock === marginBlock
-          ? g
-          : { width: stack.clientWidth, marginBlock },
-      )
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(stack)
-    return () => observer.disconnect()
-  }, [])
-  const pageHeight = Math.round(geometry.width * ratio)
-  useEffect(() => {
-    editor.commands.onPages(setPages)
-    return () => {
-      if (!editor.isDestroyed) editor.commands.onPages(null)
-    }
-  }, [editor])
-  useEffect(() => {
-    editor.commands.setPageLayout({
-      enabled: paged && pageHeight > 0,
-      contentHeight: pageHeight - 2 * geometry.marginBlock,
-      pitch: pageHeight + PAGE_GAP,
-    })
-  }, [editor, paged, pageHeight, geometry.marginBlock])
+  const { stackRef, pageHeight, pages } = usePages(editor, paged)
 
   const saver = useChapterSaver(
     { seriesId: props.seriesId, volumeId: props.volumeId, chapterId: chapter.id },
