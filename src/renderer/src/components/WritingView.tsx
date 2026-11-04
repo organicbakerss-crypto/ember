@@ -66,6 +66,8 @@ type Panel = 'binder' | 'search' | 'notes' | 'comments' | 'history' | 'diagnosti
 export interface ChapterTarget {
   chapterId: string
   find?: string
+  /** A search match to select (with the find panel open), from a search of the whole story. */
+  hit?: { node: number; start: number; end: number }
   token: number
 }
 
@@ -90,6 +92,8 @@ export function WritingView(props: {
   /** Beside the world already: no Write/World switch. */
   hideModeSwitch?: boolean
   onOpenSeries: () => void
+  /** Opens another volume of this story at a chapter (a match from a whole-story search). */
+  onOpenVolumeAt?: (volumeId: string, target: ChapterTarget) => void
 }) {
   const word = useWords()
   const pane = usePane()
@@ -331,6 +335,10 @@ export function WritingView(props: {
   if (open && open.token !== openToken) {
     setOpenToken(open.token)
     setChosenId(open.chapterId)
+    if (open.hit) {
+      setReveal({ ...open.hit, chapterId: open.chapterId, token: open.token })
+      setPanel('search')
+    }
   }
   useEffect(() => {
     if (!open?.find) return
@@ -1096,6 +1104,17 @@ export function WritingView(props: {
             <SearchPanel
               seriesId={series.id}
               volumeId={volume.id}
+              multiVolume={series.volumes.length > 1}
+              onOpenElsewhere={
+                props.onOpenVolumeAt
+                  ? (hit) =>
+                      props.onOpenVolumeAt?.(hit.volumeId, {
+                        chapterId: hit.chapterId,
+                        hit: { node: hit.node, start: hit.start, end: hit.end },
+                        token: Date.now(),
+                      })
+                  : undefined
+              }
               focusToken={searchFocus}
               onOpenHit={(hit) => {
                 if (hit.chapterId !== selectedId) select(hit.chapterId)

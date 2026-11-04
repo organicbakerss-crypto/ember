@@ -81,3 +81,39 @@ describe('find and replace across a volume', () => {
     expect(await fs.promises.readFile(path, 'utf8')).toBe('{ broken')
   })
 })
+
+describe('find and replace across a whole story', () => {
+  it('searches every volume in order, and replaces in all of them', async () => {
+    const series = await lib.createSeries({ name: 'S', world: { mode: 'none' } })
+    const v1 = await lib.createVolume({ seriesId: series.id, name: 'Book One' })
+    const v2 = await lib.createVolume({ seriesId: series.id, name: 'Book Two' })
+    const add = async (volumeId: string, title: string, text: string) => {
+      const ch = await lib.createChapter({ seriesId: series.id, volumeId, title })
+      await lib.saveChapter(series.id, volumeId, ch.id, { content: para(text) })
+      return ch
+    }
+    await add(v1.id, 'One', 'Mara ran.')
+    const two = await add(v2.id, 'Two', 'Mara came back.')
+    const found = await lib.searchStory(series.id, 'mara', opts)
+    expect(found.total).toBe(2)
+    expect(found.chapters.map((c) => [c.title, c.volumeName])).toEqual([
+      ['One', 'Book One'],
+      ['Two', 'Book Two'],
+    ])
+    expect(found.hits[1]).toMatchObject({ volumeId: v2.id, chapterId: two.id })
+    // One volume only still means only that one.
+    expect((await lib.searchVolume(series.id, v2.id, 'mara', opts)).total).toBe(1)
+
+    expect(await lib.replaceAllInStory(series.id, 'mara', 'Lena', opts)).toEqual({
+      chapters: 2,
+      replacements: 2,
+    })
+    expect((await lib.searchStory(series.id, 'lena', opts)).total).toBe(2)
+    // Each changed chapter kept its old text in history.
+    expect(
+      (await lib.listSnapshots(series.id, v2.id, two.id)).some(
+        (s) => s.reason === 'before-replace',
+      ),
+    ).toBe(true)
+  })
+})

@@ -454,15 +454,19 @@ export function registerIpc(
         input.snapshotId,
       ),
     'search:volume': (input) =>
-      host.current.searchVolume(input.seriesId, input.volumeId, input.query, input),
+      input.story
+        ? host.current.searchStory(input.seriesId, input.query, input)
+        : host.current.searchVolume(input.seriesId, input.volumeId, input.query, input),
     'search:replaceAll': (input) =>
-      host.current.replaceAllInVolume(
-        input.seriesId,
-        input.volumeId,
-        input.query,
-        input.replacement,
-        input,
-      ),
+      input.story
+        ? host.current.replaceAllInStory(input.seriesId, input.query, input.replacement, input)
+        : host.current.replaceAllInVolume(
+            input.seriesId,
+            input.volumeId,
+            input.query,
+            input.replacement,
+            input,
+          ),
     'spelling:languages': () => session.defaultSession.availableSpellCheckerLanguages,
     'world:get': (input) => host.current.world.view(input.worldId),
     'world:index': (input) => host.current.world.index(input.worldId),

@@ -4,10 +4,25 @@ import { api, describeError, useIpcEvent } from '../api'
 import { flushAll } from '../saving'
 import { useOverlays } from './overlays'
 
-/** Find (and replace) across every chapter of the volume. */
+interface SearchState {
+  query: string
+  replacement: string
+  matchCase: boolean
+  wholeWord: boolean
+  story: boolean
+  current: number
+}
+/** The last search per story: kept when a match in another volume opens that volume. */
+const lastSearch = new Map<string, SearchState>()
+
+/** Find (and replace) across every chapter of the volume, or of the whole story. */
 export function SearchPanel(props: {
   seriesId: string
   volumeId: string
+  /** The story has more than one volume (offer to search them all). */
+  multiVolume: boolean
+  /** Opens a match in another volume (that volume's writing view). */
+  onOpenElsewhere?: (hit: SearchHit) => void
   /** Bumped to focus the find field again (Ctrl/Cmd+F while the panel is open). */
   focusToken: number
   onOpenHit: (hit: SearchHit) => void
@@ -16,12 +31,25 @@ export function SearchPanel(props: {
   onReplacedAll: () => void
 }) {
   const { seriesId, volumeId } = props
-  const [query, setQuery] = useState('')
-  const [replacement, setReplacement] = useState('')
-  const [matchCase, setMatchCase] = useState(false)
-  const [wholeWord, setWholeWord] = useState(false)
+  const [initial] = useState(() => lastSearch.get(seriesId))
+  const [query, setQuery] = useState(initial?.query ?? '')
+  const [replacement, setReplacement] = useState(initial?.replacement ?? '')
+  const [matchCase, setMatchCase] = useState(initial?.matchCase ?? false)
+  const [wholeWord, setWholeWord] = useState(initial?.wholeWord ?? false)
+  const [storyWide, setStory] = useState(initial?.story ?? false)
+  const story = storyWide && props.multiVolume
   const [result, setResult] = useState<SearchResult | null>(null)
-  const [current, setCurrent] = useState<number>(-1)
+  const [current, setCurrent] = useState<number>(initial?.current ?? -1)
+  useEffect(() => {
+    lastSearch.set(seriesId, {
+      query,
+      replacement,
+      matchCase,
+      wholeWord,
+      story: storyWide,
+      current,
+    })
+  }, [seriesId, query, replacement, matchCase, wholeWord, storyWide, current])
   const [version, setVersion] = useState(0)
   const findField = useRef<HTMLInputElement>(null)
   const { toast, choose } = useOverlays()
@@ -35,15 +63,18 @@ export function SearchPanel(props: {
   useEffect(() => {
     if (!query.trim()) return
     const timer = setTimeout(() => {
-      api.invoke('search:volume', { seriesId, volumeId, query, matchCase, wholeWord }).then(
+      api.invoke('search:volume', { seriesId, volumeId, query, matchCase, wholeWord, story }).then(
         (r) => setResult(r),
         (err) => toast(describeError(err).message),
       )
     }, 250)
     return () => clearTimeout(timer)
-  }, [seriesId, volumeId, query, matchCase, wholeWord, version, toast])
+  }, [seriesId, volumeId, query, matchCase, wholeWord, story, version, toast])
   useIpcEvent('library:changed', (c) => {
-    if ((c.kind === 'chapter' || c.kind === 'outline') && c.volumeId === volumeId)
+    if (
+      (c.kind === 'chapter' || c.kind === 'outline') &&
+      (story ? c.seriesId === seriesId : c.volumeId === volumeId)
+    )
       setVersion((v) => v + 1)
   })
   const shown = query.trim() ? result : null
@@ -53,7 +84,11 @@ export function SearchPanel(props: {
     if (!hits.length) return
     const i = (index + hits.length) % hits.length
     setCurrent(i)
-    props.onOpenHit(hits[i]!)
+    open(hits[i]!)
+  }
+  const open = (hit: SearchHit) => {
+    if (hit.volumeId === volumeId) props.onOpenHit(hit)
+    else props.onOpenElsewhere?.(hit)
   }
 
   const replaceOne = () => {
@@ -78,6 +113,7 @@ export function SearchPanel(props: {
         replacement,
         matchCase,
         wholeWord,
+        story,
       })
       props.onReplacedAll()
       toast(
@@ -88,12 +124,43 @@ export function SearchPanel(props: {
     }
   }
 
-  const titles = new Map(shown?.chapters.map((c) => [c.id, c.title || 'Untitled chapter']))
+  const titles = new Map(
+    shown?.chapters.map((c) => [
+      c.id,
+      `${story ? `${c.volumeName} › ` : ''}${c.title || 'Untitled chapter'}`,
+    ]),
+  )
   let lastChapter: string | null = null
 
   return (
     <div className="search-panel">
-      <h2>Find in volume</h2>
+      <h2>Find</h2>
+      {props.multiVolume && (
+        <div className="segmented small" role="radiogroup" aria-label="Where to search">
+          <button
+            role="radio"
+            aria-checked={!story}
+            className={story ? '' : 'active'}
+            onClick={() => {
+              setStory(false)
+              setCurrent(-1)
+            }}
+          >
+            This book
+          </button>
+          <button
+            role="radio"
+            aria-checked={story}
+            className={story ? 'active' : ''}
+            onClick={() => {
+              setStory(true)
+              setCurrent(-1)
+            }}
+          >
+            Whole story
+          </button>
+        </div>
+      )}
       <input
         ref={findField}
         type="search"
@@ -165,13 +232,13 @@ export function SearchPanel(props: {
           const heading = hit.chapterId !== lastChapter ? titles.get(hit.chapterId) : null
           lastChapter = hit.chapterId
           return (
-            <li key={`${hit.chapterId}-${hit.node}-${hit.start}`}>
+            <li key={`${hit.volumeId}-${hit.chapterId}-${hit.node}-${hit.start}`}>
               {heading && <div className="search-chapter small">{heading}</div>}
               <button
                 className={`search-hit small ${i === current ? 'current' : ''}`}
                 onClick={() => {
                   setCurrent(i)
-                  props.onOpenHit(hit)
+                  open(hit)
                 }}
               >
                 …{hit.before}

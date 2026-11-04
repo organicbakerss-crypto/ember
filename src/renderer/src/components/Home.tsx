@@ -516,6 +516,18 @@ export function Home(props: { detached?: PaneRoute | null }) {
         open={write.open}
         onBack={place === 'detached' ? () => dock('write') : toShelf}
         onOpenSeries={() => setRoute({ view: 'series', seriesId: series.id })}
+        onOpenVolumeAt={
+          place === 'detached'
+            ? undefined
+            : (volumeId, open) => {
+                const target: WriteSide = { seriesId: series.id, volumeId, open }
+                setRoute((r) =>
+                  r.view === 'split' || r.view === 'splitAi'
+                    ? { ...r, write: target }
+                    : { view: 'volume', ...target },
+                )
+              }
+        }
         onOpenWorld={series.worldId ? openWorldFrom(series, write) : undefined}
         onOpenWorldBeside={place === 'alone' && series.worldId ? splitCurrent : undefined}
         onToggleAi={() => toggleAi(write, place)}

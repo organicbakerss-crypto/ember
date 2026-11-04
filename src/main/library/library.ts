@@ -1754,6 +1754,38 @@ export class Library {
     const pattern = searchPattern(query, options)
     const result: SearchResult = { hits: [], chapters: [], total: 0, truncated: false }
     if (!pattern) return result
+    await this.searchInto(result, seriesId, volumeId, pattern)
+    return result
+  }
+
+  /** Searches every volume of a story, in order. */
+  async searchStory(
+    seriesId: string,
+    query: string,
+    options: SearchOptions,
+  ): Promise<SearchResult> {
+    const pattern = searchPattern(query, options)
+    const result: SearchResult = { hits: [], chapters: [], total: 0, truncated: false }
+    if (!pattern) return result
+    for (const volume of await this.volumesInOrder(seriesId)) {
+      await this.searchInto(result, seriesId, volume.id, pattern)
+    }
+    return result
+  }
+
+  private async volumesInOrder(seriesId: string): Promise<{ id: string; name: string }[]> {
+    const series = (await this.snapshot()).series.find((s) => s.id === seriesId)
+    if (!series) throw new AppError('not-found', 'That story is gone.')
+    return series.volumes
+  }
+
+  private async searchInto(
+    result: SearchResult,
+    seriesId: string,
+    volumeId: string,
+    pattern: RegExp,
+  ): Promise<void> {
+    const volumeName = (await this.getVolume(seriesId, volumeId)).name
     for (const chapterId of await this.chaptersInOrder(seriesId, volumeId)) {
       let chapter: ChapterFile
       try {
@@ -1773,6 +1805,7 @@ export class Library {
             continue
           }
           result.hits.push({
+            volumeId,
             chapterId,
             node: index,
             ...range,
@@ -1782,9 +1815,8 @@ export class Library {
           })
         }
       })
-      if (found) result.chapters.push({ id: chapterId, title: chapter.title })
+      if (found) result.chapters.push({ id: chapterId, title: chapter.title, volumeId, volumeName })
     }
-    return result
   }
 
   /**
@@ -1825,6 +1857,22 @@ export class Library {
       }
     }
     return { chapters, replacements }
+  }
+
+  /** Replaces every match in every volume of a story (each changed chapter kept in history first). */
+  async replaceAllInStory(
+    seriesId: string,
+    query: string,
+    replacement: string,
+    options: SearchOptions,
+  ): Promise<{ chapters: number; replacements: number }> {
+    const total = { chapters: 0, replacements: 0 }
+    for (const volume of await this.volumesInOrder(seriesId)) {
+      const done = await this.replaceAllInVolume(seriesId, volume.id, query, replacement, options)
+      total.chapters += done.chapters
+      total.replacements += done.replacements
+    }
+    return total
   }
 
   /* ---------- covers ---------- */

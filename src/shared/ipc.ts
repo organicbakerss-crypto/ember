@@ -113,6 +113,7 @@ export interface VolumeStats {
 
 /** One place a search matched, with a little text around it. */
 export interface SearchHit {
+  volumeId: string
   chapterId: string
   /** Which text node in the chapter (reading order) and where in it. */
   node: number
@@ -126,7 +127,7 @@ export interface SearchHit {
 export interface SearchResult {
   hits: SearchHit[]
   /** Chapter titles for the hits, keyed by id, in reading order. */
-  chapters: { id: string; title: string }[]
+  chapters: { id: string; title: string; volumeId: string; volumeName: string }[]
   total: number
   /** True when there were more hits than are listed. */
   truncated: boolean
@@ -404,9 +405,12 @@ export const ipcInputs = {
     query: z.string().min(1).max(500),
     matchCase: z.boolean(),
     wholeWord: z.boolean(),
+    /** Every volume of the story, not only this one. */
+    story: z.boolean().optional(),
   }),
   'search:replaceAll': z.object({
     ...volumeRef,
+    story: z.boolean().optional(),
     query: z.string().min(1).max(500),
     replacement: z.string().max(500),
     matchCase: z.boolean(),
