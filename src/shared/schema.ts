@@ -135,6 +135,8 @@ export const chapterFileSchema = z.looseObject({
   /** The world entry the POV refers to, when it is one (so renaming the character keeps the link). */
   povEntryId: id('entry').nullable().optional(),
   notes: z.string(),
+  /** A short summary of the chapter, by the writer (or filled in by the AI when asked). */
+  synopsis: z.string().max(5000).default(''),
   content: richTextDocSchema,
   createdAt: timestamp,
   updatedAt: timestamp,

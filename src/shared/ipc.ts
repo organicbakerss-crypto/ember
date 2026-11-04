@@ -596,6 +596,7 @@ export const ipcInputs = {
       pov: z.string().trim().max(200).nullable().optional(),
       povEntryId: id('entry').nullable().optional(),
       notes: z.string().optional(),
+      synopsis: z.string().max(5000).optional(),
       content: richTextDocSchema.optional(),
     }),
   }),
@@ -814,6 +815,13 @@ export const ipcInputs = {
   }),
   /** Who says each line of a chapter, and who narrates (marked by the AI if needed). */
   'voice:chapterSpeakers': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    volumeId: id('volume'),
+    chapterId: id('chapter'),
+  }),
+  /** A synopsis of a chapter by the AI (its summary, made now if out of date). Nothing is saved to the chapter. */
+  'ai:chapterSynopsis': z.object({
     requestId: z.string().min(1).max(80),
     seriesId: id('series'),
     volumeId: id('volume'),
@@ -1041,6 +1049,7 @@ export interface IpcResults {
   'voice:status': { studio: boolean; voices: { id: string; name: string }[]; url: string }
   'voice:speak': Uint8Array
   'voice:transcribe': string
+  'ai:chapterSynopsis': string
   'voice:chapterSpeakers': { narrator: string | null; lines: Record<string, string> }
   'voice:setCast': null
   'voice:lines': {

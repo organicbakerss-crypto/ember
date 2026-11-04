@@ -753,6 +753,30 @@ export class AiService {
     })
   }
 
+  /** A chapter's synopsis: its AI summary, made (and kept) now if missing or out of date. */
+  async chapterSynopsis(input: {
+    requestId: string
+    seriesId: string
+    volumeId: string
+    chapterId: string
+  }): Promise<string> {
+    const library = this.options.host.current
+    const s = (await library.storySummaries(input.seriesId)).find(
+      (x) => x.chapter.id === input.chapterId,
+    )
+    if (!s) throw new AppError('not-found', 'That chapter is gone.')
+    if (s.current && s.summary) return s.summary
+    if (!s.paragraphs.some((p) => p.trim())) {
+      throw new AppError('invalid-input', 'This chapter has no text to summarise yet.')
+    }
+    const summary = await this.track(input.requestId, async (signal) =>
+      this.summariseChapter(s.chapter.title, s.paragraphs, await this.client(), signal),
+    )
+    if (!summary) throw new AppError('internal', 'The AI sent back nothing.')
+    await library.saveSummary(input.seriesId, input.volumeId, input.chapterId, summary, s.textHash)
+    return summary
+  }
+
   /**
    * Who says each line of a chapter, by line key, and who tells it (for
    * reading aloud). Without the AI, the saved marking if it's current, else

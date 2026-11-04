@@ -263,6 +263,7 @@ export function registerIpc(
       }
       return voice.transcribe(input.audio, input.mime, names)
     },
+    'ai:chapterSynopsis': (input) => ai.chapterSynopsis(input),
     'voice:chapterSpeakers': (input, event) =>
       ai.chapterSpeakers(input, (text) => {
         if (!event.sender.isDestroyed()) {

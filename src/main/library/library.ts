@@ -78,7 +78,7 @@ import { WorldStore, type StoryText } from './world'
 type UnitType = ManifestFile['unitType']
 
 export type ChapterPatch = Partial<
-  Pick<ChapterFile, 'title' | 'type' | 'pov' | 'povEntryId' | 'notes' | 'content'>
+  Pick<ChapterFile, 'title' | 'type' | 'pov' | 'povEntryId' | 'notes' | 'synopsis' | 'content'>
 >
 
 const MAX_SEARCH_HITS = 500
@@ -655,6 +655,7 @@ export class Library {
       type: input.type ?? 'chapter',
       pov: null,
       notes: '',
+      synopsis: '',
       content: emptyDoc(),
       createdAt: time,
       updatedAt: time,

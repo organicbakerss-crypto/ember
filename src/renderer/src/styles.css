@@ -4350,3 +4350,34 @@ kbd {
 .manuscript-save {
   text-align: center;
 }
+
+/* Synopsis & notes panel */
+.notes-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.notes-panel h2 {
+  margin-bottom: 0;
+}
+.notes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+.notes-field textarea {
+  font-weight: normal;
+  resize: vertical;
+}
+.notes-proposal {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.notes-proposal .row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}

@@ -36,6 +36,7 @@ import { useSettings } from '../useTheme'
 import { loadLocal, saveLocal } from '../storage'
 import { MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
+import { ChapterNotesPanel } from './ChapterNotesPanel'
 import { ManuscriptView } from '../manuscript/ManuscriptView'
 import { QuickAddDialog } from '../world/QuickAddDialog'
 import { nameMatcher } from '@shared/names'
@@ -57,7 +58,7 @@ import { copyChapterForRoyalRoad, ExportDialog } from '../io/ExportDialog'
 import { ImportDialog } from '../io/ImportDialog'
 import { usePane } from '../panes/PaneContext'
 
-type Panel = 'binder' | 'search' | 'history' | 'diagnostics' | 'world' | 'ai'
+type Panel = 'binder' | 'search' | 'notes' | 'history' | 'diagnostics' | 'world' | 'ai'
 
 /** A chapter to open, optionally showing the first use of a name. */
 export interface ChapterTarget {
@@ -637,6 +638,7 @@ export function WritingView(props: {
       run: toggleEcho,
     },
     { id: 'diagnostics', title: 'Diagnostics', run: () => openPanel('diagnostics') },
+    { id: 'notes', title: 'Chapter synopsis and notes', run: () => openPanel('notes') },
     ...(world
       ? [
           {
@@ -949,6 +951,14 @@ export function WritingView(props: {
           <path d="M15 15l5.5 5.5" />
         </RailButton>
         <RailButton
+          label="Synopsis and notes"
+          active={panel === 'notes'}
+          onClick={() => togglePanel('notes')}
+        >
+          <path d="M6 3h9l4 4v14H6z" />
+          <path d="M9 10h7M9 14h7M9 18h4" />
+        </RailButton>
+        <RailButton
           label="History"
           active={panel === 'history'}
           onClick={() => togglePanel('history')}
@@ -1038,6 +1048,15 @@ export function WritingView(props: {
                 editor.current?.replaceSelection(replacement, query, matchCase) ?? false
               }
               onReplacedAll={() => setReloadToken((t) => t + 1)}
+            />
+          )}
+          {panel === 'notes' && (
+            <ChapterNotesPanel
+              seriesId={series.id}
+              volumeId={volume.id}
+              chapterId={selectedId}
+              chapterTitle={current?.title ?? ''}
+              aiOn={aiOn}
             />
           )}
           {panel === 'history' && (

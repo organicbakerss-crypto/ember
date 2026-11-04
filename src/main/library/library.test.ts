@@ -195,6 +195,22 @@ describe('chapters and the outline', () => {
     expect(saved).toMatchObject({ title: 'One', pov: 'Mara', content })
   })
 
+  it('keeps a synopsis and notes apart from the text, and reads old chapters without one', async () => {
+    const { ref } = await makeVolume()
+    const ch = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'One' })
+    expect(ch.synopsis).toBe('')
+    await lib.saveChapter(...ref, ch.id, { synopsis: 'Mara leaves.', notes: 'Fix the ending.' })
+    const content = { type: 'doc' as const, content: [{ type: 'paragraph' }] }
+    const saved = await lib.saveChapter(...ref, ch.id, { content })
+    expect(saved).toMatchObject({ synopsis: 'Mara leaves.', notes: 'Fix the ending.', content })
+    // A chapter saved before synopses existed.
+    const path = join(lib.paths.chaptersDir(...ref), `${ch.id}.json`)
+    const old: Record<string, unknown> = { ...saved }
+    delete old['synopsis']
+    await fs.promises.writeFile(path, JSON.stringify(old))
+    expect((await lib.readChapter(...ref, ch.id)).synopsis).toBe('')
+  })
+
   it('reorders by touching only outline.json', async () => {
     const { ref } = await makeVolume()
     const a = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'A' })
