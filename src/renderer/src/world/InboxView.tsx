@@ -129,7 +129,62 @@ export function InboxView(props: {
       })),
     )
 
+  /** Accepts an AI suggestion; one Undo takes the change back out and puts the item back. */
+  const accept = async (item: InboxItem) => {
+    const s = item.suggestion
+    try {
+      const before =
+        s?.type === 'fact' ? await api.invoke('entry:read', { worldId, entryId: s.entryId }) : null
+      const done = await api.invoke('inbox:accept', { worldId, itemId: item.id })
+      record({
+        label: `Accepted: ${item.text}`,
+        undo: async () => {
+          if (s?.type === 'new' && done.entryId) {
+            await api.invoke('trash:add', {
+              target: { kind: 'entry', worldId, entryId: done.entryId },
+            })
+          } else if (s?.type === 'fact' && before) {
+            await api.invoke('entry:save', {
+              worldId,
+              entryId: before.id,
+              patch: { facts: before.facts, quotes: before.quotes },
+            })
+          } else if (done.relationshipId) {
+            await api.invoke('relationship:delete', {
+              worldId,
+              relationshipId: done.relationshipId,
+            })
+          }
+          await api.invoke('inbox:restore', { worldId, item })
+        },
+      })
+    } catch (err) {
+      fail(err)
+    }
+  }
+
+  /** Lets an AI finding go (it was fine, or not wanted); Undo brings it back. */
+  const letGo = async (item: InboxItem, label: string) => {
+    try {
+      await api.invoke('inbox:dismiss', { worldId, itemId: item.id })
+      record({ label, undo: () => api.invoke('inbox:restore', { worldId, item }) })
+    } catch (err) {
+      fail(err)
+    }
+  }
+
+  const answer = async (item: InboxItem, text: string) => {
+    try {
+      await api.invoke('inbox:answer', { worldId, itemId: item.id, answer: text })
+      toast('Thanks. The AI will know this from now on.')
+    } catch (err) {
+      fail(err)
+    }
+  }
+
   if (!inbox) return null
+  const captured = inbox.captured.filter((i) => i.kind === 'captured')
+  const found = inbox.captured.filter((i) => i.kind !== 'captured')
   const byChapter = new Map<string, NameSuggestion[]>()
   for (const s of inbox.names)
     byChapter.set(s.chapterId, [...(byChapter.get(s.chapterId) ?? []), s])
@@ -138,6 +193,13 @@ export function InboxView(props: {
     return at === undefined ? 'A chapter' : chapterName(world.index!.chapters[at]!)
   }
   const empty = !inbox.captured.length && !inbox.names.length
+  const byKind = (kind: InboxItem['kind']) => found.filter((i) => i.kind === kind)
+  const quoteOf = (item: InboxItem) => (
+    <footer className="small muted">
+      {item.quote ? `“${item.quote}” · ` : ''}
+      {chapterLabel(item.source.chapterId)}
+    </footer>
+  )
 
   return (
     <div className="inbox lens-view">
@@ -152,11 +214,118 @@ export function InboxView(props: {
         </p>
       )}
 
-      {inbox.captured.length > 0 && (
+      {byKind('suggestion').length > 0 && (
+        <section aria-label="Suggestions">
+          <h2>Suggestions from the AI</h2>
+          <p className="muted small">
+            What the AI noticed in your chapters. Nothing changes until you accept it.
+          </p>
+          <ul className="inbox-list">
+            {byKind('suggestion').map((item) => (
+              <li key={item.id} className="inbox-item">
+                <div>
+                  <strong>{item.text}</strong>
+                  {quoteOf(item)}
+                </div>
+                <div className="row">
+                  <button onClick={() => void accept(item)}>Accept</button>
+                  {item.entryId && world.byId.has(item.entryId) && (
+                    <button className="link" onClick={() => props.onOpenEntry(item.entryId!)}>
+                      Open
+                    </button>
+                  )}
+                  <button
+                    className="link"
+                    onClick={() => void letGo(item, 'Turned down a suggestion')}
+                  >
+                    Not this
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {byKind('continuity').length > 0 && (
+        <section aria-label="May not fit">
+          <h2>May not fit</h2>
+          <p className="muted small">
+            Places where a chapter and the world seem to disagree. Fix whichever is wrong, or let it
+            be.
+          </p>
+          <ul className="inbox-list">
+            {byKind('continuity').map((item) => (
+              <li key={item.id} className="inbox-item">
+                <div>
+                  <strong>{item.text}</strong>
+                  {quoteOf(item)}
+                </div>
+                <div className="row">
+                  {item.entryId && world.byId.has(item.entryId) && (
+                    <button onClick={() => props.onOpenEntry(item.entryId!)}>
+                      Open {world.byId.get(item.entryId)!.name}
+                    </button>
+                  )}
+                  <button
+                    className="link"
+                    onClick={() => void letGo(item, 'Let a continuity note go')}
+                  >
+                    Fine as it is
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {byKind('question').length > 0 && (
+        <section aria-label="Questions">
+          <h2>Questions for you</h2>
+          <p className="muted small">
+            Things the AI couldn’t tell. Your answer is kept, and the AI won’t ask again.
+          </p>
+          <ul className="inbox-list">
+            {byKind('question').map((item) => (
+              <li key={item.id} className="inbox-item inbox-question">
+                <div>
+                  <strong>{item.text}</strong>
+                  {quoteOf(item)}
+                </div>
+                <form
+                  className="row"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const field = e.currentTarget.elements.namedItem('answer') as HTMLInputElement
+                    if (field.value.trim()) void answer(item, field.value)
+                  }}
+                >
+                  <input
+                    name="answer"
+                    aria-label={`Answer: ${item.text}`}
+                    placeholder="Your answer"
+                  />
+                  <button type="submit">Answer</button>
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => void letGo(item, 'Skipped a question')}
+                  >
+                    Skip
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {captured.length > 0 && (
         <section aria-label="Captured">
           <h2>Captured</h2>
           <ul className="inbox-list">
-            {inbox.captured.map((item) => (
+            {captured.map((item) => (
               <li key={item.id} className="inbox-item">
                 <blockquote className="quote">
                   <p>“{item.text}”</p>

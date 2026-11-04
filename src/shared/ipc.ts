@@ -16,6 +16,7 @@ import type { StoryChapter, WorldIndex } from './world/story'
 import {
   chapterSourceSchema,
   chapterTypeSchema,
+  inboxItemSchema,
   factValueSchema,
   fieldIdSchema,
   id,
@@ -239,6 +240,15 @@ export interface WorldInbox {
   captured: InboxItem[]
   /** New names from the name catcher (empty when it is turned off). */
   names: NameSuggestion[]
+}
+
+/** A chapter in reading order with the AI's summary of it. */
+export interface ChapterSummaryInfo {
+  chapter: StoryChapter
+  summary: string | null
+  /** False when the chapter changed after the summary was made. */
+  current: boolean
+  words: number
 }
 
 /** A version set aside when both computers changed something. */
@@ -672,10 +682,10 @@ export const ipcInputs = {
       .max(100),
     scope: z
       .object({
-        kind: z.enum(['selection', 'screen', 'chapter']),
+        kind: z.enum(['selection', 'screen', 'chapter', 'story']),
         seriesId: id('series'),
-        volumeId: id('volume'),
-        chapterId: id('chapter'),
+        volumeId: id('volume').nullable(),
+        chapterId: id('chapter').nullable(),
         text: z.string().max(200000),
       })
       .nullable(),
@@ -695,6 +705,25 @@ export const ipcInputs = {
       .max(40),
   }),
   'ai:cancel': z.object({ requestId: z.string().min(1).max(80) }),
+  /** Reads a chapter for the world: summary kept, findings to the inbox (progress as `ai:progress`). */
+  'ai:updateWorld': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    volumeId: id('volume'),
+    chapterId: id('chapter'),
+  }),
+  /** A story's chapters in reading order with their AI summaries. */
+  'ai:summaries': z.object({ seriesId: id('series') }),
+  /** Accepts an AI suggestion from the inbox: the change is made in the world. */
+  'inbox:accept': z.object({ worldId: id('world'), itemId: id('inbox') }),
+  /** Answers a question the AI asked. */
+  'inbox:answer': z.object({
+    worldId: id('world'),
+    itemId: id('inbox'),
+    answer: z.string().trim().min(1).max(5000),
+  }),
+  /** Puts an inbox item back as it was (undo). */
+  'inbox:restore': z.object({ worldId: id('world'), item: inboxItemSchema }),
   /** What another window's writing view shows for a story (for a torn-off AI window). */
   'ai:scope': z.object({ seriesId: id('series') }),
   'ai:scopeReply': z.object({
@@ -867,6 +896,11 @@ export interface IpcResults {
   'ai:ask': { text: string }
   'ai:editChapter': { text: string }
   'ai:cancel': null
+  'ai:updateWorld': { summary: string; suggestions: number; continuity: number; questions: number }
+  'ai:summaries': ChapterSummaryInfo[]
+  'inbox:accept': { item: InboxItem; entryId: string | null; relationshipId: string | null }
+  'inbox:answer': null
+  'inbox:restore': null
   'ai:scope': {
     volumeId: string
     chapterId: string | null
@@ -937,6 +971,8 @@ export interface IpcEvents {
   'sync:hold': { worldId: string; held: boolean }
   /** Another window asks what this one's writing view shows (reply with `ai:scopeReply`). */
   'ai:scopeRequest': { requestId: string; seriesId: string }
+  /** What a long AI job is doing now ("Reading part 2 of 3…"). */
+  'ai:progress': { requestId: string; text: string }
   /** More of an AI answer. */
   'ai:token': { requestId: string; text: string }
 }

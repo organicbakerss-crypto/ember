@@ -183,4 +183,145 @@ describe('the AI service', () => {
     silent.closeAllConnections()
     await new Promise<void>((r) => silent.close(() => r()))
   })
+
+  it('updates the world from a chapter: summary kept, findings checked and sent to the inbox', async () => {
+    const ref = await story()
+    const odo = await lib.world.createEntry(ref.worldId, { name: 'Odo', template: 'person' })
+    const findings = {
+      summary: 'Mara runs to the harbour where Odo waits.',
+      new: [{ name: 'Vela', kind: 'person', about: 'A stranger.', quote: '' }],
+      facts: [
+        {
+          entry: 'Odo',
+          field: 'Role',
+          value: 'Boatman',
+          quote: 'Odo waited by the boats.',
+        },
+      ],
+      relationships: [{ from: 'Mara', to: 'Odo', type: 'friends', words: '', quote: '' }],
+      continuity: [],
+      questions: [{ question: 'Who is Vela?', quote: '' }],
+    }
+    fake = await startFakeOllama(() => JSON.stringify(findings))
+    // Vela is in the chapter too.
+    await lib.saveChapter(ref.seriesId, ref.volumeId, ref.chapterId, {
+      content: doc('Mara ran to the harbour.', 'Odo waited by the boats.', 'Vela watched.'),
+    })
+    const progress: string[] = []
+    const ai = service({})
+    const r = await ai.updateWorld({ requestId: 'u1', ...ref }, (t) => progress.push(t))
+    expect(r).toMatchObject({ suggestions: 3, continuity: 0, questions: 1 })
+    expect(progress[0]).toBe('Reading the chapter…')
+    expect(fake.requests[0]!.format).toBe('json')
+    const prompt = fake.requests[0]!.messages[1]!.content
+    expect(prompt).toContain('Fields: Role, Status, Where now (a name)')
+    expect(prompt).toContain('Other names already in the world: Kestrel Bay.')
+
+    // The summary is kept with the chapter, and current.
+    const [summary] = await lib.storySummaries(ref.seriesId)
+    expect(summary).toMatchObject({ summary: findings.summary, current: true })
+
+    // Accepting a fact: the entry gets it from this chapter on, with the line as a quote.
+    const inbox = (await lib.world.inbox(ref.worldId, false)).captured
+    const fact = inbox.find((i) => i.suggestion?.type === 'fact')!
+    await lib.world.inboxAccept(ref.worldId, fact.id)
+    const after = await lib.world.readEntry(ref.worldId, odo.id)
+    expect(after.facts['role']).toMatchObject([
+      { text: 'Boatman', from: { kind: 'chapter', chapterId: ref.chapterId } },
+    ])
+    expect(after.quotes.map((q) => [q.field, q.text])).toEqual([
+      ['role', 'Odo waited by the boats.'],
+    ])
+
+    // New entries and relationships.
+    const created = await lib.world.inboxAccept(
+      ref.worldId,
+      inbox.find((i) => i.suggestion?.type === 'new')!.id,
+    )
+    expect((await lib.world.readEntry(ref.worldId, created.entryId!)).name).toBe('Vela')
+    const rel = await lib.world.inboxAccept(
+      ref.worldId,
+      inbox.find((i) => i.suggestion?.type === 'relationship')!.id,
+    )
+    expect((await lib.world.view(ref.worldId)).relationships.map((x) => x.id)).toEqual([
+      rel.relationshipId,
+    ])
+
+    // Answering the question: never asked again, and told to the AI next time.
+    const question = inbox.find((i) => i.kind === 'question')!
+    await lib.world.answerQuestion(ref.worldId, question.id, 'A spy from the north.')
+    expect((await lib.world.inbox(ref.worldId, false)).captured).toEqual([])
+    await ai.updateWorld({ requestId: 'u2', ...ref }, () => {})
+    expect(fake.requests[1]!.messages[1]!.content).toContain('Who is Vela? A spy from the north.')
+    const again = (await lib.world.inbox(ref.worldId, false)).captured
+    expect(again.some((i) => i.kind === 'question')).toBe(false)
+    // Already done: not suggested twice.
+    expect(again.map((i) => i.text)).toEqual([])
+  })
+
+  it('reading a chapter again replaces what it found there before, not captured lines', async () => {
+    const ref = await story()
+    fake = await startFakeOllama(() =>
+      JSON.stringify({ summary: 'S.', questions: [{ question: 'Who is Odo?', quote: '' }] }),
+    )
+    const source = { ...ref, chapterTitle: 'Arrival' }
+    await lib.world.inboxCapture(ref.worldId, 'Kept.', source)
+    const ai = service({})
+    await ai.updateWorld({ requestId: 'u1', ...ref }, () => {})
+    await ai.updateWorld({ requestId: 'u2', ...ref }, () => {})
+    const items = (await lib.world.inbox(ref.worldId, false)).captured
+    expect(items.map((i) => [i.kind, i.text])).toEqual([
+      ['captured', 'Kept.'],
+      ['question', 'Who is Odo?'],
+    ])
+  })
+
+  it('says so when the AI’s answer can’t be read, and keeps nothing', async () => {
+    const ref = await story()
+    fake = await startFakeOllama(() => 'I think Mara is nice.')
+    await expect(service({}).updateWorld({ requestId: 'u1', ...ref }, () => {})).rejects.toThrow(
+      'couldn’t be read',
+    )
+    expect((await lib.storySummaries(ref.seriesId))[0]!.summary).toBeNull()
+  })
+
+  it('asks the whole story from chapter summaries, making the missing ones first', async () => {
+    const ref = await story()
+    const second = await lib.createChapter({
+      seriesId: ref.seriesId,
+      volumeId: ref.volumeId,
+      title: 'The Letter',
+    })
+    await lib.saveChapter(ref.seriesId, ref.volumeId, second.id, {
+      content: doc('Odo found a letter from Vela.'),
+    })
+    const [first] = await lib.storySummaries(ref.seriesId)
+    await lib.saveSummary(ref.seriesId, ref.volumeId, ref.chapterId, 'Mara runs.', first!.textHash)
+    fake = await startFakeOllama((req) =>
+      req.messages[0]!.content.startsWith('Summarise') ? 'Odo finds Vela’s letter.' : 'In Ch 2.',
+    )
+    const progress: string[] = []
+    const r = await service({}).ask(
+      {
+        requestId: 'a1',
+        mode: 'ask',
+        messages: [{ role: 'user', content: 'Where does the letter come from?' }],
+        scope: { kind: 'story', seriesId: ref.seriesId, volumeId: null, chapterId: null, text: '' },
+      },
+      () => {},
+      (t) => progress.push(t),
+    )
+    expect(r.text).toBe('In Ch 2.')
+    // Only the chapter without a summary was summarised.
+    expect(fake.requests).toHaveLength(2)
+    expect(fake.requests[0]!.messages[1]!.content).toContain('Odo found a letter from Vela.')
+    expect(progress[0]).toContain('1 of 1')
+    const system = fake.requests[1]!.messages[0]!.content
+    expect(system).toContain('Ch 1 “Arrival”: Mara runs.')
+    expect(system).toContain('Ch 2 “The Letter”: Odo finds Vela’s letter.')
+    expect(system).not.toContain('Odo found a letter') // summaries, not the text
+    expect(system).toContain('The whole world, briefly')
+    // Kept for next time.
+    expect((await lib.storySummaries(ref.seriesId)).every((x) => x.current)).toBe(true)
+  })
 })

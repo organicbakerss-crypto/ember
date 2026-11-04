@@ -13,6 +13,8 @@ import { z } from 'zod'
 import { dirname, join, relative, sep } from 'node:path'
 import {
   FORMAT_VERSION,
+  chapterSummaryFileSchema,
+  type ChapterSummaryFile,
   chapterFileSchema,
   emptyDoc,
   libraryFileSchema,
@@ -54,7 +56,7 @@ import { SNAPSHOT_ID } from '@shared/ipc'
 import { COVER_EXTENSIONS, detectImageType, type CoverInfo, type CoverTarget } from '@shared/media'
 import { docToText, docWordCount } from '@shared/text'
 import { docParagraphs } from '@shared/analysis/doc'
-import { chapterLabels } from '@shared/world/story'
+import { chapterLabels, type StoryChapter } from '@shared/world/story'
 import {
   findInText,
   replaceInDoc,
@@ -183,6 +185,19 @@ export interface LibraryOptions {
   /** Injectable clock, for tests. */
   now?: () => Date
 }
+
+/** A chapter in reading order with its AI summary. */
+export interface StorySummary {
+  chapter: StoryChapter
+  paragraphs: string[]
+  textHash: string
+  summary: string | null
+  /** False when the chapter changed after the summary was made. */
+  current: boolean
+}
+
+/** What a summary is checked against: the chapter's plain text. */
+export const chapterTextHash = (paragraphs: string[]) => sha256(paragraphs.join('\n\n'))
 
 export class Library {
   readonly paths: LibraryPaths
@@ -773,6 +788,79 @@ export class Library {
       }
     }
     return out
+  }
+
+  /* ---------- chapter summaries (made by the AI) ---------- */
+
+  /**
+   * A story's chapters in reading order, each with its AI summary (null when
+   * it has none, `current` false when the chapter changed since).
+   */
+  async storySummaries(seriesId: string): Promise<StorySummary[]> {
+    const series = (await this.snapshot()).series.find((s) => s.id === seriesId)
+    if (!series) throw new AppError('not-found', 'That story is gone.')
+    const out: StorySummary[] = []
+    for (const volume of series.volumes) {
+      const chapters: ChapterFile[] = []
+      for (const chapterId of await this.chaptersInOrder(series.id, volume.id)) {
+        try {
+          chapters.push(await this.readChapter(series.id, volume.id, chapterId))
+        } catch (err) {
+          if (!(err instanceof AppError)) throw err
+        }
+      }
+      const labels = chapterLabels(chapters.map((c) => c.type))
+      for (const [i, chapter] of chapters.entries()) {
+        const paragraphs = docParagraphs(chapter.content)
+        const textHash = chapterTextHash(paragraphs)
+        let summary: ChapterSummaryFile | null = null
+        try {
+          summary = await readJsonFile(
+            join(this.paths.volumeDir(series.id, volume.id), unitPaths.summary(chapter.id)),
+            chapterSummaryFileSchema,
+          )
+        } catch (err) {
+          if (!(err instanceof AppError)) throw err
+        }
+        out.push({
+          chapter: {
+            id: chapter.id,
+            seriesId: series.id,
+            volumeId: volume.id,
+            label: labels[i]!,
+            title: chapter.title,
+            volumeName: volume.name,
+          },
+          paragraphs,
+          textHash,
+          summary: summary?.text ?? null,
+          current: !!summary && summary.textHash === textHash,
+        })
+      }
+    }
+    return out
+  }
+
+  /** Keeps the AI's summary of a chapter (with the text it was made from). */
+  async saveSummary(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+    text: string,
+    textHash: string,
+  ): Promise<void> {
+    await this.lock.run(`volume:${volumeId}`, async () => {
+      await fs.promises.mkdir(join(this.paths.volumeDir(seriesId, volumeId), 'summaries'), {
+        recursive: true,
+      })
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.summary(chapterId), {
+        formatVersion: FORMAT_VERSION,
+        chapterId,
+        text: text.trim().slice(0, 5000),
+        textHash,
+        createdAt: this.timestamp(),
+      })
+    })
   }
 
   /* ---------- renaming (display names only; ids and folders never change) ---------- */

@@ -7,7 +7,7 @@
 import type { ChatMessage } from './ollama'
 
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
-export type ScopeKind = 'selection' | 'screen' | 'chapter'
+export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story'
 
 const BASE = `You are a helpful assistant inside a novel-writing app. The writer writes their own prose: never rewrite or continue their text unless they clearly ask, and never claim to have changed their files. Be concise and concrete. Use plain text with short lists when helpful; no headings.`
 
@@ -22,6 +22,7 @@ const SCOPE_LABEL: Record<ScopeKind, string> = {
   selection: 'the passage the writer selected',
   screen: 'the part of the chapter on the writer’s screen',
   chapter: 'the whole chapter',
+  story: 'the whole story',
 }
 
 export interface PromptContext {
@@ -39,7 +40,9 @@ export function systemPrompt(context: PromptContext): string {
   if (context.scope) {
     const { kind, text, chapterTitle } = context.scope
     parts.push(
-      `The writer is working on the chapter “${chapterTitle || 'Untitled'}”. Below is ${SCOPE_LABEL[kind]}:\n\n<<<\n${text}\n>>>`,
+      kind === 'story'
+        ? `Below is the whole story “${chapterTitle || 'Untitled'}” so far, as a short summary of each chapter in order (summaries, not the writer's own words). When you answer from it, say which chapter:\n\n<<<\n${text}\n>>>`
+        : `The writer is working on the chapter “${chapterTitle || 'Untitled'}”. Below is ${SCOPE_LABEL[kind]}:\n\n<<<\n${text}\n>>>`,
     )
   }
   if (context.entries.length) {

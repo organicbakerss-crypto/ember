@@ -74,17 +74,41 @@ export function registerIpc(
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
     'ai:status': (input) => ai.status(input),
     'ai:ask': (input, event) =>
-      ai.ask(input, (text) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(`${IPC_EVENT_PREFIX}ai:token`, { requestId: input.requestId, text })
-        }
-      }),
+      ai.ask(
+        input,
+        (text) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(`${IPC_EVENT_PREFIX}ai:token`, { requestId: input.requestId, text })
+          }
+        },
+        (text) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, {
+              requestId: input.requestId,
+              text,
+            })
+          }
+        },
+      ),
     'ai:editChapter': (input, event) =>
       ai.editChapter(input, (text) => {
         if (!event.sender.isDestroyed()) {
           event.sender.send(`${IPC_EVENT_PREFIX}ai:token`, { requestId: input.requestId, text })
         }
       }),
+    'ai:updateWorld': (input, event) =>
+      ai.updateWorld(input, (text) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, { requestId: input.requestId, text })
+        }
+      }),
+    'ai:summaries': async (input) =>
+      (await host.current.storySummaries(input.seriesId)).map((s) => ({
+        chapter: s.chapter,
+        summary: s.summary,
+        current: s.current,
+        words: s.paragraphs.join(' ').split(/\s+/).filter(Boolean).length,
+      })),
     'ai:conversations': (input) => host.current.listConversations(input.seriesId),
     'ai:conversation': (input) =>
       host.current.readConversation(input.seriesId, input.conversationId),
@@ -252,6 +276,15 @@ export function registerIpc(
     'inbox:file': (input) =>
       host.current.world.inboxFile(input.worldId, input.itemId, input.entryId, input.field),
     'inbox:dismiss': (input) => host.current.world.inboxDismiss(input.worldId, input.itemId),
+    'inbox:accept': (input) => host.current.world.inboxAccept(input.worldId, input.itemId),
+    'inbox:answer': async (input) => {
+      await host.current.world.answerQuestion(input.worldId, input.itemId, input.answer)
+      return null
+    },
+    'inbox:restore': async (input) => {
+      await host.current.world.inboxRestore(input.worldId, input.item)
+      return null
+    },
     'names:reject': async (input) => {
       await host.current.world.rejectNames(input.worldId, input.names, input.rejected)
       return null

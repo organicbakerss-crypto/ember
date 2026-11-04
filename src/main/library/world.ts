@@ -14,6 +14,8 @@ import {
   boardFileSchema,
   inboxFileSchema,
   inboxItemFileSchema,
+  answerFileSchema,
+  type AnswerFile,
   relationshipFileSchema,
   relationshipTypesFileSchema,
   mapFileSchema,
@@ -923,6 +925,9 @@ export class WorldStore {
       text: text.trim(),
       source,
       capturedAt: this.host.timestamp(),
+      kind: 'captured',
+      quote: null,
+      entryId: null,
     }
     await this.host.lock.run(`world:${worldId}`, async () => {
       await this.moveOldInbox(worldId)
@@ -952,6 +957,153 @@ export class WorldStore {
     const saved = await this.capture(worldId, entryId, field, item.text, item.source)
     await this.removeInboxItem(worldId, itemId)
     return saved
+  }
+
+  /* ---------- what the AI found in a chapter ---------- */
+
+  /**
+   * Puts what the AI found in a chapter in the inbox. What it found in that
+   * chapter before and is still waiting is replaced (reading it again doesn't
+   * pile up repeats); captured lines are never touched.
+   */
+  async addFindings(
+    worldId: string,
+    source: ChapterSource,
+    findings: Pick<InboxItem, 'kind' | 'text' | 'quote' | 'entryId' | 'suggestion'>[],
+  ): Promise<InboxItem[]> {
+    await this.host.getWorld(worldId)
+    const time = this.host.timestamp()
+    const items: InboxItem[] = findings.map((f) => ({
+      ...f,
+      id: newId('inbox'),
+      source,
+      capturedAt: time,
+    }))
+    await this.host.lock.run(`world:${worldId}`, async () => {
+      await this.moveOldInbox(worldId)
+      for (const old of (await this.readInbox(worldId)).items) {
+        if (old.kind !== 'captured' && old.source.chapterId === source.chapterId) {
+          await this.host.removeFile(worldId, unitPaths.inboxItem(old.id))
+        }
+      }
+      for (const item of items) await this.writeInboxItem(worldId, item)
+    })
+    this.host.changed({ kind: 'inbox', worldId })
+    return items
+  }
+
+  /** Puts an item back exactly as it was (undo). */
+  async inboxRestore(worldId: string, item: InboxItem): Promise<void> {
+    await this.host.getWorld(worldId)
+    await this.host.lock.run(`world:${worldId}`, async () => {
+      await this.moveOldInbox(worldId)
+      await this.writeInboxItem(worldId, item)
+    })
+    this.host.changed({ kind: 'inbox', worldId })
+  }
+
+  /**
+   * Accepts a suggestion: the change is made in the world (from the item's
+   * chapter on), with the line it came from kept as a quote. The item goes
+   * only after the change is saved.
+   */
+  async inboxAccept(
+    worldId: string,
+    itemId: string,
+  ): Promise<{ item: InboxItem; entryId: string | null; relationshipId: string | null }> {
+    const item = (await this.readInbox(worldId)).items.find((i) => i.id === itemId)
+    if (!item) throw new AppError('not-found', 'That inbox item is gone.')
+    const s = item.suggestion
+    if (item.kind !== 'suggestion' || !s) {
+      throw new AppError('invalid-input', 'That item has nothing to accept.')
+    }
+    const from = { kind: 'chapter' as const, chapterId: item.source.chapterId }
+    const quote = (entryId: string, field: string | null) =>
+      item.quote
+        ? this.capture(worldId, entryId, field, item.quote, item.source).then(() => {})
+        : Promise.resolve()
+    let entryId: string | null = null
+    let relationshipId: string | null = null
+    if (s.type === 'new') {
+      const created = await this.createEntry(worldId, { name: s.name, template: s.template })
+      entryId = created.id
+      if (s.about.trim()) {
+        await this.saveEntry(worldId, created.id, {
+          body: {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: s.about.trim() }] }],
+          },
+        })
+      }
+      await quote(created.id, null)
+    } else if (s.type === 'fact') {
+      const entry = await this.readEntry(worldId, s.entryId)
+      const values = entry.facts[s.field] ?? []
+      const value = {
+        id: newId('fact'),
+        ...(s.link ? { link: s.link } : { text: s.text ?? '' }),
+        from,
+      }
+      await this.saveEntry(worldId, s.entryId, {
+        facts: { ...entry.facts, [s.field]: [...values, value] },
+      })
+      entryId = s.entryId
+      await quote(s.entryId, s.field)
+    } else {
+      const rel = await this.saveRelationship(worldId, {
+        from: s.from,
+        to: s.to,
+        type: s.relType,
+        label: s.label,
+        kin: null,
+        over: false,
+        start: from,
+        end: null,
+      })
+      relationshipId = rel.id
+    }
+    await this.removeInboxItem(worldId, itemId)
+    return { item, entryId, relationshipId }
+  }
+
+  /** The writer answers a question the AI asked: kept, and told to the AI from now on. */
+  async answerQuestion(worldId: string, itemId: string, answer: string): Promise<AnswerFile> {
+    const item = (await this.readInbox(worldId)).items.find((i) => i.id === itemId)
+    if (!item) throw new AppError('not-found', 'That inbox item is gone.')
+    const file: AnswerFile = {
+      formatVersion: FORMAT_VERSION,
+      id: newId('answer'),
+      worldId,
+      question: item.text,
+      answer: answer.trim(),
+      source: item.source,
+      answeredAt: this.host.timestamp(),
+    }
+    await this.host.lock.run(`world:${worldId}`, async () => {
+      await fs.promises.mkdir(join(this.dir(worldId), 'answers'), { recursive: true })
+      await this.host.writeFile(worldId, unitPaths.answer(file.id), file)
+    })
+    await this.removeInboxItem(worldId, itemId)
+    return file
+  }
+
+  /** The writer's answers so far (oldest first). */
+  async answers(worldId: string): Promise<AnswerFile[]> {
+    let names: string[] = []
+    try {
+      names = await fs.promises.readdir(join(this.dir(worldId), 'answers'))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    }
+    const out: AnswerFile[] = []
+    for (const name of names.filter((n) => n.endsWith('.json') && !isTempFileName(n))) {
+      try {
+        out.push(await readJsonFile(join(this.dir(worldId), 'answers', name), answerFileSchema))
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+      }
+    }
+    return out.sort((a, b) => a.answeredAt.localeCompare(b.answeredAt))
   }
 
   async inbox(worldId: string, withNames: boolean): Promise<WorldInbox> {

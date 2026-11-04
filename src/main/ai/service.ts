@@ -4,8 +4,10 @@
  * the model reads (the reading scope, the world entries named in it), streams
  * answers back to the window that asked, and can stop any request.
  *
- * Nothing here writes to the library: answers and suggested fixes go back to
- * the window, and only the writer's own accept changes anything.
+ * Nothing here writes to the writer's text or world: answers and edits go
+ * back to the window, and what the AI finds in a chapter goes to the inbox
+ * (and its summary beside the chapter). Only the writer's own accept changes
+ * anything.
  */
 import { docParagraphs } from '@shared/analysis/doc'
 import { entryTerms, nameMatcher } from '@shared/names'
@@ -13,7 +15,17 @@ import type { AiSettings } from '@shared/settings'
 import type { AiStatus } from '@shared/ipc'
 import { AppError } from '../errors'
 import type { LibraryHost } from '../libraryHost'
+import { chapterTextHash } from '../library/library'
 import { Ollama, type ChatMessage } from './ollama'
+import {
+  chapterParts,
+  checkFindings,
+  combineMessages,
+  entryNote,
+  findingsMessages,
+  parseFindings,
+  type RawFindings,
+} from './worldUpdate'
 import { ChatGpt, type SecretBox } from './chatgpt'
 
 /** Used when ChatGPT doesn't list its models and none is chosen. */
@@ -41,8 +53,9 @@ export interface AskInput {
   scope: {
     kind: ScopeKind
     seriesId: string
-    volumeId: string
-    chapterId: string
+    /** The open chapter (none needed for the whole story). */
+    volumeId: string | null
+    chapterId: string | null
     /** The selection or what's on screen (for the whole chapter, read here). */
     text: string
   } | null
@@ -50,6 +63,7 @@ export interface AskInput {
 
 /** Whoever answers: Ollama or ChatGPT. */
 interface Provider {
+  kind: 'ollama' | 'chatgpt'
   chat(input: {
     messages: ChatMessage[]
     json?: boolean
@@ -60,6 +74,19 @@ interface Provider {
 }
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length
+
+/** How much of a chapter goes to the AI at once when reading it for the world. */
+const READ_WORDS = { ollama: 1500, chatgpt: 12000 }
+/** Most entries' notes sent with a chapter, and the other names listed. */
+const MAX_NOTES = 12
+const MAX_OTHER_NAMES = 400
+
+export interface WorldUpdateResult {
+  summary: string
+  suggestions: number
+  continuity: number
+  questions: number
+}
 
 export class AiService {
   private readonly running = new Map<string, AbortController>()
@@ -94,6 +121,7 @@ export class AiService {
       const model =
         settings.chatgptModel || (await this.chatgpt.models())[0] || DEFAULT_CHATGPT_MODEL
       return {
+        kind: 'chatgpt',
         chat: (i) => this.chatgpt.chat({ ...i, model, idleMs: this.options.idleMs }),
       }
     }
@@ -110,6 +138,7 @@ export class AiService {
       model = models[0]!
     }
     return {
+      kind: 'ollama',
       chat: (i) => ollama.chat({ ...i, model, idleMs: this.options.idleMs }),
     }
   }
@@ -197,10 +226,14 @@ export class AiService {
   }
 
   /** Chat, brainstorm or ask the story; the answer streams to `onToken`. */
-  async ask(input: AskInput, onToken: (text: string) => void): Promise<{ text: string }> {
+  async ask(
+    input: AskInput,
+    onToken: (text: string) => void,
+    onProgress: (text: string) => void = () => {},
+  ): Promise<{ text: string }> {
     const provider = await this.client()
     return this.track(input.requestId, async (signal) => {
-      const context = await this.context(input, provider, signal)
+      const context = await this.context(input, provider, signal, onProgress)
       const text = await provider.chat({
         messages: chatMessages(context, input.messages),
         signal,
@@ -215,19 +248,29 @@ export class AiService {
     input: AskInput,
     provider: Provider,
     signal: AbortSignal,
+    onProgress: (text: string) => void,
   ): Promise<PromptContext> {
     const context: PromptContext = { mode: input.mode, scope: null, entries: [] }
     const scope = input.scope
     if (!scope) return context
     const library = this.options.host.current
-    const chapter = await library.readChapter(scope.seriesId, scope.volumeId, scope.chapterId)
     let text = scope.text
-    if (scope.kind === 'chapter') {
-      const paragraphs = docParagraphs(chapter.content)
-      text = paragraphs.join('\n\n')
-      if (words(text) > CHAPTER_WORDS) text = await this.summarise(paragraphs, provider, signal)
+    if (scope.kind === 'story') {
+      const series = await library.getSeries(scope.seriesId)
+      text = await this.storyText(scope.seriesId, provider, signal, onProgress)
+      context.scope = { kind: 'story', text, chapterTitle: series.name }
+    } else {
+      if (!scope.volumeId || !scope.chapterId) {
+        throw new AppError('invalid-input', 'Open a chapter for the AI to read.')
+      }
+      const chapter = await library.readChapter(scope.seriesId, scope.volumeId, scope.chapterId)
+      if (scope.kind === 'chapter') {
+        const paragraphs = docParagraphs(chapter.content)
+        text = paragraphs.join('\n\n')
+        if (words(text) > CHAPTER_WORDS) text = await this.summarise(paragraphs, provider, signal)
+      }
+      context.scope = { kind: scope.kind, text, chapterTitle: chapter.title }
     }
-    context.scope = { kind: scope.kind, text, chapterTitle: chapter.title }
 
     const series = await library.getSeries(scope.seriesId)
     if (series.worldId) {
@@ -241,11 +284,79 @@ export class AiService {
         const entry = await library.world.entryText(series.worldId, entryId).catch(() => '')
         if (entry) context.entries.push(entry.slice(0, MAX_ENTRY_CHARS))
       }
-      if (input.mode === 'ask') {
+      if (input.mode === 'ask' || scope.kind === 'story') {
         context.digest = (await library.world.digest(series.worldId)).slice(0, MAX_DIGEST_CHARS)
       }
     }
     return context
+  }
+
+  /**
+   * The whole story as chapter summaries, in order. Chapters without a
+   * current summary are summarised first (and the summaries kept).
+   */
+  private async storyText(
+    seriesId: string,
+    provider: Provider,
+    signal: AbortSignal,
+    onProgress: (text: string) => void,
+  ): Promise<string> {
+    const library = this.options.host.current
+    const all = await library.storySummaries(seriesId)
+    const missing = all.filter((s) => !s.current && s.paragraphs.some((p) => p.trim()))
+    const volumes = new Set(all.map((s) => s.chapter.volumeId)).size
+    const lines: string[] = []
+    let done = 0
+    for (const s of all) {
+      let summary = s.current ? s.summary : null
+      if (!summary && missing.includes(s)) {
+        done++
+        onProgress(`Summarising chapters the AI hasn’t read yet (${done} of ${missing.length})…`)
+        summary = await this.summariseChapter(s.chapter.title, s.paragraphs, provider, signal)
+        if (summary) {
+          await library.saveSummary(
+            s.chapter.seriesId,
+            s.chapter.volumeId,
+            s.chapter.id,
+            summary,
+            s.textHash,
+          )
+        }
+      }
+      const where = volumes > 1 ? `${s.chapter.volumeName} › ` : ''
+      lines.push(
+        `${where}${s.chapter.label} “${s.chapter.title || 'Untitled'}”: ${summary ?? '(empty)'}`,
+      )
+    }
+    onProgress('')
+    return lines.join('\n\n')
+  }
+
+  /** One chapter's summary (in parts when it's long for this model). */
+  private async summariseChapter(
+    title: string,
+    paragraphs: string[],
+    provider: Provider,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const parts = chapterParts(paragraphs, READ_WORDS[provider.kind])
+    const summaries: string[] = []
+    for (const [i, part] of parts.entries()) {
+      const reply = await provider.chat({
+        messages: summaryMessages(
+          `${i === 0 ? `(The chapter “${title || 'Untitled'}”)\n\n` : ''}${part}`,
+          i + 1,
+          parts.length,
+        ),
+        temperature: 0.2,
+        signal,
+      })
+      if (reply.trim()) summaries.push(reply.trim())
+    }
+    if (summaries.length <= 1) return summaries[0] ?? ''
+    return (
+      await provider.chat({ messages: combineMessages(summaries), temperature: 0.2, signal })
+    ).trim()
   }
 
   /** A long chapter, read in parts and summarised (the model can't take it all at once). */
@@ -316,6 +427,135 @@ export class AiService {
       })
       if (!text.trim()) throw new AppError('invalid-input', 'The AI sent back nothing. Try again.')
       return { text }
+    })
+  }
+
+  /**
+   * Reads a chapter for the world: its summary is kept beside the chapter,
+   * and what the AI found (checked against the world) goes to the inbox.
+   * `onProgress` gets a line for the writer as it goes.
+   */
+  async updateWorld(
+    input: { requestId: string; seriesId: string; volumeId: string; chapterId: string },
+    onProgress: (text: string) => void,
+  ): Promise<WorldUpdateResult> {
+    const provider = await this.client()
+    const library = this.options.host.current
+    const series = await library.getSeries(input.seriesId)
+    if (!series.worldId) {
+      throw new AppError('invalid-input', 'This story has no world to update. Link one first.')
+    }
+    const worldId = series.worldId
+    const chapter = await library.readChapter(input.seriesId, input.volumeId, input.chapterId)
+    const paragraphs = docParagraphs(chapter.content)
+    const text = paragraphs.join('\n\n')
+    if (!text.trim()) throw new AppError('invalid-input', 'This chapter is empty.')
+    const [view, answers] = await Promise.all([
+      library.world.view(worldId),
+      library.world.answers(worldId),
+    ])
+
+    // The entries named in the chapter, most mentioned first.
+    const counts = new Map<string, number>()
+    for (const m of nameMatcher(entryTerms(view.entries)).find(text)) {
+      counts.set(m.entryId, (counts.get(m.entryId) ?? 0) + 1)
+    }
+    const named = [...counts].sort((a, b) => b[1] - a[1]).slice(0, MAX_NOTES)
+    const notes: string[] = []
+    for (const [entryId] of named) {
+      const entry = view.entries.find((e) => e.id === entryId)
+      if (!entry) continue
+      const template = view.templates.find((t) => t.id === entry.template)
+      const note = await library.world.entryText(worldId, entryId).catch(() => '')
+      if (note) {
+        notes.push(
+          template
+            ? entryNote(note.slice(0, MAX_ENTRY_CHARS), template)
+            : note.slice(0, MAX_ENTRY_CHARS),
+        )
+      }
+    }
+    const namedIds = new Set(named.map(([id]) => id))
+    const otherNames = view.entries
+      .filter((e) => !namedIds.has(e.id))
+      .slice(0, MAX_OTHER_NAMES)
+      .map((e) => e.name)
+
+    return this.track(input.requestId, async (signal) => {
+      const parts = chapterParts(paragraphs, READ_WORDS[provider.kind])
+      const raws: RawFindings[] = []
+      for (const [i, part] of parts.entries()) {
+        onProgress(
+          parts.length > 1 ? `Reading part ${i + 1} of ${parts.length}…` : 'Reading the chapter…',
+        )
+        const reply = await provider.chat({
+          messages: findingsMessages({
+            chapterTitle: chapter.title,
+            text: part,
+            part: i + 1,
+            parts: parts.length,
+            notes,
+            otherNames,
+            relationshipTypes: view.relationshipTypes,
+            answers,
+          }),
+          json: true,
+          temperature: 0.2,
+          signal,
+        })
+        const raw = parseFindings(reply)
+        if (!raw) {
+          throw new AppError(
+            'invalid-input',
+            'The AI’s answer couldn’t be read. Try again; a larger model does this better.',
+          )
+        }
+        raws.push(raw)
+      }
+      let summary = raws[0]?.summary ?? ''
+      if (raws.length > 1) {
+        onProgress('Putting the summary together…')
+        summary = (
+          await provider.chat({
+            messages: combineMessages(raws.map((r) => r.summary).filter(Boolean)),
+            temperature: 0.2,
+            signal,
+          })
+        ).trim()
+      }
+      onProgress('Checking what it found against the world…')
+      const findings = checkFindings(raws, text, {
+        entries: view.entries,
+        templates: view.templates,
+        relationshipTypes: view.relationshipTypes,
+        relationships: view.relationships,
+        answered: answers.map((a) => a.question),
+      })
+      if (summary) {
+        await library.saveSummary(
+          input.seriesId,
+          input.volumeId,
+          input.chapterId,
+          summary,
+          chapterTextHash(paragraphs),
+        )
+      }
+      await library.world.addFindings(
+        worldId,
+        {
+          seriesId: input.seriesId,
+          volumeId: input.volumeId,
+          chapterId: input.chapterId,
+          chapterTitle: chapter.title,
+        },
+        findings,
+      )
+      return {
+        summary,
+        suggestions: findings.filter((f) => f.kind === 'suggestion').length,
+        continuity: findings.filter((f) => f.kind === 'continuity').length,
+        questions: findings.filter((f) => f.kind === 'question').length,
+      }
     })
   }
 }

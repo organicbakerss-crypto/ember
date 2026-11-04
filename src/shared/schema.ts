@@ -265,11 +265,58 @@ export const templatesFileSchema = z.looseObject({
 })
 export type TemplatesFile = z.infer<typeof templatesFileSchema>
 
-const inboxItemSchema = z.looseObject({
+/**
+ * A change the AI suggests for the world, already checked against it (names
+ * resolved to entries, fields to the entry's template). Nothing changes until
+ * the writer accepts it in the inbox.
+ */
+export const suggestionSchema = z.discriminatedUnion('type', [
+  /** Someone or something new: added as an entry. */
+  z.looseObject({
+    type: z.literal('new'),
+    name: nameSchema,
+    template: z.string().min(1).max(60),
+    about: z.string().max(1000).default(''),
+  }),
+  /** A fact about an entry, from this chapter on. */
+  z.looseObject({
+    type: z.literal('fact'),
+    entryId: id('entry'),
+    field: fieldIdSchema,
+    text: z.string().max(1000).optional(),
+    link: id('entry').optional(),
+  }),
+  /** Two entries connected, from this chapter on. */
+  z.looseObject({
+    type: z.literal('relationship'),
+    from: id('entry'),
+    to: id('entry'),
+    relType: z.string().min(1).max(60),
+    label: z.string().max(80).default(''),
+  }),
+])
+export type Suggestion = z.infer<typeof suggestionSchema>
+
+export const inboxItemSchema = z.looseObject({
   id: id('inbox'),
+  /** What it says, in words ("Mara: Where now → Port Kell"). */
   text: z.string().min(1).max(5000),
   source: chapterSourceSchema,
   capturedAt: timestamp,
+  /**
+   * captured: a line the writer saved. From reading a chapter with the AI:
+   * suggestion (a change to accept), continuity (something that may not fit
+   * the world), question (something only the writer can answer).
+   */
+  kind: z
+    .enum(['captured', 'suggestion', 'continuity', 'question'])
+    .catch('captured')
+    .default('captured'),
+  /** The line in the chapter it comes from. */
+  quote: z.string().max(2000).nullable().catch(null).default(null),
+  /** The entry it's about, when there is one. */
+  entryId: id('entry').nullable().catch(null).default(null),
+  suggestion: suggestionSchema.optional().catch(undefined),
 })
 export type InboxItem = z.infer<typeof inboxItemSchema>
 
@@ -289,6 +336,18 @@ export const inboxFileSchema = z.looseObject({
   items: z.array(inboxItemSchema),
 })
 export type InboxFile = z.infer<typeof inboxFileSchema>
+
+/** The writer's answer to a question the AI asked: never asked again, and told to the AI. */
+export const answerFileSchema = z.looseObject({
+  formatVersion,
+  id: id('answer'),
+  worldId: id('world'),
+  question: z.string().min(1).max(2000),
+  answer: z.string().min(1).max(5000),
+  source: chapterSourceSchema.nullable().catch(null).default(null),
+  answeredAt: timestamp,
+})
+export type AnswerFile = z.infer<typeof answerFileSchema>
 
 /** Suggestions the writer turned down; they never come back. */
 export const rejectedFileSchema = z.looseObject({
@@ -421,6 +480,18 @@ export const mapFileSchema = z.looseObject({
   updatedAt: timestamp,
 })
 export type MapFile = z.infer<typeof mapFileSchema>
+
+/* ---------- chapter summaries (made by the AI, kept with the volume) ---------- */
+
+export const chapterSummaryFileSchema = z.looseObject({
+  formatVersion,
+  chapterId: id('chapter'),
+  text: z.string().min(1).max(5000),
+  /** The chapter's text it was made from (sha256): a different one means it's out of date. */
+  textHash: z.string(),
+  createdAt: timestamp,
+})
+export type ChapterSummaryFile = z.infer<typeof chapterSummaryFileSchema>
 
 /* ---------- AI conversations (kept with their story) ---------- */
 

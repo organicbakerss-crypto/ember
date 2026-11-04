@@ -1457,6 +1457,24 @@ kbd {
 .page-area {
   position: relative;
 }
+/* "Where you left off": the last few chapters, after a break. */
+.recap {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  z-index: 15;
+  width: min(26rem, calc(100% - 2rem));
+  max-height: 60%;
+  overflow: auto;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
+.recap p {
+  margin: 0.4rem 0 0;
+}
 /* Sync is putting the other computer's map, board or templates in place. */
 .world-main.held .page-scroll {
   pointer-events: none;
@@ -1846,6 +1864,10 @@ kbd {
 }
 .inbox-item p {
   margin: 0.2rem 0 0;
+}
+.inbox-question form input {
+  flex: 1;
+  min-width: 10rem;
 }
 .inbox-chapter h3 {
   margin: 0.8rem 0 0.4rem;

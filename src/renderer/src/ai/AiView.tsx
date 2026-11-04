@@ -10,6 +10,7 @@ import { parse, type Block, type Inline } from './markdown'
 import { docToMarkdown, editedDoc, type DocNode } from '@shared/ai/chapterEdit'
 import { flushAll } from '../saving'
 import { CompareDialog, type EditResult } from './CompareDialog'
+import { worldUpdateNote } from './worldUpdate'
 import { editRequest, fetchScope, localEditor, useLocalScope } from './scope'
 
 type Mode = 'chat' | 'brainstorm' | 'ask'
@@ -124,6 +125,8 @@ export function AiView(props: {
   seriesId: string
   volumeId: string
   onRoute?: (route: PaneRoute) => void
+  /** Opens the story's world (after it was updated). */
+  onOpenWorld?: (worldId: string) => void
 }) {
   const { seriesId } = props
   const { settings } = useSettings()
@@ -136,7 +139,18 @@ export function AiView(props: {
   })
   const [draft, setDraft] = useState('')
   const [quote, setQuote] = useState<string | null>(null)
-  const [wholeChapter, setWholeChapter] = useState(false)
+  /** How much the AI reads: what's selected or on screen, the whole chapter, or the whole story. */
+  const [reach, setReach] = useState<'here' | 'chapter' | 'story'>('here')
+  /** What a long job is doing now ("Summarising chapters…"). */
+  const [progress, setProgress] = useState('')
+  /** Reading a chapter for the world: the job, and what it found. */
+  const [worldJob, setWorldJob] = useState<{ id: string; title: string } | null>(null)
+  const [worldNote, setWorldNote] = useState<string | null>(null)
+  /** After an edit is kept: offer to update the world from that chapter. */
+  const [offer, setOffer] = useState<{ volumeId: string; chapterId: string; title: string } | null>(
+    null,
+  )
+  const [worldId, setWorldId] = useState<string | null>(null)
   const [busy, setBusy] = useState<{ id: string; mode: Mode; edit?: boolean } | null>(null)
   /** Edit chapter: the AI may change the open chapter, as asked. */
   const [editMode, setEditMode] = useState(false)
@@ -177,6 +191,21 @@ export function AiView(props: {
     onRoute?.({ kind: 'ai', seriesId, volumeId })
   }, [onRoute, seriesId, volumeId])
 
+  // The story's world, if it has one (Update the world needs it).
+  const loadWorld = () => {
+    api.invoke('library:snapshot').then(
+      (snap) => setWorldId(snap.series.find((s) => s.id === seriesId)?.worldId ?? null),
+      () => {},
+    )
+  }
+  useEffect(loadWorld, [seriesId])
+  useIpcEvent('library:changed', (c) => {
+    if (c.kind === 'library' || (c.kind === 'series' && c.seriesId === seriesId)) loadWorld()
+  })
+  useIpcEvent('ai:progress', ({ requestId, text }) => {
+    if (requestId === busy?.id || requestId === worldJob?.id) setProgress(text)
+  })
+
   const refreshPast = () => {
     api.invoke('ai:conversations', { seriesId }).then(setPast, () => {})
   }
@@ -211,20 +240,29 @@ export function AiView(props: {
     })
   })
 
-  const scopeKind = wholeChapter ? 'chapter' : local?.selection ? 'selection' : 'screen'
+  const scopeKind =
+    reach === 'story'
+      ? 'story'
+      : reach === 'chapter'
+        ? 'chapter'
+        : local?.selection
+          ? 'selection'
+          : 'screen'
   const chip = editMode
     ? local?.chapterId
       ? `Editing: all of “${local.chapterTitle || 'Untitled'}”`
       : 'Editing: open a chapter beside the AI'
-    : !local
-      ? 'Reading: the chapter open in the writing view'
-      : !local.chapterId
-        ? 'Reading: nothing (no chapter open)'
-        : scopeKind === 'chapter'
-          ? `Reading: all of “${local.chapterTitle || 'Untitled'}”`
-          : scopeKind === 'selection'
-            ? `Reading: your selection, ~${words(local.selection!)} words`
-            : `Reading: what’s on screen in “${local.chapterTitle || 'Untitled'}”`
+    : scopeKind === 'story'
+      ? 'Reading: the whole story (a summary of each chapter)'
+      : !local
+        ? 'Reading: the chapter open in the writing view'
+        : !local.chapterId
+          ? 'Reading: nothing (no chapter open)'
+          : scopeKind === 'chapter'
+            ? `Reading: all of “${local.chapterTitle || 'Untitled'}”`
+            : scopeKind === 'selection'
+              ? `Reading: your selection, ~${words(local.selection!)} words`
+              : `Reading: what’s on screen in “${local.chapterTitle || 'Untitled'}”`
 
   const open = async (id: string) => {
     try {
@@ -378,14 +416,50 @@ export function AiView(props: {
       c.finish(
         `Edited ${name}: kept ${kept} ${kept === 1 ? 'change' : 'changes'}${outcome.undone ? `, undid ${outcome.undone}` : ''}. The versions before and after are in History.`,
       )
+      if (worldId) setOffer({ volumeId: c.volumeId, chapterId: c.chapterId, title: c.chapterTitle })
     } else {
       c.finish(`Undid the edit to ${name}: your text is back. The version before is in History.`)
     }
   }
 
+  /** Reads a chapter for the world: what it finds goes to the world's inbox. */
+  const updateWorld = async (target?: { volumeId: string; chapterId: string; title: string }) => {
+    if (worldJob || busy) return
+    let at = target
+    if (!at) {
+      const scope = await fetchScope(seriesId)
+      if (!scope?.chapterId) {
+        setError('Open a chapter in the writing view to update the world from it.')
+        return
+      }
+      at = { volumeId: scope.volumeId, chapterId: scope.chapterId, title: scope.chapterTitle }
+    }
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    setOffer(null)
+    setError(null)
+    setWorldNote(null)
+    setProgress('')
+    setWorldJob({ id, title: at.title })
+    try {
+      const r = await api.invoke('ai:updateWorld', {
+        requestId: id,
+        seriesId,
+        volumeId: at.volumeId,
+        chapterId: at.chapterId,
+      })
+      setWorldNote(worldUpdateNote(at.title, r))
+    } catch (err) {
+      const e = describeError(err)
+      if (e.code !== 'cancelled') setError(e.message)
+    } finally {
+      setWorldJob(null)
+      setProgress('')
+    }
+  }
+
   const send = async (text: string) => {
     const question = text.trim()
-    if (!question || busy) return
+    if (!question || busy || worldJob) return
     if (editMode) {
       await runEdit(question)
       return
@@ -394,15 +468,25 @@ export function AiView(props: {
     const current = thread
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
     const scope = await fetchScope(seriesId)
-    const kind = wholeChapter ? 'chapter' : scope?.selection ? 'selection' : 'screen'
+    const kind =
+      reach === 'story'
+        ? 'story'
+        : reach === 'chapter'
+          ? 'chapter'
+          : scope?.selection
+            ? 'selection'
+            : 'screen'
     const scopeText =
       kind === 'selection' ? scope!.selection! : kind === 'screen' ? (scope?.screen ?? '') : ''
     const where = scope?.chapterTitle ? ` in “${scope.chapterTitle}”` : ''
-    const read = !scope?.chapterId
-      ? null
-      : kind === 'chapter'
-        ? `the whole chapter${where}`
-        : `${kind === 'selection' ? 'your selection' : 'what was on screen'}${where}, ~${words(scopeText)} words`
+    const read =
+      kind === 'story'
+        ? 'the whole story (chapter summaries)'
+        : !scope?.chapterId
+          ? null
+          : kind === 'chapter'
+            ? `the whole chapter${where}`
+            : `${kind === 'selection' ? 'your selection' : 'what was on screen'}${where}, ~${words(scopeText)} words`
     const content = quote
       ? `${quote
           .split('\n')
@@ -431,15 +515,18 @@ export function AiView(props: {
         messages: history
           .slice(-CONTEXT_MESSAGES)
           .map((m) => ({ role: m.role, content: m.content })),
-        scope: scope?.chapterId
-          ? {
-              kind,
-              seriesId,
-              volumeId: scope.volumeId,
-              chapterId: scope.chapterId,
-              text: scopeText,
-            }
-          : null,
+        scope:
+          kind === 'story'
+            ? { kind, seriesId, volumeId: null, chapterId: null, text: '' }
+            : scope?.chapterId
+              ? {
+                  kind,
+                  seriesId,
+                  volumeId: scope.volumeId,
+                  chapterId: scope.chapterId,
+                  text: scopeText,
+                }
+              : null,
       })
       save(into, current, [
         ...history,
@@ -460,6 +547,7 @@ export function AiView(props: {
       }
     } finally {
       setBusy(null)
+      setProgress('')
     }
   }
 
@@ -561,6 +649,16 @@ export function AiView(props: {
             ))}
           </div>
           <span className="status-spacer" />
+          {worldId && (
+            <button
+              className="link small"
+              disabled={!!worldJob || !!busy}
+              title="Read the open chapter and suggest changes to the world (they wait in its inbox)"
+              onClick={() => void updateWorld()}
+            >
+              Update the world
+            </button>
+          )}
           {messages.length > 0 && !busy && (
             <button
               className="link small"
@@ -593,7 +691,7 @@ export function AiView(props: {
                     <Blocks blocks={parse(m.content)} />
                   </div>
                 ) : (
-                  <p className="muted">…</p>
+                  <p className="muted">{(busy && i === messages.length - 1 && progress) || '…'}</p>
                 )}
                 {m.read && <div className="ai-read muted small">Read {m.read}</div>}
                 {m.role === 'assistant' && m.content && !(busy && i === messages.length - 1) && (
@@ -608,6 +706,36 @@ export function AiView(props: {
                 )}
               </div>
             ))}
+            {worldJob && (
+              <div className="ai-message assistant ai-world-note">
+                <p className="muted">
+                  Updating the world from “{worldJob.title || 'Untitled'}”… {progress}
+                </p>
+              </div>
+            )}
+            {worldNote && !worldJob && (
+              <div className="ai-message assistant ai-world-note">
+                <p>{worldNote}</p>
+                {worldId && props.onOpenWorld && (
+                  <div className="ai-actions small">
+                    <button className="link" onClick={() => props.onOpenWorld!(worldId)}>
+                      Open the world
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {offer && !worldJob && (
+              <div className="ai-message assistant ai-world-note">
+                <p>Update the world from “{offer.title || 'Untitled'}” too?</p>
+                <div className="row">
+                  <button onClick={() => void updateWorld(offer)}>Update the world</button>
+                  <button className="link" onClick={() => setOffer(null)}>
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
             {busy?.edit && (
               <div className="ai-message assistant">
                 <p className="muted">
@@ -656,12 +784,16 @@ export function AiView(props: {
             </span>
             {!editMode && (
               <label className="ai-whole">
-                <input
-                  type="checkbox"
-                  checked={wholeChapter}
-                  onChange={(e) => setWholeChapter(e.target.checked)}
-                />
-                Whole chapter
+                Reads
+                <select
+                  aria-label="What the AI reads"
+                  value={reach}
+                  onChange={(e) => setReach(e.target.value as typeof reach)}
+                >
+                  <option value="here">Selection or screen</option>
+                  <option value="chapter">Whole chapter</option>
+                  <option value="story">Whole story</option>
+                </select>
               </label>
             )}
             <label
@@ -709,10 +841,10 @@ export function AiView(props: {
               Nothing in your chapter changes. Saved with this story.
             </span>
             <span className="status-spacer" />
-            {busy ? (
+            {busy || worldJob ? (
               <button
                 type="button"
-                onClick={() => void api.invoke('ai:cancel', { requestId: busy.id })}
+                onClick={() => void api.invoke('ai:cancel', { requestId: (busy ?? worldJob)!.id })}
               >
                 Stop
               </button>

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isBook, worldLinkMenu } from './worldLink'
 import { offerScope, requestEdit, useScopeAnswers } from '../ai/scope'
+import { updateWorld, worldUpdateNote } from '../ai/worldUpdate'
+import { Recap } from '../ai/Recap'
 import type {
   WorldSummary,
   CaptureContext,
@@ -125,6 +127,19 @@ export function WritingView(props: {
   const editWithAi = (draft: string) => {
     requestEdit(series.id, draft)
     if (!props.aiBeside) props.onToggleAi?.()
+  }
+  /** Reads the chapter for the world; what it finds waits in the world's inbox. */
+  const worldFromChapter = async (chapterId: string) => {
+    const title = liveMeta[chapterId]?.title || view?.chapters[chapterId]?.title || ''
+    actions.toast(`Reading “${title || 'Untitled'}” for the world…`)
+    try {
+      await flushAll()
+      const r = await updateWorld({ seriesId: series.id, volumeId: volume.id, chapterId })
+      actions.toast(worldUpdateNote(title, r))
+    } catch (err) {
+      const e = describeError(err)
+      if (e.code !== 'cancelled') actions.toast(e.message)
+    }
   }
   const [exporting, setExporting] = useState<{ chapterId: string | null; only?: boolean } | null>(
     null,
@@ -544,6 +559,15 @@ export function WritingView(props: {
                   title: 'Edit this chapter with AI (fix spelling and grammar, add a scene…)',
                   run: () => editWithAi('Fix the spelling, grammar and punctuation.'),
                 },
+                ...(series.worldId
+                  ? [
+                      {
+                        id: 'ai-world',
+                        title: 'Update the world from this chapter (AI)',
+                        run: () => void worldFromChapter(selectedId),
+                      },
+                    ]
+                  : []),
               ]
             : []),
         ]
@@ -667,6 +691,15 @@ export function WritingView(props: {
                       disabled: !selectedId,
                       onSelect: () => editWithAi('Fix the spelling, grammar and punctuation.'),
                     },
+                    ...(series.worldId
+                      ? [
+                          {
+                            label: 'Update the world from this chapter (AI)',
+                            disabled: !selectedId,
+                            onSelect: () => selectedId && void worldFromChapter(selectedId),
+                          },
+                        ]
+                      : []),
                   ]
                 : []),
               {
@@ -877,6 +910,7 @@ export function WritingView(props: {
 
       <main className="page-area">
         {settingsOpen && <SettingsWindow onClose={() => setSettingsOpen(false)} />}
+        {aiOn && !focusMode && <Recap seriesId={series.id} chapterId={selectedId} />}
         {/* The editor stays loaded behind Settings, keeping undo history and scroll position. */}
         <div className="page-area-inner" hidden={settingsOpen}>
           {selectedId && view && selectedId in view.chapters ? (

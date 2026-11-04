@@ -8,9 +8,11 @@ import { appConfig } from '../../../app.config'
  *   series/<series-id>/series.json
  *   series/<series-id>/volumes/<volume-id>/{volume,outline,manifest}.json
  *   series/<series-id>/volumes/<volume-id>/chapters/<chapter-id>.json
+ *   series/<series-id>/volumes/<volume-id>/summaries/<chapter-id>.json   (AI summaries)
  *   worlds/<world-id>/{world,manifest}.json
  *   worlds/<world-id>/{templates,rejected}.json         (only once used)
- *   worlds/<world-id>/inbox/<item-id>.json              (one per captured item)
+ *   worlds/<world-id>/inbox/<item-id>.json              (one per item: captured, or from the AI)
+ *   worlds/<world-id>/answers/<answer-id>.json          (the writer's answers to the AI's questions)
  *   worlds/<world-id>/entries/<entry-id>.json
  *   worlds/<world-id>/images/<sha256>.<ext>             (portraits and maps, stored once)
  *   worlds/<world-id>/maps/<map-id>.json                (region outlines or a travel sketch)
@@ -68,6 +70,8 @@ export const unitPaths = {
   map: (mapId: string) => `maps/${mapId}.json`,
   relationship: (relId: string) => `relationships/${relId}.json`,
   inboxItem: (itemId: string) => `inbox/${itemId}.json`,
+  answer: (answerId: string) => `answers/${answerId}.json`,
+  summary: (chapterId: string) => `summaries/${chapterId}.json`,
   /** The old single inbox file, moved to `inbox/` when the inbox next changes. */
   oldInbox: 'inbox.json',
   manifest: 'manifest.json',

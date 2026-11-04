@@ -404,7 +404,14 @@ export function Home(props: { detached?: PaneRoute | null }) {
           place === 'detached' ? () => void api.invoke('window:dropped', { route }) : undefined
         }
       >
-        <AiView seriesId={side.seriesId} volumeId={side.volumeId} onRoute={reportAi} />
+        <AiView
+          seriesId={side.seriesId}
+          volumeId={side.volumeId}
+          onRoute={reportAi}
+          onOpenWorld={(worldId) =>
+            void api.invoke('window:open', { route: { kind: 'world', worldId } })
+          }
+        />
       </PaneFrame>
     )
   }

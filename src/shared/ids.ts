@@ -28,6 +28,7 @@ export const ID_KINDS = {
   relationship: 'rel',
   conversation: 'cnv',
   conflict: 'cfl',
+  answer: 'ans',
 } as const
 
 export type IdKind = keyof typeof ID_KINDS
