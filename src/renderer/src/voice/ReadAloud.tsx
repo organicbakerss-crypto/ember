@@ -98,6 +98,6 @@ export function ReadAloud(props: {
 /** What to do when this computer has no voice to read with. */
 function noVoiceHelp(): string {
   return navigator.userAgent.includes('Linux')
-    ? 'This computer has no voice to read with. On Linux, install speech-dispatcher and espeak-ng (for example: sudo apt install speech-dispatcher espeak-ng), then restart the app. VoiceStudio’s voices come next.'
+    ? 'This computer has no voice to read with. On Linux, install speech-dispatcher and espeak-ng (Arch: sudo pacman -S speech-dispatcher espeak-ng; Ubuntu or Debian: sudo apt install speech-dispatcher espeak-ng), then restart the app.'
     : 'This computer’s voice couldn’t be used. Check Settings → Voice, and that a voice is installed (on a Mac: System Settings → Accessibility → Spoken Content).'
 }
