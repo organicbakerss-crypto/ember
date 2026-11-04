@@ -165,6 +165,8 @@ export interface SnapshotInfo {
     | 'before-deletion'
     | 'before-restore'
     | 'before-replace'
+    | 'before-split'
+    | 'before-merge'
     | 'before-sync'
     | 'before-ai'
     | 'after-ai'
@@ -595,6 +597,16 @@ export const ipcInputs = {
     arcId: id('arc').optional(),
   }),
   'chapter:read': z.object({ ...volumeRef, chapterId: id('chapter') }),
+  /** Splits a chapter in two: `before` stays, `after` becomes a new chapter right after it. */
+  'chapter:split': z.object({
+    ...volumeRef,
+    chapterId: id('chapter'),
+    before: richTextDocSchema,
+    after: richTextDocSchema,
+  }),
+  /** Joins the chapter after this one onto its end (that one goes to the trash). */
+  'chapter:mergeNext': z.object({ ...volumeRef, chapterId: id('chapter') }),
+  'chapter:duplicate': z.object({ ...volumeRef, chapterId: id('chapter') }),
   'chapter:save': z.object({
     ...volumeRef,
     chapterId: id('chapter'),
@@ -1022,6 +1034,9 @@ export interface IpcResults {
   'arc:create': OutlineView
   'chapter:create': ChapterFile
   'chapter:read': ChapterFile
+  'chapter:split': ChapterFile
+  'chapter:mergeNext': ChapterFile
+  'chapter:duplicate': ChapterFile
   'chapter:save': ChapterFile
   'world:create': WorldFile
   'volume:update': VolumeFile
@@ -1124,6 +1139,8 @@ export interface IpcEvents {
   'text:quickAdd': string
   /** "Add a comment" was chosen on selected text (from the right-click menu). */
   'text:comment': null
+  /** "Split the chapter here" was chosen (from the right-click menu). */
+  'text:split': null
   /** Something was captured from the right-click menu (a short confirmation to show). */
   'text:captured': string
   'settings:changed': AppSettings

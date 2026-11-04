@@ -35,6 +35,7 @@ import {
   type LibraryFile,
   type ManifestFile,
   type OutlineFile,
+  type RichTextDoc,
   type SeriesFile,
   type VolumeFile,
   type WorldFile,
@@ -106,6 +107,8 @@ const snapshotFileSchema = z.looseObject({
       'before-deletion',
       'before-restore',
       'before-replace',
+      'before-split',
+      'before-merge',
       'before-sync',
       'before-ai',
       'after-ai',
@@ -685,6 +688,143 @@ export class Library {
     })
     this.onChange({ kind: 'outline', seriesId, volumeId })
     return chapter
+  }
+
+  /** Puts a chapter into the outline right after another (in the same arc, if it's in one). */
+  private placeAfter(outline: OutlineFile, afterId: string, chapterId: string): void {
+    for (const item of outline.items) {
+      if (item.type === 'arc' && item.chapterIds.includes(afterId)) {
+        item.chapterIds.splice(item.chapterIds.indexOf(afterId) + 1, 0, chapterId)
+        return
+      }
+    }
+    const at = outline.items.findIndex((i) => i.type === 'chapter' && i.id === afterId)
+    outline.items.splice(at < 0 ? outline.items.length : at + 1, 0, {
+      type: 'chapter',
+      id: chapterId,
+    })
+  }
+
+  /** A new chapter made from an existing one, placed right after `afterId`. Inside the volume lock. */
+  private async addChapterAfter(
+    seriesId: string,
+    volumeId: string,
+    afterId: string,
+    from: ChapterFile,
+    changes: Partial<ChapterFile>,
+  ): Promise<ChapterFile> {
+    const time = this.timestamp()
+    const chapter: ChapterFile = {
+      ...from,
+      ...changes,
+      id: newId('chapter'),
+      volumeId,
+      createdAt: time,
+      updatedAt: time,
+    }
+    // Chapter file first: if the outline write fails, getOutline() still shows it.
+    await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapter.id), chapter)
+    const outline = await this.readStoredOutline(seriesId, volumeId)
+    this.placeAfter(outline, afterId, chapter.id)
+    await this.writeVolumeFile(seriesId, volumeId, unitPaths.outline, outline)
+    return chapter
+  }
+
+  /**
+   * Splits a chapter: `before` stays in it, `after` becomes a new chapter right
+   * after it. The new chapter is written before the old one is shortened, and
+   * the old one's full text is kept in its history.
+   */
+  async splitChapter(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+    before: RichTextDoc,
+    after: RichTextDoc,
+  ): Promise<ChapterFile> {
+    const made = await this.lock.run(`volume:${volumeId}`, async () => {
+      const existing = await this.readChapter(seriesId, volumeId, chapterId)
+      await this.snapshotChapter(volumeId, existing, 'before-split', true)
+      const second = await this.addChapterAfter(seriesId, volumeId, chapterId, existing, {
+        title: existing.title ? `${existing.title} (part 2)` : '',
+        content: after,
+        notes: '',
+        synopsis: '',
+      })
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapterId), {
+        ...existing,
+        content: before,
+        updatedAt: this.timestamp(),
+      })
+      return second
+    })
+    this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId })
+    this.onChange({ kind: 'outline', seriesId, volumeId })
+    return made
+  }
+
+  /**
+   * Joins the next chapter (in reading order) onto the end of this one, with a
+   * scene break between. The joined one goes to the trash, so it can be
+   * restored; this one's text before the join is kept in its history.
+   */
+  async mergeNextChapter(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+  ): Promise<ChapterFile> {
+    const order = await this.chaptersInOrder(seriesId, volumeId)
+    const nextId = order[order.indexOf(chapterId) + 1]
+    if (!order.includes(chapterId))
+      throw new AppError('not-found', 'That chapter no longer exists.')
+    if (!nextId)
+      throw new AppError(
+        'invalid-input',
+        'This is the last chapter: there is none after it to join.',
+      )
+    const merged = await this.lock.run(`volume:${volumeId}`, async () => {
+      const first = await this.readChapter(seriesId, volumeId, chapterId)
+      const next = await this.readChapter(seriesId, volumeId, nextId)
+      await this.snapshotChapter(volumeId, first, 'before-merge', true)
+      const join = (a: string, b: string) => [a, b].filter((t) => t.trim()).join('\n\n')
+      const result: ChapterFile = {
+        ...first,
+        content: {
+          ...first.content,
+          content: [
+            ...(first.content.content ?? []),
+            { type: 'sceneBreak' },
+            ...(next.content.content ?? []),
+          ],
+        },
+        notes: join(first.notes, next.notes),
+        synopsis: join(first.synopsis ?? '', next.synopsis ?? ''),
+        updatedAt: this.timestamp(),
+      }
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapterId), result)
+      return result
+    })
+    // Only once its words are safely in this chapter.
+    await this.trashChapter(seriesId, volumeId, nextId)
+    this.onChange({ kind: 'chapter', seriesId, volumeId, chapterId })
+    this.onChange({ kind: 'outline', seriesId, volumeId })
+    return merged
+  }
+
+  /** A copy of a chapter, right after it. */
+  async duplicateChapter(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+  ): Promise<ChapterFile> {
+    const copy = await this.lock.run(`volume:${volumeId}`, async () => {
+      const existing = await this.readChapter(seriesId, volumeId, chapterId)
+      return this.addChapterAfter(seriesId, volumeId, chapterId, existing, {
+        title: `${existing.title || 'Untitled chapter'} (copy)`.slice(0, 200),
+      })
+    })
+    this.onChange({ kind: 'outline', seriesId, volumeId })
+    return copy
   }
 
   /**

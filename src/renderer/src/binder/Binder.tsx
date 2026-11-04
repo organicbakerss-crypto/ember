@@ -90,6 +90,10 @@ interface BinderProps {
   onRenameChapter: (chapterId: string, title: string) => Promise<unknown>
   onTrashChapter: (chapterId: string) => void
   onSetStatus: (chapterId: string, status: ChapterStatus | null) => void
+  /** Split the open chapter at the cursor. */
+  onSplit: () => void
+  onMergeNext: (chapterId: string) => void
+  onDuplicate: (chapterId: string) => void
   onSetLabel: (chapterId: string, label: ChapterLabel | null) => void
   /** Copies a chapter for pasting into Royal Road. */
   onCopyForRoyalRoad?: (chapterId: string) => void
@@ -213,6 +217,7 @@ export function Binder(props: BinderProps) {
 
   const chapterMenu = (id: string): MenuItem[] => {
     const current = findContainer(containers, id)
+    const order = chapterOrder(containers)
     return [
       { label: 'Rename', hint: 'F2', onSelect: () => props.onRenamingChange(id) },
       {
@@ -231,6 +236,17 @@ export function Binder(props: BinderProps) {
           onSelect: () => props.onSetLabel(id, label),
         })),
       },
+      {
+        label: 'Split at the cursor',
+        disabled: id !== props.selectedId,
+        onSelect: props.onSplit,
+      },
+      {
+        label: 'Join the next chapter onto this one',
+        disabled: order[order.length - 1] === id,
+        onSelect: () => props.onMergeNext(id),
+      },
+      { label: 'Duplicate', onSelect: () => props.onDuplicate(id) },
       {
         label: 'Move to arc',
         disabled: arcs.size === 0 && current === ROOT,

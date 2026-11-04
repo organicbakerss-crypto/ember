@@ -90,6 +90,15 @@ export function attachTextMenu(
         { type: 'separator' },
       )
     }
+    if (params.isEditable && !selected && params.formControlType === 'none') {
+      items.push(
+        {
+          label: 'Split the chapter here',
+          click: () => window.webContents.send(`${IPC_EVENT_PREFIX}text:split`, null),
+        },
+        { type: 'separator' },
+      )
+    }
     const extra = extraItems(params)
     if (extra.length) items.push(...extra, { type: 'separator' })
     if (params.isEditable) {

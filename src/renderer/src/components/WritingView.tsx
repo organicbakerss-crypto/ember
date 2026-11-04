@@ -17,7 +17,13 @@ import type {
   VolumeStats,
   VolumeSummary,
 } from '@shared/ipc'
-import type { ChapterLabel, ChapterStatus, OutlineArc, OutlineFile } from '@shared/schema'
+import type {
+  ChapterLabel,
+  ChapterStatus,
+  OutlineArc,
+  OutlineFile,
+  RichTextDoc,
+} from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
 import { Binder, STATUS_NAMES } from '../binder/Binder'
 import { chapterOrder, toContainers } from '../binder/model'
@@ -427,6 +433,70 @@ export function WritingView(props: {
     if (stored) setLiveMeta((m) => ({ ...m, [chapterId]: { ...stored, ...m[chapterId], title } }))
   }
 
+  /** Cuts the open chapter in two at the cursor; the rest becomes the next chapter. */
+  const splitHere = async () => {
+    if (!selectedId) return
+    const halves = editor.current?.splitAtCursor() ?? null
+    if (!halves) {
+      actions.toast(
+        'Put the cursor where the new chapter should start (not at the very start or end).',
+      )
+      return
+    }
+    try {
+      await flushAll()
+      const second = await api.invoke('chapter:split', {
+        ...ref,
+        chapterId: selectedId,
+        before: halves.before as RichTextDoc,
+        after: halves.after as RichTextDoc,
+      })
+      setReloadToken((t) => t + 1)
+      actions.toast(
+        `Split: the rest is now “${second.title || 'Untitled chapter'}”, right after it.`,
+      )
+    } catch (err) {
+      actions.toast(describeError(err).message)
+    }
+  }
+  useIpcEvent('text:split', () => {
+    if (pane.active) void splitHere()
+  })
+
+  /** Joins the next chapter onto the end of this one (that one goes to the trash). */
+  const mergeNext = async (chapterId: string) => {
+    if (!view) return
+    const order = chapterOrder(toContainers(view.outline))
+    const nextId = order[order.indexOf(chapterId) + 1]
+    if (!nextId) return
+    const name = (id: string) =>
+      `“${liveMeta[id]?.title || view.chapters[id]?.title || 'Untitled chapter'}”`
+    const answer = await choose(
+      `Join ${name(nextId)} onto the end of ${name(chapterId)}?`,
+      [{ value: 'join', label: 'Join them', primary: true }],
+      `A scene break goes between them. ${name(nextId)} goes to the trash, so you can get it back, and ${name(chapterId)} keeps its text from before in its history.`,
+    )
+    if (!answer) return
+    try {
+      await flushAll()
+      await api.invoke('chapter:mergeNext', { ...ref, chapterId })
+      if (selectedId === nextId) select(chapterId)
+      setReloadToken((t) => t + 1)
+    } catch (err) {
+      actions.toast(describeError(err).message)
+    }
+  }
+
+  const duplicate = async (chapterId: string) => {
+    try {
+      await flushAll()
+      const copy = await api.invoke('chapter:duplicate', { ...ref, chapterId })
+      select(copy.id)
+    } catch (err) {
+      actions.toast(describeError(err).message)
+    }
+  }
+
   /** Sets a chapter's status or colour label (only that field is saved). */
   const markChapter = async (
     chapterId: string,
@@ -688,6 +758,21 @@ export function WritingView(props: {
       run: addComment,
     },
     { id: 'comments', title: 'Show the comments', run: () => openPanel('comments') },
+    ...(selectedId
+      ? [
+          { id: 'split', title: 'Split the chapter at the cursor', run: () => void splitHere() },
+          {
+            id: 'merge',
+            title: 'Join the next chapter onto this one',
+            run: () => void mergeNext(selectedId),
+          },
+          {
+            id: 'duplicate',
+            title: 'Duplicate this chapter',
+            run: () => void duplicate(selectedId),
+          },
+        ]
+      : []),
     ...(selectedId
       ? (['draft', 'revised', 'done'] as const).map((status) => ({
           id: `status-${status}`,
@@ -1087,6 +1172,9 @@ export function WritingView(props: {
               onRenameChapter={renameChapter}
               onTrashChapter={trashChapter}
               onSetStatus={(chapterId, status) => void markChapter(chapterId, { status })}
+              onSplit={() => void splitHere()}
+              onMergeNext={(chapterId) => void mergeNext(chapterId)}
+              onDuplicate={(chapterId) => void duplicate(chapterId)}
               onSetLabel={(chapterId, label) => void markChapter(chapterId, { label })}
               onCopyForRoyalRoad={(chapterId) =>
                 void copyChapterForRoyalRoad(

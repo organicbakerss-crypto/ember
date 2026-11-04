@@ -453,6 +453,18 @@ export function registerIpc(
         input.chapterId,
         input.snapshotId,
       ),
+    'chapter:split': (input) =>
+      host.current.splitChapter(
+        input.seriesId,
+        input.volumeId,
+        input.chapterId,
+        input.before,
+        input.after,
+      ),
+    'chapter:mergeNext': (input) =>
+      host.current.mergeNextChapter(input.seriesId, input.volumeId, input.chapterId),
+    'chapter:duplicate': (input) =>
+      host.current.duplicateChapter(input.seriesId, input.volumeId, input.chapterId),
     'search:volume': (input) =>
       input.story
         ? host.current.searchStory(input.seriesId, input.query, input)

@@ -14,6 +14,8 @@ const REASONS: Record<SnapshotInfo['reason'], string> = {
   'before-deletion': 'before a deletion',
   'before-restore': 'before a restore',
   'before-replace': 'before replace all',
+  'before-split': 'before splitting the chapter',
+  'before-merge': 'before joining the next chapter on',
   'before-sync': 'before an update from another computer',
   'before-ai': 'before an AI edit',
   'after-ai': 'after an AI edit',

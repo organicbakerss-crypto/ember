@@ -63,6 +63,8 @@ export interface EditorHandle {
   removeComment: (id: string) => void
   /** Selects and shows a comment's passage. */
   showComment: (id: string) => void
+  /** The chapter cut in two at the cursor; null when the cursor is at the very start or end. */
+  splitAtCursor: () => { before: JSONContent; after: JSONContent } | null
 }
 
 /** A search match to select once the chapter is open. */
@@ -457,6 +459,15 @@ function EditorPage(
       const c = listComments(editor.state.doc).find((x) => x.id === id)
       if (c)
         editor.chain().focus().setTextSelection({ from: c.from, to: c.to }).scrollIntoView().run()
+    },
+    splitAtCursor() {
+      if (readOnly || contentError) return null
+      const { doc } = editor.state
+      const pos = editor.state.selection.from
+      const before = doc.cut(0, pos)
+      const after = doc.cut(pos)
+      if (!before.textContent.trim() || !after.textContent.trim()) return null
+      return { before: before.toJSON() as JSONContent, after: after.toJSON() as JSONContent }
     },
     getDoc() {
       if (readOnly || contentError) return null
