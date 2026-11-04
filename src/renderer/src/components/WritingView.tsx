@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isBook, worldLinkMenu } from './worldLink'
-import { offerScope, useScopeAnswers } from '../ai/scope'
-import { GrammarDialog } from '../ai/GrammarDialog'
+import { offerScope, requestEdit, useScopeAnswers } from '../ai/scope'
 import type {
   WorldSummary,
   CaptureContext,
@@ -122,7 +121,11 @@ export function WritingView(props: {
   const aiOn = settings.ai.enabled
   // Offer the AI what this view shows (it reads it when asked).
   useScopeAnswers()
-  const [checking, setChecking] = useState(false)
+  /** "Edit with AI": opens the AI beside the page with Edit chapter ticked. */
+  const editWithAi = (draft: string) => {
+    requestEdit(series.id, draft)
+    if (!props.aiBeside) props.onToggleAi?.()
+  }
   const [exporting, setExporting] = useState<{ chapterId: string | null; only?: boolean } | null>(
     null,
   )
@@ -413,6 +416,8 @@ export function WritingView(props: {
       chapterTitle: currentTitle,
       selection: selectedText,
       screen: () => editor.current?.visibleText() ?? '',
+      doc: () => editor.current?.getDoc() ?? null,
+      replace: (doc) => editor.current?.replaceDoc(doc) ?? false,
     })
   }, [series.id, volume.id, selectedId, currentTitle, selectedText])
   useEffect(() => () => offerScope(series.id, null), [series.id])
@@ -535,9 +540,9 @@ export function WritingView(props: {
           ...(selectedId
             ? [
                 {
-                  id: 'ai-grammar',
-                  title: 'Check spelling and grammar (AI)',
-                  run: () => setChecking(true),
+                  id: 'ai-edit',
+                  title: 'Edit this chapter with AI (fix spelling and grammar, add a scene…)',
+                  run: () => editWithAi('Fix the spelling, grammar and punctuation.'),
                 },
               ]
             : []),
@@ -658,9 +663,9 @@ export function WritingView(props: {
               ...(aiOn
                 ? [
                     {
-                      label: 'Check spelling and grammar (AI)…',
+                      label: 'Edit with AI (spelling, grammar…)…',
                       disabled: !selectedId,
-                      onSelect: () => setChecking(true),
+                      onSelect: () => editWithAi('Fix the spelling, grammar and punctuation.'),
                     },
                   ]
                 : []),
@@ -955,18 +960,6 @@ export function WritingView(props: {
             return !!created
           }}
           onCancel={() => setQuickAdd(null)}
-        />
-      )}
-      {checking && selectedId && (
-        <GrammarDialog
-          seriesId={series.id}
-          volumeId={volume.id}
-          chapterId={selectedId}
-          worldId={worldId}
-          blocks={() => editor.current?.textBlocks() ?? null}
-          apply={(expected, changes) => editor.current?.applyBlockChanges(expected, changes) ?? 0}
-          onClose={() => setChecking(false)}
-          toast={actions.toast}
         />
       )}
       {exporting && (

@@ -70,17 +70,11 @@ export async function startFakeChatGpt(): Promise<FakeChatGpt> {
       if (url.pathname === '/responses') {
         const input = (body['input'] as { content: { text: string }[] }[]) ?? []
         const last = input[input.length - 1]?.content[0]?.text ?? ''
-        // Grammar: asked for JSON in the instructions; answered in a code fence, as models do.
-        const grammar = String(body['instructions'] ?? '').includes('Reply with JSON only')
+        // Editing a chapter: the chapter comes back with "teh" fixed.
+        const editing = String(body['instructions'] ?? '').includes('You edit one chapter')
         if (body['text']) return json(400, { detail: 'Unsupported parameter: text.format' })
-        const text = grammar
-          ? '```json\n' +
-            JSON.stringify({
-              paragraphs: (JSON.parse(last) as { paragraphs: string[] }).paragraphs.map((p) =>
-                p.replace(/teh/g, 'the'),
-              ),
-            }) +
-            '\n```'
+        const text = editing
+          ? last.slice(last.indexOf('”:') + 4).replace(/teh/g, 'the')
           : `From ChatGPT: ${last.slice(-40)}`
         res.writeHead(200, { 'content-type': 'text/event-stream' })
         for (let i = 0; i < text.length; i += 8) {

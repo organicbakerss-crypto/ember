@@ -91,8 +91,18 @@ describe('ChatGPT, signed in directly', () => {
     expect(call.body).toMatchObject({ model: 'gpt-6.1-sol', store: false, stream: true })
     expect((call.body['input'] as unknown[]).length).toBe(3)
 
-    const g = await ai.grammar({ requestId: 'g', paragraphs: ['teh end.'] }, () => {})
-    expect(g.paragraphs).toEqual(['the end.'])
+    const e = await ai.editChapter(
+      {
+        requestId: 'g',
+        seriesId: 'ser_none',
+        instruction: 'Fix spelling',
+        chapterTitle: 'A',
+        chapter: 'teh end.',
+        messages: [],
+      },
+      () => {},
+    )
+    expect(e.text).toBe('the end.')
 
     await ai.chatgptSignOut()
     expect((await ai.status()).account).toBeNull()

@@ -79,14 +79,10 @@ export function registerIpc(
           event.sender.send(`${IPC_EVENT_PREFIX}ai:token`, { requestId: input.requestId, text })
         }
       }),
-    'ai:grammar': (input, event) =>
-      ai.grammar(input, (done, total) => {
+    'ai:editChapter': (input, event) =>
+      ai.editChapter(input, (text) => {
         if (!event.sender.isDestroyed()) {
-          event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, {
-            requestId: input.requestId,
-            done,
-            total,
-          })
+          event.sender.send(`${IPC_EVENT_PREFIX}ai:token`, { requestId: input.requestId, text })
         }
       }),
     'ai:conversations': (input) => host.current.listConversations(input.seriesId),

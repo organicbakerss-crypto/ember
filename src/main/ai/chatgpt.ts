@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { appConfig } from '../../../app.config'
 import { writeFileAtomic } from '../fs/atomicWrite'
 import { AppError } from '../errors'
+import { idleLimit, type IdleLimit } from './idle'
 import type { ChatMessage } from './ollama'
 
 export const AUTH_BASE = 'https://auth.openai.com'
@@ -298,8 +299,26 @@ export class ChatGpt {
     model: string
     json?: boolean
     signal?: AbortSignal
+    /** Give up after this long with nothing arriving. */
+    idleMs?: number
     onToken?: (text: string) => void
   }): Promise<string> {
+    const limit = idleLimit(input.signal, input.idleMs ?? 120000)
+    try {
+      return await this.stream(input, limit)
+    } catch (err) {
+      if (limit.timedOut)
+        throw new AppError(
+          'invalid-input',
+          'ChatGPT stopped answering (nothing for 2 minutes). Try again; if it keeps happening, check you haven’t hit your plan’s limit.',
+        )
+      throw err
+    } finally {
+      limit.done()
+    }
+  }
+
+  private async stream(input: Parameters<ChatGpt['chat']>[0], limit: IdleLimit): Promise<string> {
     const login = await this.fresh()
     const instructions = input.messages
       .filter((m) => m.role === 'system')
@@ -335,10 +354,10 @@ export class ChatGpt {
           accept: 'text/event-stream',
         },
         body: JSON.stringify(body),
-        signal: input.signal,
+        signal: limit.signal,
       })
     } catch (err) {
-      if (input.signal?.aborted) throw new AppError('cancelled', 'Stopped.')
+      if (input.signal?.aborted && !limit.timedOut) throw new AppError('cancelled', 'Stopped.')
       throw new AppError('invalid-input', 'Couldn’t reach ChatGPT. Check your connection.', {
         cause: err,
       })
@@ -374,6 +393,7 @@ export class ChatGpt {
     const decoder = new TextDecoder()
     try {
       for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+        limit.reset()
         pending += decoder.decode(chunk, { stream: true })
         let end: number
         while ((end = pending.indexOf('\n\n')) >= 0) {
@@ -403,7 +423,7 @@ export class ChatGpt {
         }
       }
     } catch (err) {
-      if (input.signal?.aborted) throw new AppError('cancelled', 'Stopped.')
+      if (input.signal?.aborted && !limit.timedOut) throw new AppError('cancelled', 'Stopped.')
       throw err
     }
     return out

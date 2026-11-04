@@ -3,6 +3,7 @@
  * what the app needs: the installed models, and a streamed chat.
  */
 import { AppError } from '../errors'
+import { idleLimit, type IdleLimit } from './idle'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -48,8 +49,26 @@ export class Ollama {
     json?: boolean
     temperature?: number
     signal?: AbortSignal
+    /** Give up after this long with nothing arriving. */
+    idleMs?: number
     onToken?: (text: string) => void
   }): Promise<string> {
+    const limit = idleLimit(input.signal, input.idleMs ?? 300000)
+    try {
+      return await this.stream(input, limit)
+    } catch (err) {
+      if (limit.timedOut)
+        throw new AppError(
+          'invalid-input',
+          'Ollama stopped answering (nothing for 5 minutes). Is the model still loading? Try again.',
+        )
+      throw err
+    } finally {
+      limit.done()
+    }
+  }
+
+  private async stream(input: Parameters<Ollama['chat']>[0], limit: IdleLimit): Promise<string> {
     let res: Response
     try {
       res = await this.fetchImpl(this.url('/api/chat'), {
@@ -62,10 +81,10 @@ export class Ollama {
           ...(input.json ? { format: 'json' } : {}),
           options: { temperature: input.temperature ?? 0.7 },
         }),
-        signal: input.signal,
+        signal: limit.signal,
       })
     } catch (err) {
-      if (input.signal?.aborted) throw new AppError('cancelled', 'Stopped.')
+      if (input.signal?.aborted && !limit.timedOut) throw new AppError('cancelled', 'Stopped.')
       throw this.unreachable(err)
     }
     if (!res.ok || !res.body) {
@@ -90,6 +109,7 @@ export class Ollama {
     const decoder = new TextDecoder()
     try {
       for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+        limit.reset()
         pending += decoder.decode(chunk, { stream: true })
         let nl: number
         while ((nl = pending.indexOf('\n')) >= 0) {
@@ -106,7 +126,7 @@ export class Ollama {
         }
       }
     } catch (err) {
-      if (input.signal?.aborted) throw new AppError('cancelled', 'Stopped.')
+      if (input.signal?.aborted && !limit.timedOut) throw new AppError('cancelled', 'Stopped.')
       throw err
     }
     return out

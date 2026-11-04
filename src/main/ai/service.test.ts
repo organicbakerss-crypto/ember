@@ -92,26 +92,31 @@ describe('the AI service', () => {
     expect(system).toContain('only the text and world notes provided')
   })
 
-  it('grammar: corrected paragraphs, world names kept, scene breaks skipped, bad replies retried', async () => {
-    let call = 0
+  it('edit chapter: sends the chapter, the instruction, names and the conversation; returns the edit', async () => {
     fake = await startFakeOllama((req) => {
-      call++
-      const { paragraphs } = JSON.parse(req.messages[1]!.content) as { paragraphs: string[] }
-      // The first (batched) reply loses a paragraph; single ones come back fixed.
-      if (call === 1 && paragraphs.length > 1)
-        return JSON.stringify({ paragraphs: [paragraphs[0]] })
-      return JSON.stringify({ paragraphs: paragraphs.map((p) => p.replace('teh', 'the')) })
+      const user = req.messages[1]!.content
+      return user.slice(user.indexOf('“Arrival”:') + 12).replace(/teh/g, 'the')
     })
     const ref = await story()
-    const progress: number[] = []
-    const r = await service({}).grammar(
-      { requestId: 'g', paragraphs: ['teh cat.', '* * *', '', 'teh dog.'], worldId: ref.worldId },
-      (done) => progress.push(done),
+    const tokens: string[] = []
+    const r = await service({}).editChapter(
+      {
+        requestId: 'e',
+        seriesId: ref.seriesId,
+        instruction: 'Fix the spelling',
+        chapterTitle: 'Arrival',
+        chapter: 'Mara ran to teh harbour.\n\n* * *\n\nOdo waited.',
+        messages: [{ role: 'user', content: 'Here is a scene I wrote: The bell rang.' }],
+      },
+      (t) => tokens.push(t),
     )
-    expect(r.paragraphs).toEqual(['the cat.', '* * *', '', 'the dog.'])
-    expect(fake.requests[0]!.format).toBe('json')
-    expect(fake.requests[0]!.messages[0]!.content).toContain('Mara')
-    expect(progress.at(-1)).toBe(2)
+    expect(r.text).toBe('Mara ran to the harbour.\n\n* * *\n\nOdo waited.')
+    expect(tokens.join('')).toBe(r.text)
+    const [system, user] = fake.requests[0]!.messages
+    expect(system!.content).toContain('Mara') // world names
+    expect(system!.content).toContain('whole edited chapter')
+    expect(user!.content).toContain('What to do: Fix the spelling')
+    expect(user!.content).toContain('Writer: Here is a scene I wrote: The bell rang.')
   })
 
   it('explains what’s wrong: AI off, Ollama not running, model missing', async () => {
@@ -146,10 +151,36 @@ describe('the AI service', () => {
     await expect(asking).rejects.toThrow(/Stopped/)
   })
 
-  it('grammar says so when the replies can’t be read, instead of “no changes”', async () => {
-    fake = await startFakeOllama(() => 'Sorry, I can only chat.')
+  it('gives up when the AI goes quiet, and says so', async () => {
+    const { createServer } = await import('node:http')
+    const silent = createServer((req, res) => {
+      if (req.url === '/api/tags') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        return res.end(JSON.stringify({ models: [{ name: 'm' }] }))
+      }
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      // Starts answering, then nothing.
+      res.write(JSON.stringify({ message: { content: 'Hm' } }) + '\n')
+    })
+    await new Promise<void>((r) => silent.listen(0, '127.0.0.1', r))
+    const port = (silent.address() as { port: number }).port
+    const ai = new AiService({
+      settings: async () => ({
+        ...DEFAULT_AI_SETTINGS,
+        enabled: true,
+        host: `http://127.0.0.1:${port}`,
+      }),
+      host: { current: lib } as unknown as LibraryHost,
+      chatgpt: { file: join(dir, 'chatgpt.json'), secrets: plain },
+      idleMs: 300,
+    })
     await expect(
-      service({}).grammar({ requestId: 'u', paragraphs: ['teh one.', 'teh two.'] }, () => {}),
-    ).rejects.toThrow(/couldn’t be read as corrections/)
+      ai.ask(
+        { requestId: 'q', mode: 'chat', messages: [{ role: 'user', content: 'hi' }], scope: null },
+        () => {},
+      ),
+    ).rejects.toThrow(/stopped answering/)
+    silent.closeAllConnections()
+    await new Promise<void>((r) => silent.close(() => r()))
   })
 })

@@ -4010,3 +4010,77 @@ kbd {
     flex-wrap: wrap;
   }
 }
+
+/* ---------- comparing an AI edit ---------- */
+
+.dialog.compare-dialog {
+  max-width: min(84rem, 96vw);
+  width: min(84rem, 96vw);
+  height: min(60rem, 92vh);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.compare-head {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.compare-head h2 {
+  margin: 0 0 0.2rem;
+}
+.compare-cols,
+.compare-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+.compare-labels {
+  padding: 0 0.9rem;
+}
+.compare-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--page);
+  color: var(--page-text);
+  font-family: var(--page-font);
+  padding: 0.6rem 0.9rem;
+}
+.compare-row {
+  padding: 0.35rem 0;
+  border-bottom: 1px dashed transparent;
+}
+.compare-row.changed {
+  border-bottom-color: var(--border);
+}
+.compare-cell {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  min-width: 0;
+}
+.compare-row.same .compare-cell {
+  opacity: 0.6;
+}
+.compare-row ins {
+  text-decoration: none;
+  background: color-mix(in srgb, #2e9d4f 28%, transparent);
+}
+.compare-row del {
+  background: color-mix(in srgb, #c0392b 18%, transparent);
+}
+.compare-row ins.wording,
+.compare-row.added ins {
+  background: color-mix(in srgb, #d08a00 35%, transparent);
+}
+.compare-row.undone .compare-cell:first-child del {
+  background: none;
+  text-decoration: none;
+}
+.compare-undo {
+  display: block;
+  margin-top: 0.2rem;
+}

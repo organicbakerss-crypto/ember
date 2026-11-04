@@ -13,7 +13,6 @@ import { NameCards, type NameIndex } from './NameCards'
 import { docWords, findScenes, type Scene } from './scenes'
 import { Toolbar } from './Toolbar'
 import { useChapterSaver, type SaveState } from './useChapterSaver'
-import { applyBlockChanges, textBlocks, type BlockChange } from './textBlocks'
 
 export interface ChapterMeta {
   title: string
@@ -39,10 +38,10 @@ export interface EditorHandle {
   textBeforeSelection: () => string
   /** The paragraphs (and headings) visible on screen, as text. */
   visibleText: () => string
-  /** Every paragraph and heading as text (for AI fixes), or null when it can't be edited here. */
-  textBlocks: () => string[] | null
-  /** Applies chosen changes to those blocks as one undoable step; returns how many applied. */
-  applyBlockChanges: (expected: string[], changes: BlockChange[]) => number
+  /** The chapter as it is on the page, or null when it can't be edited here. */
+  getDoc: () => JSONContent | null
+  /** Replaces the whole chapter as one undoable step (an AI edit). Returns whether it did. */
+  replaceDoc: (doc: JSONContent) => boolean
 }
 
 /** A search match to select once the chapter is open. */
@@ -403,16 +402,14 @@ function EditorPage(
       })
       return parts.join('\n\n')
     },
-    textBlocks() {
+    getDoc() {
       if (readOnly || contentError) return null
-      return textBlocks(editor.state.doc).map((b) => b.text)
+      return editor.getJSON()
     },
-    applyBlockChanges(expected: string[], changes: BlockChange[]) {
-      if (readOnly) return 0
-      const tr = editor.state.tr
-      const applied = applyBlockChanges(tr, expected, changes)
-      if (applied) editor.view.dispatch(tr)
-      return applied
+    replaceDoc(doc: JSONContent) {
+      if (readOnly || contentError) return false
+      editor.chain().setContent(doc, { emitUpdate: true }).run()
+      return true
     },
     textBeforeSelection() {
       const { $from } = editor.state.selection

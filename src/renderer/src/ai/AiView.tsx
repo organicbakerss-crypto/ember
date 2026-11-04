@@ -7,7 +7,10 @@ import { api, describeError, useIpcEvent } from '../api'
 import { formatWhen } from '../components/TrashPage'
 import { useSettings } from '../useTheme'
 import { parse, type Block, type Inline } from './markdown'
-import { fetchScope, useLocalScope } from './scope'
+import { docToMarkdown, editedDoc, type DocNode } from '@shared/ai/chapterEdit'
+import { flushAll } from '../saving'
+import { CompareDialog, type EditResult } from './CompareDialog'
+import { editRequest, fetchScope, localEditor, useLocalScope } from './scope'
 
 type Mode = 'chat' | 'brainstorm' | 'ask'
 type Message = Pick<ConversationMessage, 'role' | 'content' | 'at' | 'read'>
@@ -134,7 +137,18 @@ export function AiView(props: {
   const [draft, setDraft] = useState('')
   const [quote, setQuote] = useState<string | null>(null)
   const [wholeChapter, setWholeChapter] = useState(false)
-  const [busy, setBusy] = useState<{ id: string; mode: Mode } | null>(null)
+  const [busy, setBusy] = useState<{ id: string; mode: Mode; edit?: boolean } | null>(null)
+  /** Edit chapter: the AI may change the open chapter, as asked. */
+  const [editMode, setEditMode] = useState(false)
+  const [editWords, setEditWords] = useState(0)
+  const [compare, setCompare] = useState<{
+    result: EditResult
+    chapterTitle: string
+    volumeId: string
+    chapterId: string
+    finish: (summary: string) => void
+  } | null>(null)
+  const [handledRequest, setHandledRequest] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [past, setPast] = useState<ConversationSummary[]>([])
   const [listOpen, setListOpen] = useState(false)
@@ -147,6 +161,14 @@ export function AiView(props: {
   // The answer as it streams in (to keep what came if it's stopped).
   const partial = useRef('')
   const local = useLocalScope(seriesId)
+  // "Edit with AI" from the ⋯ menu: tick Edit chapter and fill in the request.
+  const asked = editRequest(seriesId)
+  if (asked && asked.id !== handledRequest) {
+    setHandledRequest(asked.id)
+    setEditMode(true)
+    setMode('chat')
+    setDraft(asked.draft)
+  }
   const thread = threads[mode]
   const messages = thread.messages
 
@@ -176,6 +198,10 @@ export function AiView(props: {
     if (requestId !== busy?.id) return
     const into = busy.mode
     partial.current += text
+    if (busy.edit) {
+      setEditWords(words(partial.current))
+      return
+    }
     setThreads((t) => {
       const msgs = [...t[into].messages]
       const last = msgs[msgs.length - 1]
@@ -186,15 +212,19 @@ export function AiView(props: {
   })
 
   const scopeKind = wholeChapter ? 'chapter' : local?.selection ? 'selection' : 'screen'
-  const chip = !local
-    ? 'Reading: the chapter open in the writing view'
-    : !local.chapterId
-      ? 'Reading: nothing (no chapter open)'
-      : scopeKind === 'chapter'
-        ? `Reading: all of “${local.chapterTitle || 'Untitled'}”`
-        : scopeKind === 'selection'
-          ? `Reading: your selection, ~${words(local.selection!)} words`
-          : `Reading: what’s on screen in “${local.chapterTitle || 'Untitled'}”`
+  const chip = editMode
+    ? local?.chapterId
+      ? `Editing: all of “${local.chapterTitle || 'Untitled'}”`
+      : 'Editing: open a chapter beside the AI'
+    : !local
+      ? 'Reading: the chapter open in the writing view'
+      : !local.chapterId
+        ? 'Reading: nothing (no chapter open)'
+        : scopeKind === 'chapter'
+          ? `Reading: all of “${local.chapterTitle || 'Untitled'}”`
+          : scopeKind === 'selection'
+            ? `Reading: your selection, ~${words(local.selection!)} words`
+            : `Reading: what’s on screen in “${local.chapterTitle || 'Untitled'}”`
 
   const open = async (id: string) => {
     try {
@@ -246,9 +276,120 @@ export function AiView(props: {
       .catch((err) => setError(`Couldn’t save the conversation: ${describeError(err).message}`))
   }
 
+  /** Edit chapter: the AI edits the open chapter; the change goes in, then side by side. */
+  const runEdit = async (instruction: string) => {
+    const into = mode
+    const current = thread
+    const editor = localEditor(seriesId)
+    if (!editor?.chapterId) {
+      setError(
+        'Open a chapter beside the AI to edit it (Edit chapter works when the AI is beside the page).',
+      )
+      return
+    }
+    const oldDoc = editor.doc()
+    if (!oldDoc) {
+      setError('This chapter is being edited in another window or pane. Edit it there.')
+      return
+    }
+    const { volumeId, chapterId, chapterTitle } = editor
+    const md = docToMarkdown(oldDoc as { content?: DocNode[] })
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const now = new Date().toISOString()
+    const read = `Edit chapter: “${chapterTitle || 'Untitled'}”, ~${words(md)} words`
+    const history: Message[] = [
+      ...current.messages,
+      { role: 'user', content: instruction, at: now, read },
+    ]
+    setThreads((t) => ({ ...t, [into]: { ...current, messages: history } }))
+    setDraft('')
+    setError(null)
+    setBusy({ id: requestId, mode: into, edit: true })
+    setEditWords(0)
+    stick.current = true
+    partial.current = ''
+    const reply = (content: string) =>
+      save(into, current, [
+        ...history,
+        { role: 'assistant', content, at: new Date().toISOString(), read: null },
+      ])
+    try {
+      // The version before goes into History first.
+      await flushAll()
+      await api.invoke('history:keep', { seriesId, volumeId, chapterId, reason: 'before-ai' })
+      const answer = await api.invoke('ai:editChapter', {
+        requestId,
+        seriesId,
+        instruction,
+        chapterTitle,
+        chapter: md,
+        messages: current.messages
+          .slice(-CONTEXT_MESSAGES)
+          .map((m) => ({ role: m.role, content: m.content })),
+      })
+      const result = editedDoc(oldDoc as { content?: DocNode[] }, answer.text)
+      const changes = result.pairs.filter((p) => !p.same).length
+      if (!changes) {
+        reply(`No changes needed in “${chapterTitle || 'Untitled'}”.`)
+        return
+      }
+      // Typed in meanwhile? Then nothing is changed.
+      const now2 = editor.doc()
+      if (!now2 || docToMarkdown(now2 as { content?: DocNode[] }) !== md) {
+        reply('The chapter changed while the AI was working, so nothing was changed. Ask again.')
+        return
+      }
+      if (!editor.replace(result.doc)) {
+        reply('The chapter couldn’t be edited here (another window has it).')
+        return
+      }
+      setCompare({
+        result,
+        chapterTitle,
+        volumeId,
+        chapterId,
+        finish: reply,
+      })
+    } catch (err) {
+      const e = describeError(err)
+      if (e.code !== 'cancelled') setError(e.message)
+      setThreads((t) => ({ ...t, [into]: { ...t[into], messages: history } }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const finishCompare = async (outcome: { kept: boolean; undone: number; changes: number }) => {
+    const c = compare
+    setCompare(null)
+    if (!c) return
+    const name = `“${c.chapterTitle || 'Untitled'}”`
+    if (outcome.kept && outcome.undone < outcome.changes) {
+      await flushAll()
+      await api
+        .invoke('history:keep', {
+          seriesId,
+          volumeId: c.volumeId,
+          chapterId: c.chapterId,
+          reason: 'after-ai',
+        })
+        .catch(() => {})
+      const kept = outcome.changes - outcome.undone
+      c.finish(
+        `Edited ${name}: kept ${kept} ${kept === 1 ? 'change' : 'changes'}${outcome.undone ? `, undid ${outcome.undone}` : ''}. The versions before and after are in History.`,
+      )
+    } else {
+      c.finish(`Undid the edit to ${name}: your text is back. The version before is in History.`)
+    }
+  }
+
   const send = async (text: string) => {
     const question = text.trim()
     if (!question || busy) return
+    if (editMode) {
+      await runEdit(question)
+      return
+    }
     const into = mode
     const current = thread
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -467,6 +608,14 @@ export function AiView(props: {
                 )}
               </div>
             ))}
+            {busy?.edit && (
+              <div className="ai-message assistant">
+                <p className="muted">
+                  Editing the chapter…{' '}
+                  {editWords ? `${editWords.toLocaleString()} words written` : ''}
+                </p>
+              </div>
+            )}
           </div>
         </div>
         {replyAt && (
@@ -505,20 +654,44 @@ export function AiView(props: {
             <span className="ai-chip" title="What the AI reads with your message">
               {chip}
             </span>
-            <label className="ai-whole">
+            {!editMode && (
+              <label className="ai-whole">
+                <input
+                  type="checkbox"
+                  checked={wholeChapter}
+                  onChange={(e) => setWholeChapter(e.target.checked)}
+                />
+                Whole chapter
+              </label>
+            )}
+            <label
+              className="ai-whole ai-edit-toggle"
+              title={
+                local
+                  ? 'Let the AI change the open chapter as you ask (you see every change after, and can undo it)'
+                  : 'Works when the AI is beside the page'
+              }
+            >
               <input
                 type="checkbox"
-                checked={wholeChapter}
-                onChange={(e) => setWholeChapter(e.target.checked)}
+                checked={editMode}
+                disabled={!local}
+                onChange={(e) => setEditMode(e.target.checked)}
               />
-              Whole chapter
+              Edit chapter
             </label>
           </div>
           <textarea
             ref={input}
             aria-label="Message to the AI"
             placeholder={
-              quote ? 'Reply to that part…' : mode === 'ask' ? 'Ask about your story…' : 'Message…'
+              editMode
+                ? 'What should change? e.g. “fix the spelling and grammar”, or “add the scene above where they reach the harbour”'
+                : quote
+                  ? 'Reply to that part…'
+                  : mode === 'ask'
+                    ? 'Ask about your story…'
+                    : 'Message…'
             }
             value={draft}
             rows={3}
@@ -545,12 +718,20 @@ export function AiView(props: {
               </button>
             ) : (
               <button className="primary" type="submit" disabled={!draft.trim()}>
-                Send
+                {editMode ? 'Edit chapter' : 'Send'}
               </button>
             )}
           </div>
         </form>
       </section>
+      {compare && (
+        <CompareDialog
+          chapterTitle={compare.chapterTitle}
+          result={compare.result}
+          apply={(doc) => localEditor(seriesId)?.replace(doc)}
+          onDone={(o) => void finishCompare(o)}
+        />
+      )}
     </div>
   )
 }

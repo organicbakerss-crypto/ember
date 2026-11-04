@@ -160,6 +160,7 @@ export interface SnapshotInfo {
     | 'before-replace'
     | 'before-sync'
     | 'before-ai'
+    | 'after-ai'
 }
 
 export const SNAPSHOT_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/
@@ -317,7 +318,7 @@ export const ipcInputs = {
   'history:keep': z.object({
     ...volumeRef,
     chapterId: id('chapter'),
-    reason: z.enum(['manual', 'before-ai']).optional(),
+    reason: z.enum(['manual', 'before-ai', 'after-ai']).optional(),
   }),
   'history:restore': z.object({
     ...volumeRef,
@@ -649,11 +650,19 @@ export const ipcInputs = {
       })
       .nullable(),
   }),
-  /** Spelling and grammar fixes for some paragraphs (streams `ai:progress`). Nothing is changed. */
-  'ai:grammar': z.object({
+  /**
+   * The AI's edit of the open chapter, as asked (streams `ai:token`). Nothing
+   * is written: the window puts it in, keeps versions and shows the changes.
+   */
+  'ai:editChapter': z.object({
     requestId: z.string().min(1).max(80),
-    paragraphs: z.array(z.string().max(50000)).max(5000),
-    worldId: id('world').nullable().optional(),
+    seriesId: id('series'),
+    instruction: z.string().trim().min(1).max(20000),
+    chapterTitle: z.string().max(300),
+    chapter: z.string().max(500000),
+    messages: z
+      .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(20000) }))
+      .max(40),
   }),
   'ai:cancel': z.object({ requestId: z.string().min(1).max(80) }),
   /** What another window's writing view shows for a story (for a torn-off AI window). */
@@ -821,7 +830,7 @@ export interface IpcResults {
   'sync:openCloudflare': null
   'ai:status': AiStatus
   'ai:ask': { text: string }
-  'ai:grammar': { paragraphs: string[] }
+  'ai:editChapter': { text: string }
   'ai:cancel': null
   'ai:scope': {
     volumeId: string
@@ -890,8 +899,6 @@ export interface IpcEvents {
   'ai:scopeRequest': { requestId: string; seriesId: string }
   /** More of an AI answer. */
   'ai:token': { requestId: string; text: string }
-  /** How far a spelling and grammar check has got (paragraphs). */
-  'ai:progress': { requestId: string; done: number; total: number }
 }
 
 /** A saved AI conversation in lists. */

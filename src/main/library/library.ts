@@ -100,6 +100,7 @@ const snapshotFileSchema = z.looseObject({
       'before-replace',
       'before-sync',
       'before-ai',
+      'after-ai',
     ])
     .catch('auto'),
   title: z.string(),
@@ -1488,7 +1489,7 @@ export class Library {
     seriesId: string,
     volumeId: string,
     chapterId: string,
-    reason: 'manual' | 'before-ai' = 'manual',
+    reason: 'manual' | 'before-ai' | 'after-ai' = 'manual',
   ): Promise<void> {
     await this.lock.run(`volume:${volumeId}`, async () => {
       const chapter = await this.readChapter(seriesId, volumeId, chapterId)

@@ -20,8 +20,7 @@ import { ChatGpt, type SecretBox } from './chatgpt'
 const DEFAULT_CHATGPT_MODEL = 'gpt-6.1-sol'
 import {
   chatMessages,
-  grammarMessages,
-  parseGrammar,
+  editMessages,
   summaryMessages,
   type AiMode,
   type PromptContext,
@@ -34,8 +33,6 @@ const MAX_ENTRY_CHARS = 1500
 const MAX_DIGEST_CHARS = 8000
 /** A whole chapter longer than this is read in parts and summarised. */
 const CHAPTER_WORDS = 2500
-/** Grammar is checked a few paragraphs at a time. */
-const GRAMMAR_BATCH_CHARS = 1500
 
 export interface AskInput {
   requestId: string
@@ -53,9 +50,6 @@ export interface AskInput {
 
 /** Whoever answers: Ollama or ChatGPT. */
 interface Provider {
-  /** How many requests to run at once, and how much text per grammar request. */
-  parallel: number
-  grammarBatch: number
   chat(input: {
     messages: ChatMessage[]
     json?: boolean
@@ -77,6 +71,8 @@ export class AiService {
       settings: () => Promise<AiSettings>
       host: LibraryHost
       fetchImpl?: typeof fetch
+      /** Give up on a request after this long with nothing arriving (tests make it short). */
+      idleMs?: number
       /** ChatGPT: where its login is kept, and how it's encrypted. */
       chatgpt: { file: string; secrets: SecretBox; authBase?: string; answersBase?: string }
     },
@@ -98,9 +94,7 @@ export class AiService {
       const model =
         settings.chatgptModel || (await this.chatgpt.models())[0] || DEFAULT_CHATGPT_MODEL
       return {
-        parallel: 4,
-        grammarBatch: GRAMMAR_BATCH_CHARS * 3,
-        chat: (i) => this.chatgpt.chat({ ...i, model }),
+        chat: (i) => this.chatgpt.chat({ ...i, model, idleMs: this.options.idleMs }),
       }
     }
     const ollama = new Ollama(settings.host, this.options.fetchImpl)
@@ -116,9 +110,7 @@ export class AiService {
       model = models[0]!
     }
     return {
-      parallel: 1,
-      grammarBatch: GRAMMAR_BATCH_CHARS,
-      chat: (i) => ollama.chat({ ...i, model }),
+      chat: (i) => ollama.chat({ ...i, model, idleMs: this.options.idleMs }),
     }
   }
 
@@ -285,78 +277,45 @@ export class AiService {
   }
 
   /**
-   * Spelling and grammar: corrected versions of the paragraphs, same count
-   * and order. Paragraphs the model mangles come back unchanged.
+   * Edits the open chapter as asked: the chapter goes as Markdown, the whole
+   * edited chapter comes back (streamed to `onToken`). Nothing is written here:
+   * the window puts it in, keeps the versions and shows what changed.
    */
-  async grammar(
-    input: { requestId: string; paragraphs: string[]; worldId?: string | null },
-    onProgress: (done: number, total: number) => void,
-  ): Promise<{ paragraphs: string[] }> {
+  async editChapter(
+    input: {
+      requestId: string
+      seriesId: string
+      instruction: string
+      chapterTitle: string
+      chapter: string
+      messages: { role: 'user' | 'assistant'; content: string }[]
+    },
+    onToken: (text: string) => void,
+  ): Promise<{ text: string }> {
     const provider = await this.client()
     let names: string[] = []
-    if (input.worldId) {
-      const view = await this.options.host.current.world.view(input.worldId).catch(() => null)
+    const series = await Promise.resolve()
+      .then(() => this.options.host.current.getSeries(input.seriesId))
+      .catch(() => null)
+    if (series?.worldId) {
+      const view = await this.options.host.current.world.view(series.worldId).catch(() => null)
       names = view ? view.entries.flatMap((e) => [e.name, ...e.aliases]) : []
     }
     return this.track(input.requestId, async (signal) => {
-      const out = [...input.paragraphs]
-      // Only paragraphs with words in them; scene breaks and blanks stay as they are.
-      const todo = input.paragraphs.flatMap((p, i) => (/[\p{L}\p{N}]/u.test(p) ? [i] : []))
-      const batches: number[][] = [[]]
-      let size = 0
-      for (const i of todo) {
-        if (size > 0 && size + input.paragraphs[i]!.length > provider.grammarBatch) {
-          batches.push([])
-          size = 0
-        }
-        batches[batches.length - 1]!.push(i)
-        size += input.paragraphs[i]!.length
-      }
-      let done = 0
-      onProgress(0, todo.length)
-      const fix = async (indexes: number[]): Promise<boolean> => {
-        const texts = indexes.map((i) => input.paragraphs[i]!)
-        const reply = await provider.chat({
-          messages: grammarMessages(texts, names),
-          json: true,
-          temperature: 0,
-          signal,
-        })
-        const fixed = parseGrammar(reply, texts.length)
-        if (!fixed) {
-          lastReply = reply
-          return false
-        }
-        indexes.forEach((i, k) => (out[i] = fixed[k]!))
-        return true
-      }
-      let lastReply = ''
-      let unread = 0
-      const run = async (batch: number[]) => {
-        if (!(await fix(batch))) {
-          if (batch.length > 1) {
-            // The model lost count: one paragraph at a time instead.
-            for (const i of batch) if (!(await fix([i]))) unread++
-          } else unread++
-        }
-        done += batch.length
-        onProgress(done, todo.length)
-      }
-      // A few batches at once where the model runs elsewhere (ChatGPT); one by one on this computer.
-      const queue = batches.filter((b) => b.length)
-      await Promise.all(
-        Array.from({ length: Math.min(provider.parallel, queue.length) }, async () => {
-          for (let b = queue.shift(); b; b = queue.shift()) await run(b)
+      const text = await provider.chat({
+        messages: editMessages({
+          instruction: input.instruction,
+          chapterTitle: input.chapterTitle,
+          chapter: input.chapter,
+          history: input.messages,
+          names,
         }),
-      )
-      // Nothing usable came back at all: say so, rather than "no changes".
-      if (todo.length && unread === todo.length) {
-        throw new AppError(
-          'invalid-input',
-          `The AI’s replies couldn’t be read as corrections, so nothing was checked. It said: “${lastReply.trim().slice(0, 160)}”`,
-        )
-      }
-      return { paragraphs: out }
+        temperature: 0.2,
+        signal,
+        onToken,
+      })
+      if (!text.trim()) throw new AppError('invalid-input', 'The AI sent back nothing. Try again.')
+      return { text }
     })
   }
 }

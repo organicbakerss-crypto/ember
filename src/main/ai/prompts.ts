@@ -56,37 +56,34 @@ export function chatMessages(
   return [{ role: 'system', content: systemPrompt(context) }, ...history]
 }
 
-/* ---------- grammar ---------- */
+/* ---------- editing the chapter ---------- */
 
-export function grammarMessages(paragraphs: string[], names: string[]): ChatMessage[] {
-  const keep = names.length
-    ? ` These names are correct as written, keep them exactly: ${names.slice(0, 200).join(', ')}.`
+export function editMessages(input: {
+  instruction: string
+  chapterTitle: string
+  chapter: string
+  /** The conversation so far (it may hold a scene the writer wants placed). */
+  history: { role: 'user' | 'assistant'; content: string }[]
+  names: string[]
+}): ChatMessage[] {
+  const keep = input.names.length
+    ? ` These names are spelled correctly as they are: ${input.names.slice(0, 200).join(', ')}.`
+    : ''
+  const earlier = input.history.length
+    ? `The conversation so far (it may contain text the writer wants used):\n\n${input.history
+        .map((m) => `${m.role === 'user' ? 'Writer' : 'You'}: ${m.content}`)
+        .join('\n\n')}\n\n`
     : ''
   return [
     {
       role: 'system',
-      content: `You fix spelling, grammar, punctuation and capitalisation in fiction. Change as little as possible. Never change word choice, style, tone, tense, dialect, slang, dialogue or meaning, and never add or remove sentences.${keep} Reply with JSON only: {"paragraphs": [...]} holding exactly ${paragraphs.length} strings, the corrected paragraphs in the same order (unchanged if already correct).`,
+      content: `You edit one chapter of the writer's novel, doing exactly what they ask and nothing else. Every paragraph you weren't asked to change stays word for word as it is.${keep} The chapter is in Markdown: paragraphs separated by blank lines, "* * *" for scene breaks, ## for headings, **bold**, *italic*, ~~strike~~, <u>underline</u>, > for quoted text. Reply with the whole edited chapter in that same Markdown, from its first paragraph to its last, and nothing else: no introduction, no notes, no code fence.`,
     },
-    { role: 'user', content: JSON.stringify({ paragraphs }) },
+    {
+      role: 'user',
+      content: `${earlier}What to do: ${input.instruction}\n\nThe chapter “${input.chapterTitle || 'Untitled'}”:\n\n${input.chapter}`,
+    },
   ]
-}
-
-/** The corrected paragraphs from a reply, or null when it isn't the shape asked for. */
-export function parseGrammar(reply: string, expected: number): string[] | null {
-  try {
-    const start = reply.indexOf('{')
-    const data = JSON.parse(
-      start >= 0 ? reply.slice(start, reply.lastIndexOf('}') + 1) : reply,
-    ) as {
-      paragraphs?: unknown
-    }
-    const list = data.paragraphs
-    if (!Array.isArray(list) || list.length !== expected) return null
-    if (!list.every((p) => typeof p === 'string')) return null
-    return list as string[]
-  } catch {
-    return null
-  }
 }
 
 /* ---------- long chapters ---------- */
