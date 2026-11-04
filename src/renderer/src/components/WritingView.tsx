@@ -36,6 +36,7 @@ import { useSettings } from '../useTheme'
 import { loadLocal, saveLocal } from '../storage'
 import { MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
+import { ManuscriptView } from '../manuscript/ManuscriptView'
 import { QuickAddDialog } from '../world/QuickAddDialog'
 import { nameMatcher } from '@shared/names'
 import { guessTemplate } from '@shared/world/guess'
@@ -113,6 +114,7 @@ export function WritingView(props: {
   const [revealArcId, setRevealArcId] = useState<string | null>(null)
   const [focusMode, setFocusMode] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [manuscriptOpen, setManuscriptOpen] = useState(false)
   // Bumped to reload the open chapter from disk (after a restore or replace-all).
   const [reloadToken, setReloadToken] = useState(0)
   const [reveal, setReveal] = useState<(Reveal & { chapterId: string }) | null>(null)
@@ -339,6 +341,7 @@ export function WritingView(props: {
 
   const select = (chapterId: string) => {
     setChosenId(chapterId)
+    setManuscriptOpen(false)
     setScenes([])
     setSelectionParagraphs(null)
     saveLocal(lastChapterKey, chapterId)
@@ -556,6 +559,18 @@ export function WritingView(props: {
     void api.invoke('capture:context', { context: captureContext }).catch(() => {})
   }, [captureContext])
   useEffect(() => () => void api.invoke('capture:context', { context: null }).catch(() => {}), [])
+  // The manuscript's chapters in reading order (kept the same array while the order is).
+  const idsKey = view
+    ? chapterOrder(toContainers(view.outline))
+        .filter((id) => id in view.chapters)
+        .join(',')
+    : ''
+  const manuscriptIds = useMemo(() => (idsKey ? idsKey.split(',') : []), [idsKey])
+  const ownHeadings = volume.settings['headings']
+  const headings =
+    ownHeadings === 'both' || ownHeadings === 'number' || ownHeadings === 'title'
+      ? ownHeadings
+      : settings.export.headings
   const arc = view?.outline.items.find(
     (i) => i.type === 'arc' && selectedId && i.chapterIds.includes(selectedId),
   )
@@ -880,6 +895,16 @@ export function WritingView(props: {
         >
           ⋯
         </button>
+        {view && (
+          <button
+            className="small"
+            aria-pressed={manuscriptOpen}
+            title={`The whole ${book ? 'book' : 'volume'} as one manuscript, cover first`}
+            onClick={() => setManuscriptOpen((open) => !open)}
+          >
+            Manuscript
+          </button>
+        )}
         {props.onOpenWorldBeside && (
           <button
             className="side-by-side small"
@@ -974,6 +999,7 @@ export function WritingView(props: {
           {panel === 'binder' && view && (
             <Binder
               volumeName={volume.name}
+              onOpenManuscript={() => setManuscriptOpen(true)}
               view={view}
               liveMeta={liveMeta}
               selectedId={selectedId}
@@ -1113,7 +1139,16 @@ export function WritingView(props: {
         )}
         {/* The editor stays loaded behind Settings, keeping undo history and scroll position. */}
         <div className="page-area-inner" hidden={settingsOpen}>
-          {selectedId && view && selectedId in view.chapters ? (
+          {manuscriptOpen && view ? (
+            <ManuscriptView
+              series={series}
+              volume={volume}
+              chapterIds={manuscriptIds}
+              headings={headings}
+              author={settings.export.author}
+              onClose={() => setManuscriptOpen(false)}
+            />
+          ) : selectedId && view && selectedId in view.chapters ? (
             <ChapterEditor
               key={`${selectedId}:${reloadToken}`}
               seriesId={series.id}

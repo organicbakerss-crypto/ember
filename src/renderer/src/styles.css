@@ -4281,3 +4281,73 @@ kbd {
   display: block;
   margin-top: 0.2rem;
 }
+
+/* Manuscript: the whole book as one document, cover first. */
+.manuscript {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.manuscript-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.binder-name {
+  font: inherit;
+  color: inherit;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.manuscript-front {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+.manuscript-cover {
+  width: min(100%, 22rem);
+}
+.manuscript-cover .cover {
+  width: 100%;
+}
+.manuscript-title-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: min(var(--page-height, 60vh), 60vh);
+}
+.manuscript-title-page h1 {
+  font-size: 2.2rem;
+  margin-bottom: 0.5rem;
+}
+.ms-chapter {
+  padding-top: 3rem;
+}
+.ms-chapter + .ms-chapter {
+  margin-top: 3rem;
+  border-top: 1px dashed var(--border);
+}
+.ms-chapter::before {
+  content: attr(data-heading);
+  display: block;
+  margin-bottom: 2rem;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  user-select: none;
+  pointer-events: none;
+}
+.ms-readonly {
+  opacity: 0.6;
+}
+.manuscript-save {
+  text-align: center;
+}

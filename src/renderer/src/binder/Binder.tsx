@@ -47,6 +47,8 @@ import { useCollapsed } from './useCollapsed'
 
 interface BinderProps {
   volumeName: string
+  /** Opens the whole book as one manuscript (clicking its name). */
+  onOpenManuscript?: () => void
   view: OutlineView
   /** Live title/type/POV of the open chapter, ahead of what's on disk. */
   liveMeta: Record<string, ChapterMeta>
@@ -236,7 +238,19 @@ export function Binder(props: BinderProps) {
   return (
     <div className="binder">
       <header className="binder-header">
-        <h2 title={props.volumeName}>{props.volumeName}</h2>
+        <h2 title={props.volumeName}>
+          {props.onOpenManuscript ? (
+            <button
+              className="link binder-name"
+              title="Open the whole manuscript"
+              onClick={props.onOpenManuscript}
+            >
+              {props.volumeName}
+            </button>
+          ) : (
+            props.volumeName
+          )}
+        </h2>
         {povs.length > 0 && (
           <select
             aria-label="Filter by POV"
