@@ -844,7 +844,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
    - The people board: dragging portraits isn't smooth.
    - (More to come from the writer.)
 12b. **From the audit** (`docs/audit-2026-11.md`; the writer agreed to all the broken and clutter items, and these additions):
-   - **Manuscript view**: the whole book (or volume) as one continuous book, chapter titles as headings the way a printed book shows them (the export heading settings), scene breaks, a title page. Opened by a **Manuscript** button, and by clicking the book/volume name above the chapter list in the binder.
+   - **Manuscript view** (the writer's choice: **fully editable**): the whole book (or volume) as one continuous document, the **cover as page zero**, then a title page, chapter titles as headings the way a printed book shows them (the export heading settings), scene breaks. Typing anywhere edits that chapter: each chapter is its own section with a locked boundary (a heading can't be deleted or merged into the next by typing; joining or splitting chapters is the split/merge command), edits save to the right chapter file through the usual autosave, history and leases (a chapter open elsewhere shows read-only here). Opened by a **Manuscript** button, and by clicking the book/volume name above the chapter list in the binder.
    - Chapter **synopsis and notes** (the stored notes shown; synopsis filled from the AI summary when there is one).
    - Chapter **status** (draft / revised / done) and colour labels.
    - **Comments** on the text (highlight a passage, leave a note to self).
@@ -853,7 +853,7 @@ Build in this order. Each milestone ends with a working app the user can actuall
    - **Typewriter scrolling** and true **full screen**.
    - World: a **search box**, **tags** on entries, a **picture gallery** per entry, free **lore pages**, **export the world** (a series bible).
    - Not wanted: an outline/corkboard view; writing stats and deadline goals.
-   - **Book mode** (one of the last things, after the rest): the Manuscript view as a real open book: two book-sized pages side by side, turned by dragging a page (forward or back) or clicking a bottom corner, with a page-turn animation (skipped in Lighter mode). Built on the Manuscript view's pagination.
+   - **Book mode** (one of the last things, after the rest; **read-only**, the cover as page zero too): the Manuscript view as a real open book: two book-sized pages side by side, turned by dragging a page (forward or back) or clicking a bottom corner, with a page-turn animation (skipped in Lighter mode). Built on the Manuscript view's pagination.
 13. **Themes:** done early (after 4e): High Contrast and eighteen more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
 14. **Remaining modules:** publishing, author's notes, doodle pad, relationship web.
 
