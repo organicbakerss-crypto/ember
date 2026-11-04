@@ -370,6 +370,7 @@ export const ipcInputs = {
     }),
   }),
   'series:rename': z.object({ seriesId: id('series'), name: nameSchema }),
+  'series:describe': z.object({ seriesId: id('series'), description: z.string().max(10000) }),
   'world:rename': z.object({ worldId: id('world'), name: nameSchema }),
   'arc:delete': z.object({
     ...volumeRef,
@@ -953,6 +954,7 @@ export interface IpcResults {
   'sync:usage': { bytes: number; files: number } | null
   'world:setFeatures': WorldFile
   'series:rename': SeriesFile
+  'series:describe': SeriesFile
   'world:rename': WorldFile
   'arc:delete': OutlineView
   'history:list': SnapshotInfo[]

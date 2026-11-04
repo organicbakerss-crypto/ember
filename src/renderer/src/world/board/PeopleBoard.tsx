@@ -87,7 +87,12 @@ export function PeopleBoard(props: {
   const who = world.view.entries.filter((e) => lensOf(world, e) === 'who')
   const people = who.filter((e) => !isGroup(e))
   const groups = who.filter(isGroup)
-  const positions = withDefaults(people, world.view.board)
+  // Where portraits were just dropped, shown until the saved board comes back (no snap-back).
+  const [dropped, setDropped] = useState<{ base: BoardFile['positions']; at: Positions } | null>(
+    null,
+  )
+  if (dropped && dropped.base !== world.view.board) setDropped(null)
+  const positions = withDefaults(people, dropped?.at ?? world.view.board)
   const onBoard = new Set(people.map((p) => p.id))
 
   // Where something is drawn, in board units, following a drag in progress.
@@ -135,6 +140,7 @@ export function PeopleBoard(props: {
       await api.invoke('board:save', { worldId, positions: next, seen: world.view.syncGen })
       record({ label, undo: () => api.invoke('board:save', { worldId, positions: before }) })
     } catch (err) {
+      setDropped(null)
       toast(describeError(err).message)
     }
   }
@@ -146,15 +152,40 @@ export function PeopleBoard(props: {
     const p = toBoard(e)
     setDrag({ ids, from: p, at: p, moved: false })
   }
+  // At most one redraw per screen frame while dragging (pointer events come faster).
+  const frame = useRef<{ id: number; at: { x: number; y: number } } | null>(null)
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag) return
     const at = toBoard(e)
-    const moved = drag.moved || Math.hypot((at.x - drag.from.x) * W, (at.y - drag.from.y) * H) > 5
-    setDrag({ ...drag, at, moved })
+    if (frame.current) {
+      frame.current.at = at
+      return
+    }
+    frame.current = { id: 0, at }
+    frame.current.id = requestAnimationFrame(() => {
+      const latest = frame.current?.at ?? at
+      frame.current = null
+      setDrag((d) =>
+        d
+          ? {
+              ...d,
+              at: latest,
+              moved:
+                d.moved || Math.hypot((latest.x - d.from.x) * W, (latest.y - d.from.y) * H) > 5,
+            }
+          : d,
+      )
+    })
   }
   const onPointerUp = (e: React.PointerEvent) => {
     if (!drag) return
-    const { ids, from, at, moved } = drag
+    if (frame.current) {
+      cancelAnimationFrame(frame.current.id)
+      frame.current = null
+    }
+    const { ids, from } = drag
+    const at = toBoard(e)
+    const moved = drag.moved || Math.hypot((at.x - from.x) * W, (at.y - from.y) * H) > 5
     setDrag(null)
     if (!moved) {
       if (ids.length === 1) props.onOpenEntry(ids[0]!)
@@ -184,6 +215,7 @@ export function PeopleBoard(props: {
     }
     const what =
       ids.length === 1 ? (world.resolve(ids[0]!)?.name ?? 'someone') : `${ids.length} people`
+    setDropped({ base: world.view.board, at: next })
     void savePositions(next, `Moved ${what} on the board`)
   }
 

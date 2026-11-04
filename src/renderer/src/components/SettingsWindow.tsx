@@ -34,17 +34,12 @@ const CATEGORIES: Category[] = [
   { id: 'analysis', label: 'Writing analysis', render: () => <AnalysisSettingsSection /> },
   { id: 'status', label: 'Status bar', render: () => <StatusBarSettings /> },
   { id: 'library', label: 'Library', render: () => <LibrarySettings /> },
-  { id: 'shortcuts', label: 'Keyboard shortcuts', later: 'Change the keyboard shortcuts.' },
+  { id: 'shortcuts', label: 'Keyboard shortcuts', render: () => <ShortcutsList /> },
   { id: 'world', label: 'World', render: () => <WorldSettings /> },
   { id: 'import', label: 'Import & export', render: () => <ImportExportSettings /> },
   { id: 'sync', label: 'Sync', render: () => <SyncSettings /> },
   { id: 'ai', label: 'AI', render: () => <AiSettingsSection /> },
   { id: 'voice', label: 'Voice', render: () => <VoiceSettingsSection /> },
-  {
-    id: 'modules',
-    label: 'Optional modules',
-    later: "Publishing, author's notes, doodle pad, relationship web (Milestone 14).",
-  },
 ]
 
 /**
@@ -111,14 +106,30 @@ function AppearanceSettings() {
     ...themes.filter((t) => !t.skin),
   ]
   const skinned = themes.filter((t) => t.skin).sort((a, b) => a.name.localeCompare(b.name))
-  const option = (theme: { id: string; name: string }) => (
-    <label key={theme.id} className="radio">
+  const option = (theme: { id: string; name: string; colors?: Record<string, string> }) => (
+    <label
+      key={theme.id}
+      className={`radio theme-option ${settings.theme === theme.id ? 'on' : ''}`}
+    >
       <input
         type="radio"
         name="theme"
         checked={settings.theme === theme.id}
         onChange={() => update({ theme: theme.id })}
       />
+      {theme.colors && (
+        // A small preview: the desk, the page, the text and the accent.
+        <span
+          className="theme-swatch"
+          aria-hidden
+          style={{ background: theme.colors['desk'] ?? theme.colors['bg'] }}
+        >
+          <span style={{ background: theme.colors['surface'], color: theme.colors['text'] }}>
+            Aa
+          </span>
+          <span style={{ background: theme.colors['accent'] }} />
+        </span>
+      )}
       {theme.name}
     </label>
   )
@@ -451,6 +462,59 @@ function SyncSettings() {
 }
 
 /** AI on this computer: on or off, who answers (Ollama or ChatGPT), which model. */
+/** Every keyboard shortcut, in one list. */
+function ShortcutsList() {
+  const groups: [string, [string, string][]][] = [
+    [
+      'Anywhere',
+      [
+        [`${MOD}K`, 'Command palette: every action, every chapter and world entry'],
+        [`${MOD}\\`, 'The world beside the writing (split screen), or back'],
+        ['F2', 'Rename what’s selected (chapter, story, entry)'],
+        ['Alt+← / Alt+→', 'Back / forward (World mode)'],
+      ],
+    ],
+    [
+      'Writing',
+      [
+        [`${MOD}B / ${MOD}I / ${MOD}U`, 'Bold / italic / underline'],
+        [`${MOD}Z / ${MOD}Shift+Z`, 'Undo / redo'],
+        ['*** on an empty line', 'Scene break'],
+        [`${MOD}F`, 'Find in volume'],
+        [`${MOD}H`, 'Find and replace in volume'],
+        [`${MOD}Shift+F`, 'Focus mode (Esc to leave)'],
+        [`${MOD}Alt+R`, 'Rhythm (sentence lengths)'],
+        [`${MOD}Alt+E`, 'Echo (repeated words)'],
+        [`${MOD}Alt+N`, 'Add the selected name to the world'],
+        [`${MOD}+click a name`, 'Open its world entry'],
+      ],
+    ],
+    ['World', [[`${MOD}Alt+N`, 'Quick add an entry']]],
+  ]
+  return (
+    <section className="settings-section">
+      <h3>Keyboard shortcuts</h3>
+      {groups.map(([title, rows]) => (
+        <div key={title}>
+          <h4 className="small muted">{title}</h4>
+          <table className="shortcuts-table">
+            <tbody>
+              {rows.map(([keys, what]) => (
+                <tr key={keys + what}>
+                  <td>
+                    <kbd>{keys}</kbd>
+                  </td>
+                  <td>{what}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 /** VoiceStudio: whether it's found, where, and how it's used. */
 function StudioSettings() {
   const { settings, update } = useSettings()

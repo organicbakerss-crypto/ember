@@ -42,7 +42,7 @@ export const FONT_CHOICES: { label: string; value: string | null }[] = [
 
 /** Text colours offered in the toolbar, chosen to stay readable on light and dark pages. */
 export const COLOR_CHOICES: { label: string; value: string | null }[] = [
-  { label: 'Default', value: null },
+  { label: 'Text colour', value: null },
   { label: 'Red', value: '#c0392b' },
   { label: 'Orange', value: '#d9771f' },
   { label: 'Green', value: '#2e9b5f' },

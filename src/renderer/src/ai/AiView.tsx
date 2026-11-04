@@ -1057,9 +1057,11 @@ export function AiView(props: {
             }}
           />
           <div className="row">
-            <span className="muted small">
-              {provider === 'chatgpt' ? 'ChatGPT (your plan)' : 'Ollama, on this computer'} ·
-              Nothing in your chapter changes. Saved with this story.
+            <span
+              className="muted small"
+              title="Nothing in your chapter changes unless Edit chapter is ticked. Conversations are saved with this story."
+            >
+              {provider === 'chatgpt' ? 'ChatGPT' : 'Ollama'}
             </span>
             <span className="status-spacer" />
             {busy || worldJob ? (

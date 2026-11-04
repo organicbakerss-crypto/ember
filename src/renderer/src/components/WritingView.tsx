@@ -369,7 +369,7 @@ export function WritingView(props: {
       // Beside another pane, only the one being worked in answers shortcuts.
       if (!pane.active) return
       const key = e.key.toLowerCase()
-      if (e.key === 'F3') renameOpenChapter()
+      if (e.key === 'F2' || e.key === 'F3') renameOpenChapter()
       else if (modKey(e) && e.shiftKey && key === 'f') setFocusMode((f) => !f)
       else if (modKey(e) && !e.shiftKey && (key === 'f' || key === 'h')) openSearch()
       else if (modKey(e) && e.altKey && e.code === 'KeyR') toggleRhythm()
@@ -608,7 +608,7 @@ export function WritingView(props: {
       shortcut: `${MOD}Shift+F`,
       run: () => setFocusMode((f) => !f),
     },
-    { id: 'rename', title: 'Rename chapter', shortcut: 'F3', run: renameOpenChapter },
+    { id: 'rename', title: 'Rename chapter', shortcut: 'F2', run: renameOpenChapter },
     {
       id: 'rhythm',
       title: rhythm ? 'Turn off Rhythm (sentence lengths)' : 'Turn on Rhythm (sentence lengths)',
@@ -780,76 +780,100 @@ export function WritingView(props: {
         <button
           className="icon"
           aria-label="Volume menu"
-          title="Export, copy for Royal Road, import"
+          title="Export & import, AI, voice, and this book’s settings"
           onClick={(e) =>
             openMenu(e, [
               {
-                label: 'Export… (Word, PDF, EPUB, Markdown)',
-                onSelect: () => setExporting({ chapterId: selectedId }),
+                label: 'Export & import',
+                submenu: [
+                  {
+                    label: 'Export… (Word, PDF, EPUB, Markdown)',
+                    onSelect: () => setExporting({ chapterId: selectedId }),
+                  },
+                  {
+                    label: 'Copy this chapter for Royal Road',
+                    disabled: !selectedId,
+                    onSelect: () =>
+                      selectedId &&
+                      void copyChapterForRoyalRoad(
+                        { seriesId: series.id, volumeId: volume.id, chapterId: selectedId },
+                        actions.toast,
+                      ),
+                  },
+                  { label: 'Import from Word (.docx)…', onSelect: () => setImporting(true) },
+                ],
               },
-              {
-                label: 'Copy this chapter for Royal Road',
-                disabled: !selectedId,
-                onSelect: () =>
-                  selectedId &&
-                  void copyChapterForRoyalRoad(
-                    { seriesId: series.id, volumeId: volume.id, chapterId: selectedId },
-                    actions.toast,
-                  ),
-              },
-              { label: 'Import from Word (.docx)…', onSelect: () => setImporting(true) },
-              ...voiceCommands.map((c) => ({ label: c.title, onSelect: c.run })),
               ...(aiOn
                 ? [
                     {
-                      label: 'Edit with AI (spelling, grammar…)…',
-                      disabled: !selectedId,
-                      onSelect: () => editWithAi('Fix the spelling, grammar and punctuation.'),
+                      label: 'AI',
+                      submenu: [
+                        {
+                          label: 'Edit with AI (spelling, grammar…)…',
+                          disabled: !selectedId,
+                          onSelect: () => editWithAi('Fix the spelling, grammar and punctuation.'),
+                        },
+                        ...(series.worldId
+                          ? [
+                              {
+                                label: 'Update the world from this chapter',
+                                disabled: !selectedId,
+                                onSelect: () => selectedId && void worldFromChapter(selectedId),
+                              },
+                            ]
+                          : []),
+                        ...STORY_PROMPTS.map((p) => ({
+                          label: `${p.label}…`,
+                          onSelect: () => askAboutStory(p.text),
+                        })),
+                      ],
                     },
-                    ...STORY_PROMPTS.map((p) => ({
-                      label: `${p.label} (AI)…`,
-                      onSelect: () => askAboutStory(p.text),
-                    })),
-                    ...(series.worldId
-                      ? [
-                          {
-                            label: 'Update the world from this chapter (AI)',
-                            disabled: !selectedId,
-                            onSelect: () => selectedId && void worldFromChapter(selectedId),
-                          },
-                        ]
-                      : []),
+                  ]
+                : []),
+              ...(voiceCommands.length
+                ? [
+                    {
+                      label: 'Voice',
+                      submenu: voiceCommands.map((c) => ({ label: c.title, onSelect: c.run })),
+                    },
                   ]
                 : []),
               {
-                label: book ? 'Chapter headings in exports' : 'This volume’s chapter headings',
-                submenu: (
-                  [
-                    [null, 'As in Settings'],
-                    ['both', 'Chapter 1: Arrival'],
-                    ['number', 'Chapter 1'],
-                    ['title', 'Arrival (stories, a collection)'],
-                  ] as const
-                ).map(([value, label]) => ({
-                  label,
-                  checked: (volume.settings['headings'] ?? null) === value,
-                  onSelect: () =>
-                    void api
-                      .invoke('volume:update', { ...ref, headings: value })
-                      .catch((err: unknown) => actions.toast(describeError(err).message)),
-                })),
-              },
-              ...(book && props.worlds ? [worldLinkMenu(series, props.worlds, actions.toast)] : []),
-              {
-                label: 'Finished (keep less history)',
-                checked: volume.settings['finished'] === true,
-                onSelect: () =>
-                  void api
-                    .invoke('volume:update', {
-                      ...ref,
-                      finished: volume.settings['finished'] !== true,
-                    })
-                    .catch((err: unknown) => actions.toast(describeError(err).message)),
+                label: book ? 'This book' : 'This volume',
+                submenu: [
+                  {
+                    label: 'Chapter headings in exports',
+                    submenu: (
+                      [
+                        [null, 'As in Settings'],
+                        ['both', 'Chapter 1: Arrival'],
+                        ['number', 'Chapter 1'],
+                        ['title', 'Arrival (stories, a collection)'],
+                      ] as const
+                    ).map(([value, label]) => ({
+                      label,
+                      checked: (volume.settings['headings'] ?? null) === value,
+                      onSelect: () =>
+                        void api
+                          .invoke('volume:update', { ...ref, headings: value })
+                          .catch((err: unknown) => actions.toast(describeError(err).message)),
+                    })),
+                  },
+                  ...(book && props.worlds
+                    ? [worldLinkMenu(series, props.worlds, actions.toast)]
+                    : []),
+                  {
+                    label: 'Finished (keep less history)',
+                    checked: volume.settings['finished'] === true,
+                    onSelect: () =>
+                      void api
+                        .invoke('volume:update', {
+                          ...ref,
+                          finished: volume.settings['finished'] !== true,
+                        })
+                        .catch((err: unknown) => actions.toast(describeError(err).message)),
+                  },
+                ],
               },
             ])
           }
@@ -858,12 +882,12 @@ export function WritingView(props: {
         </button>
         {props.onOpenWorldBeside && (
           <button
-            className="icon side-by-side"
+            className="side-by-side small"
             aria-label="Open the world beside"
-            title={`Open the world beside (${MOD}\\)`}
+            title={`Open the world beside the page, split screen (${MOD}\\)`}
             onClick={props.onOpenWorldBeside}
           >
-            ⫽
+            ◫ {word('world', 'World')} beside
           </button>
         )}
         {props.onOpenWorld && !props.hideModeSwitch && (
@@ -907,6 +931,13 @@ export function WritingView(props: {
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 7.5V12l3 2" />
         </RailButton>
+        <RailButton
+          label="Diagnostics: words, sentences, repeated words"
+          active={panel === 'diagnostics'}
+          onClick={() => togglePanel('diagnostics')}
+        >
+          <path d="M5 20V11M10 20V5M15 20v-7M20 20V8" />
+        </RailButton>
         {aiOn && (
           <RailButton
             label={props.aiBeside ? 'Close the AI' : 'AI beside the page'}
@@ -919,7 +950,7 @@ export function WritingView(props: {
         )}
         {world && (
           <RailButton
-            label="World beside the page"
+            label="Who and where in this chapter"
             active={panel === 'world'}
             onClick={() => togglePanel('world')}
           >

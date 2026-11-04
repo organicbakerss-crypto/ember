@@ -1457,6 +1457,29 @@ kbd {
 .page-area {
   position: relative;
 }
+.world-nav-hint {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: normal;
+  color: var(--muted);
+  line-height: 1.2;
+}
+.shortcuts-table {
+  border-collapse: collapse;
+  margin-bottom: 0.8rem;
+}
+.shortcuts-table td {
+  padding: 0.25rem 1rem 0.25rem 0;
+  vertical-align: top;
+}
+.shortcuts-table kbd {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
 .cast-dialog {
   width: min(32rem, calc(100vw - 2rem));
   max-height: 80vh;
@@ -3346,6 +3369,47 @@ kbd {
 }
 :root[data-theme='high-contrast'] :is(button, input, select, .card) {
   border-color: var(--border);
+}
+.series-description {
+  display: block;
+  width: min(44rem, 100%);
+  margin-top: 0.75rem;
+  resize: vertical;
+}
+.series-settings {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg);
+  display: flex;
+}
+.series-settings > * {
+  flex: 1;
+}
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.theme-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.theme-swatch > span:first-child {
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.theme-swatch > span:last-child {
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
 }
 .theme-grid {
   display: grid;

@@ -128,16 +128,20 @@ export function HistoryPanel(props: {
             )}
           </div>
         </li>
-        {list?.map((s) => (
-          <li key={s.id}>
-            <button className="history-item" onClick={() => void open(s)}>
-              <span>{formatWhen(s.savedAt)}</span>
-              <span className="muted small">
-                {s.wordCount.toLocaleString()} words{REASONS[s.reason] && ` · ${REASONS[s.reason]}`}
-              </span>
-            </button>
-          </li>
-        ))}
+        {/* An empty version (before anything was written) is nothing to go back to. */}
+        {list
+          ?.filter((s) => s.wordCount > 0)
+          .map((s) => (
+            <li key={s.id}>
+              <button className="history-item" onClick={() => void open(s)}>
+                <span>{formatWhen(s.savedAt)}</span>
+                <span className="muted small">
+                  {s.wordCount.toLocaleString()} words
+                  {REASONS[s.reason] && ` · ${REASONS[s.reason]}`}
+                </span>
+              </button>
+            </li>
+          ))}
       </ol>
       {list?.length === 0 && (
         <p className="muted small">

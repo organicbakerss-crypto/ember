@@ -433,6 +433,7 @@ export function registerIpc(
     'library:snapshot': () => host.current.snapshot(),
     'series:create': (input) => host.current.createSeries(input),
     'series:rename': (input) => host.current.renameSeries(input.seriesId, input.name),
+    'series:describe': (input) => host.current.describeSeries(input.seriesId, input.description),
     'world:rename': (input) => host.current.renameWorld(input.worldId, input.name),
     'arc:delete': (input) =>
       host.current.deleteArc(input.seriesId, input.volumeId, input.arcId, input.chapters),

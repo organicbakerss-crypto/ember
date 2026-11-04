@@ -924,6 +924,18 @@ export class Library {
 
   /* ---------- renaming (display names only; ids and folders never change) ---------- */
 
+  /** The story's description (the series page). */
+  async describeSeries(seriesId: string, description: string): Promise<SeriesFile> {
+    const updated = await this.lock.run(`series:${seriesId}`, async () => {
+      const series = await this.getSeries(seriesId)
+      const next = { ...series, description: description.trim(), updatedAt: this.timestamp() }
+      await writeJsonFile(this.paths.seriesFile(seriesId), next)
+      return next
+    })
+    this.onChange({ kind: 'series', seriesId })
+    return updated
+  }
+
   /** The voices a story is read with (VoiceStudio voice names), kept with the story. */
   async setSeriesVoices(
     seriesId: string,

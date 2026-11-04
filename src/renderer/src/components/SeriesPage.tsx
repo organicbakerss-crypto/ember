@@ -10,6 +10,7 @@ import { useLibraryActions } from './useLibraryActions'
 import { ExportDialog } from '../io/ExportDialog'
 import { ImportDialog } from '../io/ImportDialog'
 import { worldLinkMenu } from './worldLink'
+import { SettingsWindow } from './SettingsWindow'
 
 /** A series' volumes as covers, in reading order. */
 export function SeriesPage(props: {
@@ -28,9 +29,10 @@ export function SeriesPage(props: {
 
   const [exporting, setExporting] = useState<VolumeSummary | null>(null)
   const [importing, setImporting] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const volumeMenu = (volume: VolumeSummary): MenuItem[] => [
-    { label: 'Rename', hint: 'F3', onSelect: () => setRenaming(volume.id) },
+    { label: 'Rename', hint: 'F2', onSelect: () => setRenaming(volume.id) },
     { label: 'Export… (Word, PDF, EPUB, Markdown)', onSelect: () => setExporting(volume) },
     {
       label: 'Finished (keep less history)',
@@ -92,13 +94,44 @@ export function SeriesPage(props: {
             >
               {props.world ? `World: ${props.world.name}` : 'No world'} ▾
             </button>
+            <p className="muted small">
+              {series.volumes.length} {series.volumes.length === 1 ? 'volume' : 'volumes'} ·{' '}
+              {formatWords(series.volumes.reduce((n, v) => n + v.wordCount, 0))} in all
+            </p>
           </div>
           <span className="status-spacer" />
           <button onClick={() => setImporting(true)} title="Bring chapters in from a .docx file">
             Import from Word…
           </button>
+          <button
+            className="icon"
+            aria-label="Settings"
+            title="Settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            ⚙
+          </button>
         </div>
+        <textarea
+          className="series-description"
+          aria-label="Description"
+          placeholder="What this story is about, in a few lines (for you; the AI’s blurb can go here)"
+          defaultValue={series.description ?? ''}
+          rows={3}
+          onBlur={(e) => {
+            if (e.target.value.trim() !== (series.description ?? '')) {
+              void api
+                .invoke('series:describe', { seriesId: series.id, description: e.target.value })
+                .catch((err: unknown) => toast(describeError(err).message))
+            }
+          }}
+        />
       </header>
+      {settingsOpen && (
+        <div className="series-settings">
+          <SettingsWindow onClose={() => setSettingsOpen(false)} />
+        </div>
+      )}
       {exporting && (
         <ExportDialog series={series} volume={exporting} onClose={() => setExporting(null)} />
       )}
@@ -128,7 +161,7 @@ export function SeriesPage(props: {
               onClick={() => props.onOpenVolume(volume.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') props.onOpenVolume(volume.id)
-                if (e.key === 'F3') setRenaming(volume.id)
+                if (e.key === 'F2' || e.key === 'F3') setRenaming(volume.id)
               }}
             >
               <CoverDropZone

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { SettingsWindow } from '../components/SettingsWindow'
 import type { Appearance, EntrySummary, SeriesSummary } from '@shared/ipc'
 import { LENSES } from '@shared/world/lenses'
 import { LENS_LABELS, type Lens } from '@shared/world/templates'
@@ -43,6 +44,14 @@ const samePlace = (a: Place, b: Place) => JSON.stringify(a) === JSON.stringify(b
  * quiet inbox. Every entry opens as a page. Back and forward work like a
  * browser. It reads the manuscript but never edits it.
  */
+/** What each section holds, under its name (How especially isn't obvious). */
+const LENS_HINTS: Record<Lens, string> = {
+  where: 'places, maps',
+  who: 'people, groups',
+  when: 'history, events',
+  how: 'magic, laws, beliefs, tech',
+}
+
 export function WorldView(props: {
   worldId: string
   /** Entry to open (e.g. from a linked name in a chapter). */
@@ -108,6 +117,7 @@ export function WorldView(props: {
     template?: string
   } | null>(null)
   const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [digest, setDigest] = useState<string | null>(null)
 
   const go = useCallback(
@@ -367,14 +377,23 @@ export function WorldView(props: {
           </button>
           {props.onWriteBeside && (
             <button
-              className="icon side-by-side"
+              className="side-by-side small"
               aria-label="Open writing beside"
-              title={`Open writing beside (${MOD}\\)`}
+              title={`Open the writing beside, split screen (${MOD}\\)`}
               onClick={props.onWriteBeside}
             >
-              ⫽
+              ◫ Writing beside
             </button>
           )}
+          <button
+            className="icon"
+            aria-label="Settings"
+            title="Settings"
+            aria-pressed={settingsOpen}
+            onClick={() => setSettingsOpen((o) => !o)}
+          >
+            ⚙
+          </button>
           {props.onWrite && (
             <div className="segmented mode-switch" role="radiogroup" aria-label="Mode">
               <button
@@ -403,6 +422,7 @@ export function WorldView(props: {
               >
                 <span className="world-nav-label" title={LENS_LABELS[lens]}>
                   {word(lens, LENS_LABELS[lens])}
+                  <span className="world-nav-hint">{LENS_HINTS[lens]}</span>
                 </span>
                 <span className="muted small">
                   {view.entries.filter((e) => lensOf(world, e) === lens).length}
@@ -456,7 +476,8 @@ export function WorldView(props: {
               Updating from your other computer…
             </div>
           )}
-          <div className="page-scroll">
+          {settingsOpen && <SettingsWindow onClose={() => setSettingsOpen(false)} />}
+          <div className="page-scroll" hidden={settingsOpen}>
             {place.kind === 'entry' ? (
               entry ? (
                 <EntryPage

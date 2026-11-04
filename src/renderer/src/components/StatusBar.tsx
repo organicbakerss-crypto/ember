@@ -50,7 +50,7 @@ export function StatusBar(props: {
     update(({ statusBar }) => ({
       statusBar: statusBar.includes(item)
         ? statusBar.filter((i) => i !== item)
-        : [...statusBar, item],
+        : addOnLeft(statusBar, item),
     }))
 
   const menu = (e: React.MouseEvent) => {
@@ -264,4 +264,14 @@ function GoalsForm(props: { seriesId: string; volume: VolumeSummary; onDone: () 
       </div>
     </form>
   )
+}
+
+/**
+ * A newly shown item joins the left group: before "sync", which starts the
+ * right-hand side (anything after it sits on the right).
+ */
+function addOnLeft(items: StatusItem[], item: StatusItem): StatusItem[] {
+  const at = items.indexOf('sync')
+  if (item === 'sync' || at < 0) return [...items, item]
+  return [...items.slice(0, at), item, ...items.slice(at)]
 }
