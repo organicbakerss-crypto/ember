@@ -124,6 +124,13 @@ export type OutlineFile = z.infer<typeof outlineFileSchema>
 export const chapterTypeSchema = z.enum(['chapter', 'interlude'])
 export type ChapterType = z.infer<typeof chapterTypeSchema>
 
+/** Where a chapter is: being written, revised, or finished. */
+export const CHAPTER_STATUSES = ['draft', 'revised', 'done'] as const
+export type ChapterStatus = (typeof CHAPTER_STATUSES)[number]
+/** Colour labels a writer can give chapters (their meaning is the writer's). */
+export const CHAPTER_LABELS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'] as const
+export type ChapterLabel = (typeof CHAPTER_LABELS)[number]
+
 export const chapterFileSchema = z.looseObject({
   formatVersion,
   id: id('chapter'),
@@ -137,6 +144,9 @@ export const chapterFileSchema = z.looseObject({
   notes: z.string(),
   /** A short summary of the chapter, by the writer (or filled in by the AI when asked). */
   synopsis: z.string().max(5000).default(''),
+  /** Unknown values (from a newer app) read as none rather than failing the chapter. */
+  status: z.enum(CHAPTER_STATUSES).nullable().catch(null).default(null),
+  label: z.enum(CHAPTER_LABELS).nullable().catch(null).default(null),
   content: richTextDocSchema,
   createdAt: timestamp,
   updatedAt: timestamp,

@@ -17,9 +17,9 @@ import type {
   VolumeStats,
   VolumeSummary,
 } from '@shared/ipc'
-import type { OutlineArc, OutlineFile } from '@shared/schema'
+import type { ChapterLabel, ChapterStatus, OutlineArc, OutlineFile } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
-import { Binder } from '../binder/Binder'
+import { Binder, STATUS_NAMES } from '../binder/Binder'
 import { chapterOrder, toContainers } from '../binder/model'
 import {
   ChapterEditor,
@@ -398,6 +398,19 @@ export function WritingView(props: {
     if (stored) setLiveMeta((m) => ({ ...m, [chapterId]: { ...stored, ...m[chapterId], title } }))
   }
 
+  /** Sets a chapter's status or colour label (only that field is saved). */
+  const markChapter = async (
+    chapterId: string,
+    patch: { status?: ChapterStatus | null; label?: ChapterLabel | null },
+  ) => {
+    try {
+      await api.invoke('chapter:save', { ...ref, chapterId, patch })
+      refresh()
+    } catch (err) {
+      actions.toast(describeError(err).message)
+    }
+  }
+
   const trashChapter = (chapterId: string) => {
     const title = liveMeta[chapterId]?.title ?? view?.chapters[chapterId]?.title ?? ''
     void actions.moveToTrash({ kind: 'chapter', ...ref, chapterId }, title || 'Untitled chapter')
@@ -639,6 +652,13 @@ export function WritingView(props: {
     },
     { id: 'diagnostics', title: 'Diagnostics', run: () => openPanel('diagnostics') },
     { id: 'notes', title: 'Chapter synopsis and notes', run: () => openPanel('notes') },
+    ...(selectedId
+      ? (['draft', 'revised', 'done'] as const).map((status) => ({
+          id: `status-${status}`,
+          title: `Mark this chapter as ${STATUS_NAMES[status]}`,
+          run: () => void markChapter(selectedId, { status }),
+        }))
+      : []),
     ...(world
       ? [
           {
@@ -1023,6 +1043,8 @@ export function WritingView(props: {
               onRenamingChange={setRenamingId}
               onRenameChapter={renameChapter}
               onTrashChapter={trashChapter}
+              onSetStatus={(chapterId, status) => void markChapter(chapterId, { status })}
+              onSetLabel={(chapterId, label) => void markChapter(chapterId, { label })}
               onCopyForRoyalRoad={(chapterId) =>
                 void copyChapterForRoyalRoad(
                   { seriesId: series.id, volumeId: volume.id, chapterId },

@@ -153,6 +153,8 @@ describe('chapters and the outline', () => {
       type: 'chapter',
       pov: null,
       povEntryId: null,
+      status: null,
+      label: null,
     })
   })
 
@@ -209,6 +211,28 @@ describe('chapters and the outline', () => {
     delete old['synopsis']
     await fs.promises.writeFile(path, JSON.stringify(old))
     expect((await lib.readChapter(...ref, ch.id)).synopsis).toBe('')
+  })
+
+  it('keeps a status and colour label, shown in the outline; unknown ones read as none', async () => {
+    const { ref } = await makeVolume()
+    const ch = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'One' })
+    await lib.saveChapter(...ref, ch.id, { status: 'revised', label: 'blue' })
+    expect((await lib.getOutline(...ref)).chapters[ch.id]).toMatchObject({
+      status: 'revised',
+      label: 'blue',
+    })
+    // A status from a newer app version: the chapter still opens, and its words are intact.
+    const path = join(lib.paths.chaptersDir(...ref), `${ch.id}.json`)
+    const raw = JSON.parse(await fs.promises.readFile(path, 'utf8')) as Record<string, unknown>
+    await fs.promises.writeFile(
+      path,
+      JSON.stringify({ ...raw, status: 'published', label: 'teal' }),
+    )
+    expect(await lib.readChapter(...ref, ch.id)).toMatchObject({
+      title: 'One',
+      status: null,
+      label: null,
+    })
   })
 
   it('reorders by touching only outline.json', async () => {

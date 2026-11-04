@@ -16,6 +16,8 @@ import type { StoryChapter, WorldIndex } from './world/story'
 import {
   chapterSourceSchema,
   chapterTypeSchema,
+  CHAPTER_LABELS,
+  CHAPTER_STATUSES,
   inboxItemSchema,
   factValueSchema,
   fieldIdSchema,
@@ -95,7 +97,10 @@ export interface LibrarySnapshot {
 export interface OutlineView {
   outline: OutlineFile
   /** Chapter metadata keyed by id (no content), for drawing the binder. */
-  chapters: Record<string, Pick<ChapterFile, 'id' | 'title' | 'type' | 'pov' | 'povEntryId'>>
+  chapters: Record<
+    string,
+    Pick<ChapterFile, 'id' | 'title' | 'type' | 'pov' | 'povEntryId' | 'status' | 'label'>
+  >
   problems: LibraryProblem[]
 }
 
@@ -597,6 +602,8 @@ export const ipcInputs = {
       povEntryId: id('entry').nullable().optional(),
       notes: z.string().optional(),
       synopsis: z.string().max(5000).optional(),
+      status: z.enum(CHAPTER_STATUSES).nullable().optional(),
+      label: z.enum(CHAPTER_LABELS).nullable().optional(),
       content: richTextDocSchema.optional(),
     }),
   }),

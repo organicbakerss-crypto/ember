@@ -23,7 +23,14 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { OutlineView } from '@shared/ipc'
-import type { OutlineArc, OutlineFile } from '@shared/schema'
+import {
+  CHAPTER_LABELS,
+  CHAPTER_STATUSES,
+  type ChapterLabel,
+  type ChapterStatus,
+  type OutlineArc,
+  type OutlineFile,
+} from '@shared/schema'
 import type { ChapterMeta } from '../editor/ChapterEditor'
 import type { Scene } from '../editor/scenes'
 import { EditableText } from '../components/EditableText'
@@ -45,6 +52,24 @@ import {
 } from './model'
 import { useCollapsed } from './useCollapsed'
 
+export const STATUS_NAMES: Record<ChapterStatus, string> = {
+  draft: 'Draft',
+  revised: 'Revised',
+  done: 'Done',
+}
+export const LABEL_NAMES: Record<ChapterLabel, string> = {
+  red: 'Red',
+  orange: 'Orange',
+  yellow: 'Yellow',
+  green: 'Green',
+  blue: 'Blue',
+  purple: 'Purple',
+}
+
+type StatusFilter = '' | 'unfinished' | ChapterStatus
+const matchesStatus = (status: ChapterStatus | null, filter: StatusFilter) =>
+  filter === '' || (filter === 'unfinished' ? status !== 'done' : status === filter)
+
 interface BinderProps {
   volumeName: string
   /** Opens the whole book as one manuscript (clicking its name). */
@@ -64,6 +89,8 @@ interface BinderProps {
   onRenamingChange: (id: string | null) => void
   onRenameChapter: (chapterId: string, title: string) => Promise<unknown>
   onTrashChapter: (chapterId: string) => void
+  onSetStatus: (chapterId: string, status: ChapterStatus | null) => void
+  onSetLabel: (chapterId: string, label: ChapterLabel | null) => void
   /** Copies a chapter for pasting into Royal Road. */
   onCopyForRoyalRoad?: (chapterId: string) => void
   /** Exports one chapter (opens the export dialog with it chosen). */
@@ -81,6 +108,7 @@ export function Binder(props: BinderProps) {
   const [containers, setContainers] = useState<Containers>(() => toContainers(view.outline))
   const [activeId, setActiveId] = useState<string | null>(null)
   const [povFilter, setPovFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const collapsed = useCollapsed()
   const { openMenu } = useOverlays()
 
@@ -113,8 +141,11 @@ export function Binder(props: BinderProps) {
     return [...new Set(all.filter((p): p is string => !!p))].sort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.chapters, props.liveMeta])
-  const filtering = povFilter !== ''
-  const visible = (id: string) => !filtering || meta(id).pov === povFilter
+  const filtering = povFilter !== '' || statusFilter !== ''
+  const visible = (id: string) =>
+    (povFilter === '' || meta(id).pov === povFilter) &&
+    matchesStatus(view.chapters[id]?.status ?? null, statusFilter)
+  const anyStatus = Object.values(view.chapters).some((c) => c.status)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -185,6 +216,22 @@ export function Binder(props: BinderProps) {
     return [
       { label: 'Rename', hint: 'F2', onSelect: () => props.onRenamingChange(id) },
       {
+        label: 'Status',
+        submenu: [...CHAPTER_STATUSES, null].map((status) => ({
+          label: status ? STATUS_NAMES[status] : 'None',
+          checked: (view.chapters[id]?.status ?? null) === status,
+          onSelect: () => props.onSetStatus(id, status),
+        })),
+      },
+      {
+        label: 'Colour label',
+        submenu: [...CHAPTER_LABELS, null].map((label) => ({
+          label: label ? LABEL_NAMES[label] : 'None',
+          checked: (view.chapters[id]?.label ?? null) === label,
+          onSelect: () => props.onSetLabel(id, label),
+        })),
+      },
+      {
         label: 'Move to arc',
         disabled: arcs.size === 0 && current === ROOT,
         submenu: [
@@ -223,6 +270,8 @@ export function Binder(props: BinderProps) {
     <SortableChapter key={id} id={id} disabled={filtering} hidden={!visible(id)}>
       <ChapterRow
         meta={meta(id)}
+        status={view.chapters[id]?.status ?? null}
+        label={view.chapters[id]?.label ?? null}
         selected={id === props.selectedId}
         scenes={id === props.selectedId ? props.scenes : []}
         renaming={props.renamingId === id}
@@ -266,8 +315,24 @@ export function Binder(props: BinderProps) {
             ))}
           </select>
         )}
+        {anyStatus && (
+          <select
+            aria-label="Filter by status"
+            className="small"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          >
+            <option value="">Any status</option>
+            <option value="unfinished">Not done</option>
+            {CHAPTER_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_NAMES[s]}
+              </option>
+            ))}
+          </select>
+        )}
       </header>
-      {filtering && <p className="muted small">Clear the POV filter to rearrange chapters.</p>}
+      {filtering && <p className="muted small">Clear the filter to rearrange chapters.</p>}
 
       <DndContext
         sensors={sensors}
@@ -468,6 +533,8 @@ function ArcHeader(props: {
 
 function ChapterRow(props: {
   meta: ChapterMeta
+  status: ChapterStatus | null
+  label: ChapterLabel | null
   selected: boolean
   scenes: Scene[]
   renaming: boolean
@@ -485,6 +552,13 @@ function ChapterRow(props: {
         onClick={props.onSelect}
         onContextMenu={props.onContextMenu}
       >
+        {props.label && (
+          <span
+            className={`binder-label label-${props.label}`}
+            title={`${LABEL_NAMES[props.label]} label`}
+            aria-label={`${LABEL_NAMES[props.label]} label`}
+          />
+        )}
         <EditableText
           className="binder-title"
           value={meta.title}
@@ -495,6 +569,12 @@ function ChapterRow(props: {
           onRename={props.onRename}
         />
         {meta.type === 'interlude' && <span className="binder-tag">Interlude</span>}
+        {props.status && (
+          <span className={`binder-status status-${props.status}`}>
+            {props.status === 'done' ? '✓ ' : ''}
+            {STATUS_NAMES[props.status]}
+          </span>
+        )}
         {meta.pov && <span className="binder-pov">{meta.pov}</span>}
       </div>
       {props.scenes.length > 1 && (

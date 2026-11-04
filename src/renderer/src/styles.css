@@ -4381,3 +4381,51 @@ kbd {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+
+/* Chapter status and colour labels in the binder */
+.binder-label {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+}
+.label-red {
+  background: #d64545;
+}
+.label-orange {
+  background: #e08a2e;
+}
+.label-yellow {
+  background: #d9b72b;
+}
+.label-green {
+  background: #4c9f5a;
+}
+.label-blue {
+  background: #3f7fd1;
+}
+.label-purple {
+  background: #8d5ac8;
+}
+.binder-status {
+  flex: none;
+  font-size: 0.68rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+.binder-status.status-done {
+  opacity: 0.9;
+  color: var(--success, #4c9f5a);
+}
+.binder-header select + select {
+  margin-left: 0.25rem;
+}
+.binder-row.selected .binder-status {
+  color: inherit;
+}
+.binder-row.selected .binder-label {
+  box-shadow: 0 0 0 1.5px currentColor;
+}
