@@ -48,6 +48,8 @@ export interface AppSettings {
   pageView: 'pages' | 'continuous'
   /** Paper shape for the page view. The page keeps these proportions at any width. */
   paperSize: PaperSize
+  /** Keep the line being typed in the middle of the screen. */
+  typewriter: boolean
   spellcheck: boolean
   /** Spellcheck languages (e.g. `en-GB`). Empty means the system language. Ignored on macOS. */
   spellLanguages: string[]
@@ -215,6 +217,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   pageWidth: PAGE_WIDTH.default,
   pageView: 'pages',
   paperSize: 'a4',
+  typewriter: false,
   spellcheck: true,
   spellLanguages: [],
   dictionary: [],

@@ -49,6 +49,12 @@ function createWindow(
   })
   window.once('ready-to-show', () => window.show())
   window.on('focus', () => sync?.focused())
+  window.on('enter-full-screen', () =>
+    window.webContents.send(`${IPC_EVENT_PREFIX}window:fullScreen`, true),
+  )
+  window.on('leave-full-screen', () =>
+    window.webContents.send(`${IPC_EVENT_PREFIX}window:fullScreen`, false),
+  )
   guardClose(window)
   attachScreenshotKey(window)
   attachTextMenu(

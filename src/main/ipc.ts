@@ -597,6 +597,10 @@ export function registerIpc(
       if (input.dictionary) sync.noteChange()
       return next
     },
+    'window:fullScreen': (input, event) => {
+      BrowserWindow.fromWebContents(event.sender)?.setFullScreen(input.on)
+      return null
+    },
     'window:flushed': (_input, event) => {
       confirmFlushed(BrowserWindow.fromWebContents(event.sender))
       return null

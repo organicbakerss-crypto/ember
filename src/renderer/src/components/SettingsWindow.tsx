@@ -1001,6 +1001,14 @@ function PageSettings() {
           ))}
         </select>
       </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.typewriter}
+          onChange={(e) => change({ typewriter: e.target.checked })}
+        />
+        Typewriter scrolling: the line you’re typing stays in the middle of the screen
+      </label>
       <h3>Text width</h3>
       <input
         type="range"

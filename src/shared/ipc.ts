@@ -641,6 +641,7 @@ export const ipcInputs = {
   'settings:update': z.object({
     theme: z.string().min(1).max(100).optional(),
     pageView: z.enum(['pages', 'continuous']).optional(),
+    typewriter: z.boolean().optional(),
     paperSize: z.enum(['a4', 'letter', 'trade']).optional(),
     spellcheck: z.boolean().optional(),
     spellLanguages: z.array(z.string().max(20)).max(10).optional(),
@@ -693,6 +694,8 @@ export const ipcInputs = {
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
+  /** Puts the window in full screen, or back. */
+  'window:fullScreen': z.object({ on: z.boolean() }),
   'window:flushed': z.void(),
   /** Exports a volume (or some of its chapters) to a file the writer picks. */
   'export:volume': z.object({
@@ -1045,6 +1048,7 @@ export interface IpcResults {
   'volume:names': string[]
   'settings:get': AppSettings
   'settings:update': AppSettings
+  'window:fullScreen': null
   'window:flushed': null
   'window:open': null
   'export:volume': { path: string; chapters: number; skipped: string[] }
@@ -1141,6 +1145,8 @@ export interface IpcEvents {
   'text:comment': null
   /** "Split the chapter here" was chosen (from the right-click menu). */
   'text:split': null
+  /** The window went full screen (true) or back (false). */
+  'window:fullScreen': boolean
   /** Something was captured from the right-click menu (a short confirmation to show). */
   'text:captured': string
   'settings:changed': AppSettings

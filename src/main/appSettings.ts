@@ -45,6 +45,7 @@ const appSettingsSchema = z.looseObject({
     .default(PAGE_WIDTH.default),
   pageView: z.enum(['pages', 'continuous']).catch('pages').default('pages'),
   paperSize: z.enum(['a4', 'letter', 'trade']).catch('a4').default('a4'),
+  typewriter: z.boolean().catch(false).default(false),
   spellcheck: z.boolean().catch(true).default(true),
   spellLanguages: z.array(z.string()).catch([]).default([]),
   dictionary: z.array(z.string()).catch([]).default([]),

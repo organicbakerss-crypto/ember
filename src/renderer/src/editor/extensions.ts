@@ -8,6 +8,7 @@ import { LinkedNames } from './linkedNames'
 import { Pagination } from './pagination'
 import { SceneBreak } from './sceneBreak'
 import { CommentMark } from './comments'
+import { Typewriter } from './typewriter'
 
 /** The editor's schema. Changing it changes what chapter files can contain. */
 export function chapterExtensions(placeholder = 'Start writing…'): Extensions {
@@ -28,6 +29,7 @@ export function chapterExtensions(placeholder = 'Start writing…'): Extensions 
     AnalysisDecorations,
     ReadingMark,
     Pagination,
+    Typewriter,
     LinkedNames,
     Placeholder.configure({ placeholder }),
   ]

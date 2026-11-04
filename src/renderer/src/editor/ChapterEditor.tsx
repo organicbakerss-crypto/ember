@@ -300,6 +300,9 @@ function EditorPage(
   const { settings } = useSettings()
   const paged = settings.pageView === 'pages'
   const { stackRef, pageHeight, pages } = usePages(editor, paged)
+  useEffect(() => {
+    editor.commands.setTypewriter(settings.typewriter)
+  }, [editor, settings.typewriter])
 
   const saver = useChapterSaver(
     { seriesId: props.seriesId, volumeId: props.volumeId, chapterId: chapter.id },

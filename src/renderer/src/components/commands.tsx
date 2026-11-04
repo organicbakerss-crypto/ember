@@ -28,7 +28,7 @@ interface Registry {
 
 const RegistryContext = createContext<Registry | null>(null)
 
-const isMac = navigator.platform.toLowerCase().includes('mac')
+export const isMac = navigator.platform.toLowerCase().includes('mac')
 export const MOD = isMac ? '⌘' : 'Ctrl+'
 
 /** True for Ctrl (Windows/Linux) or Cmd (macOS) shortcuts. */

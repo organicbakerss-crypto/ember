@@ -40,7 +40,7 @@ import type { AnalysisOptions } from '../editor/analysisDecorations'
 import { flushAll } from '../saving'
 import { useSettings } from '../useTheme'
 import { loadLocal, saveLocal } from '../storage'
-import { MOD, modKey, useCommands, type Command } from './commands'
+import { isMac, MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { ChapterNotesPanel } from './ChapterNotesPanel'
 import { CommentsPanel } from './CommentsPanel'
@@ -129,6 +129,16 @@ export function WritingView(props: {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [revealArcId, setRevealArcId] = useState<string | null>(null)
   const [focusMode, setFocusMode] = useState(false)
+  // Full screen (F11, the View menu, or the palette): just the page, filling the screen.
+  const [fullScreen, setFullScreen] = useState(false)
+  useIpcEvent('window:fullScreen', (on) => {
+    setFullScreen(on)
+    if (pane.active || !on) setFocusMode(on)
+  })
+  const leaveFocus = () => {
+    setFocusMode(false)
+    if (fullScreen) void api.invoke('window:fullScreen', { on: false })
+  }
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [manuscriptOpen, setManuscriptOpen] = useState(false)
   // Bumped to reload the open chapter from disk (after a restore or replace-all).
@@ -141,7 +151,7 @@ export function WritingView(props: {
   const [highlightStem, setHighlightStem] = useState<string | null>(null)
   const [chapterParagraphs, setChapterParagraphs] = useState<string[]>([])
   const [selectionParagraphs, setSelectionParagraphs] = useState<string[] | null>(null)
-  const { settings } = useSettings()
+  const { settings, update: updateSettings } = useSettings()
   const { choose, openMenu } = useOverlays()
   // Export and import dialogs (export can start with one chapter chosen).
   const aiOn = settings.ai.enabled
@@ -414,7 +424,7 @@ export function WritingView(props: {
       else if (modKey(e) && e.altKey && e.code === 'KeyE') toggleEcho()
       else if (modKey(e) && e.altKey && e.code === 'KeyN') startQuickAdd()
       else if (modKey(e) && e.altKey && e.code === 'KeyM') addComment()
-      else if (e.key === 'Escape' && focusMode) setFocusMode(false)
+      else if (e.key === 'Escape' && focusMode) leaveFocus()
       else return
       e.preventDefault()
     }
@@ -734,7 +744,18 @@ export function WritingView(props: {
       id: 'focus',
       title: focusMode ? 'Leave focus mode' : 'Focus mode',
       shortcut: `${MOD}Shift+F`,
-      run: () => setFocusMode((f) => !f),
+      run: () => (focusMode ? leaveFocus() : setFocusMode(true)),
+    },
+    {
+      id: 'fullscreen',
+      title: fullScreen ? 'Leave full screen' : 'Full screen (just the page)',
+      shortcut: isMac ? '⌃⌘F' : 'F11',
+      run: () => void api.invoke('window:fullScreen', { on: !fullScreen }),
+    },
+    {
+      id: 'typewriter',
+      title: settings.typewriter ? 'Turn off typewriter scrolling' : 'Turn on typewriter scrolling',
+      run: () => updateSettings({ typewriter: !settings.typewriter }),
     },
     { id: 'rename', title: 'Rename chapter', shortcut: 'F2', run: renameOpenChapter },
     {
@@ -880,10 +901,12 @@ export function WritingView(props: {
   useCommands('writing', commands)
 
   return (
-    <div className={`writing-view ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''}`}>
+    <div
+      className={`writing-view ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''} ${settings.typewriter ? 'typewriter' : ''}`}
+    >
       {focusMode && (
-        <button className="focus-exit small" onClick={() => setFocusMode(false)}>
-          Leave focus mode (Esc)
+        <button className="focus-exit small" onClick={leaveFocus}>
+          {fullScreen ? 'Leave full screen (Esc)' : 'Leave focus mode (Esc)'}
         </button>
       )}
       <header className="top-bar">

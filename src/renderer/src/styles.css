@@ -4483,3 +4483,8 @@ kbd {
 .comment-card > .link {
   align-self: flex-end;
 }
+
+/* Typewriter scrolling: room below the last line so it can reach the middle too. */
+.writing-view.typewriter .page-scroll {
+  padding-bottom: 50vh;
+}
