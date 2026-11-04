@@ -4838,3 +4838,9 @@ kbd {
 .book-bar strong {
   white-space: nowrap;
 }
+
+/* Cyberpunk: a faint neon glow on the line being written. */
+:root[data-theme='cyberpunk'] .chapter-content.ProseMirror-focused .active-block {
+  text-shadow: 0 0 7px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: text-shadow 0.2s;
+}

@@ -9,6 +9,7 @@ import { Pagination } from './pagination'
 import { SceneBreak } from './sceneBreak'
 import { CommentMark } from './comments'
 import { Typewriter } from './typewriter'
+import { ActiveBlock } from './activeBlock'
 
 /** The editor's schema. Changing it changes what chapter files can contain. */
 export function chapterExtensions(placeholder = 'Start writing…'): Extensions {
@@ -30,6 +31,7 @@ export function chapterExtensions(placeholder = 'Start writing…'): Extensions 
     ReadingMark,
     Pagination,
     Typewriter,
+    ActiveBlock,
     LinkedNames,
     Placeholder.configure({ placeholder }),
   ]
