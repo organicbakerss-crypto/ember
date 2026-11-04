@@ -3,6 +3,7 @@ import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style'
 import { Placeholder } from '@tiptap/extensions'
 import type { Extensions } from '@tiptap/core'
 import { AnalysisDecorations } from './analysisDecorations'
+import { ReadingMark } from './readingMark'
 import { LinkedNames } from './linkedNames'
 import { Pagination } from './pagination'
 import { SceneBreak } from './sceneBreak'
@@ -23,6 +24,7 @@ export function chapterExtensions(placeholder = 'Start writing…'): Extensions 
     FontFamily,
     SceneBreak,
     AnalysisDecorations,
+    ReadingMark,
     Pagination,
     LinkedNames,
     Placeholder.configure({ placeholder }),

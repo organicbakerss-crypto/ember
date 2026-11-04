@@ -20,3 +20,10 @@ export const aiSettingsSchema = z.object({
   autoWorld: z.boolean().catch(false).default(false),
   prompts: z.array(z.string().trim().min(1).max(1000)).max(20).catch([]).default([]),
 })
+
+/** Voice settings as stored and as sent from a window (see VoiceSettings). */
+export const voiceSettingsSchema = z.object({
+  enabled: z.boolean(),
+  systemVoice: z.string().max(200).catch('').default(''),
+  rate: z.number().min(0.5).max(2).catch(1).default(1),
+})

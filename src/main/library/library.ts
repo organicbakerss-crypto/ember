@@ -14,6 +14,8 @@ import { dirname, join, relative, sep } from 'node:path'
 import {
   FORMAT_VERSION,
   chapterSummaryFileSchema,
+  chapterSpeakersFileSchema,
+  type ChapterSpeakersFile,
   type ChapterSummaryFile,
   chapterFileSchema,
   emptyDoc,
@@ -839,6 +841,40 @@ export class Library {
       }
     }
     return out
+  }
+
+  /** Who says what in a chapter (the AI's marking), or null when there's none yet. */
+  async readSpeakers(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+  ): Promise<ChapterSpeakersFile | null> {
+    try {
+      return await readJsonFile(
+        join(this.paths.volumeDir(seriesId, volumeId), unitPaths.speakers(chapterId)),
+        chapterSpeakersFileSchema,
+      )
+    } catch (err) {
+      if (err instanceof AppError) return null
+      throw err
+    }
+  }
+
+  async saveSpeakers(
+    seriesId: string,
+    volumeId: string,
+    file: Pick<ChapterSpeakersFile, 'chapterId' | 'textHash' | 'narrator' | 'lines'>,
+  ): Promise<void> {
+    await this.lock.run(`volume:${volumeId}`, async () => {
+      await fs.promises.mkdir(join(this.paths.volumeDir(seriesId, volumeId), 'speakers'), {
+        recursive: true,
+      })
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.speakers(file.chapterId), {
+        formatVersion: FORMAT_VERSION,
+        ...file,
+        createdAt: this.timestamp(),
+      })
+    })
   }
 
   /** Keeps the AI's summary of a chapter (with the text it was made from). */

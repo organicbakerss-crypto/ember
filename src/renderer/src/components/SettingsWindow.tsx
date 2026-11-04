@@ -39,16 +39,7 @@ const CATEGORIES: Category[] = [
   { id: 'import', label: 'Import & export', render: () => <ImportExportSettings /> },
   { id: 'sync', label: 'Sync', render: () => <SyncSettings /> },
   { id: 'ai', label: 'AI', render: () => <AiSettingsSection /> },
-  {
-    id: 'companion',
-    label: 'Companion',
-    later: 'The on-screen companion and character presets (Milestone 11).',
-  },
-  {
-    id: 'voice',
-    label: 'Voice',
-    later: 'Push-to-talk, local voices and ElevenLabs (Milestone 12).',
-  },
+  { id: 'voice', label: 'Voice', render: () => <VoiceSettingsSection /> },
   {
     id: 'modules',
     label: 'Optional modules',
@@ -460,6 +451,97 @@ function SyncSettings() {
 }
 
 /** AI on this computer: on or off, who answers (Ollama or ChatGPT), which model. */
+/** Voice: reading aloud with the computer's voices, and the audiobook script for VoiceStudio. */
+function VoiceSettingsSection() {
+  const { settings, update } = useSettings()
+  const voice = settings.voice
+  const set = (patch: Partial<typeof voice>) =>
+    update(({ voice: current }) => ({ voice: { ...current, ...patch } }))
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() =>
+    typeof speechSynthesis === 'undefined' ? [] : speechSynthesis.getVoices(),
+  )
+  useEffect(() => {
+    if (typeof speechSynthesis === 'undefined') return
+    const load = () => setVoices(speechSynthesis.getVoices())
+    speechSynthesis.addEventListener('voiceschanged', load)
+    return () => speechSynthesis.removeEventListener('voiceschanged', load)
+  }, [])
+  const test = () => {
+    if (typeof speechSynthesis === 'undefined') return
+    speechSynthesis.cancel()
+    const u = new SpeechSynthesisUtterance('This is how your chapters will sound.')
+    const v = voices.find((x) => x.name === voice.systemVoice)
+    if (v) u.voice = v
+    u.rate = voice.rate
+    speechSynthesis.speak(u)
+  }
+  return (
+    <section className="settings-section">
+      <h3>Voice</h3>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={voice.enabled}
+          onChange={(e) => set({ enabled: e.target.checked })}
+        />
+        Use voice: read chapters aloud, and make audiobook scripts for VoiceStudio
+      </label>
+      {voice.enabled && (
+        <>
+          <h3>Reading aloud</h3>
+          <p className="muted small">
+            “Read aloud from here” in the ⋯ menu reads the chapter from where your cursor is,
+            highlighting as it goes. It uses this computer’s voices (on a Mac, the “Enhanced” and
+            “Premium” voices in System Settings → Accessibility → Spoken Content sound best).
+          </p>
+          <label>
+            Voice
+            <select
+              value={voice.systemVoice}
+              onChange={(e) => set({ systemVoice: e.target.value })}
+            >
+              <option value="">The system’s default</option>
+              {voices.map((v) => (
+                <option key={v.name} value={v.name}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Speed: {voice.rate.toFixed(2)}×
+            <input
+              type="range"
+              min={0.6}
+              max={1.6}
+              step={0.05}
+              value={voice.rate}
+              onChange={(e) => set({ rate: Number(e.target.value) })}
+            />
+          </label>
+          <p className="row">
+            <button onClick={test}>Try it</button>
+            {!voices.length && (
+              <span className="muted small">
+                No voices found on this computer (on Linux, install speech-dispatcher).
+              </span>
+            )}
+          </p>
+          <h3>Audiobooks with VoiceStudio</h3>
+          <p className="muted small">
+            “Audiobook script for VoiceStudio” in the ⋯ menu makes a script of the chapter or the
+            whole book for VoiceStudio’s Audiobook page. The AI marks who says each line (needs the
+            AI on), and every line is tagged with that character’s name, like{' '}
+            <code>[voice:Ashley]</code>. Narration is tagged with the narrator: the POV character
+            when a chapter is told in the first person, otherwise “Narrator”; lines it can’t place
+            are “Other”. In VoiceStudio, give each name a voice in the Cast.
+          </p>
+        </>
+      )}
+    </section>
+  )
+}
+
 function AiSettingsSection() {
   const { settings, update } = useSettings()
   const { toast } = useOverlays()

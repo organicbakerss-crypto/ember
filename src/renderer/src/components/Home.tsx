@@ -307,6 +307,18 @@ export function Home(props: { detached?: PaneRoute | null }) {
   // AI work runs in the background: say when it's done, wherever the writer is.
   useIpcEvent('ai:jobDone', (job) => {
     const worldId = seriesOf(job.seriesId)?.worldId
+    if (job.kind === 'voices') {
+      if (job.state === 'failed') toast(`The audiobook script couldn’t be made: ${job.error}`)
+      else if (job.state === 'done' && job.result) {
+        const r = job.result
+        toast(
+          r.saved
+            ? `Saved the audiobook script (${r.chapters} ${r.chapters === 1 ? 'chapter' : 'chapters'}, ${r.lines} lines): ${r.saved}. Open it in VoiceStudio’s Audiobook page and give each name a voice in the Cast.`
+            : 'The audiobook script was made but not saved.',
+        )
+      }
+      return
+    }
     if (job.kind === 'names') {
       if (job.state === 'done' && job.result) {
         toast(

@@ -10,12 +10,13 @@ import {
   DEFAULT_STATUS_BAR,
   DEFAULT_EXPORT_SETTINGS,
   DEFAULT_AI_SETTINGS,
+  DEFAULT_VOICE_SETTINGS,
   DEFAULT_WORLD_SETTINGS,
   PAGE_WIDTH,
   STATUS_ITEMS,
   type AppSettings,
 } from '@shared/settings'
-import { aiSettingsSchema, exportSettingsSchema } from '@shared/exportSettings'
+import { aiSettingsSchema, exportSettingsSchema, voiceSettingsSchema } from '@shared/exportSettings'
 import { writeFileAtomic } from './fs/atomicWrite'
 import { serializeJson } from './fs/jsonFile'
 
@@ -67,6 +68,7 @@ const appSettingsSchema = z.looseObject({
     .default(DEFAULT_WORLD_SETTINGS),
   export: exportSettingsSchema.catch(DEFAULT_EXPORT_SETTINGS).default(DEFAULT_EXPORT_SETTINGS),
   ai: aiSettingsSchema.catch(DEFAULT_AI_SETTINGS).default(DEFAULT_AI_SETTINGS),
+  voice: voiceSettingsSchema.catch(DEFAULT_VOICE_SETTINGS).default(DEFAULT_VOICE_SETTINGS),
 })
 
 export class AppSettingsStore {

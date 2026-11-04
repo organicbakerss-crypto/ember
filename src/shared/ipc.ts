@@ -8,7 +8,7 @@ import { z } from 'zod'
 import { MAX_COVER_BYTES, MAX_MAP_BYTES, type CoverInfo, type CoverTarget } from './media'
 import { docKeySchema, paneRouteSchema, type PaneRoute } from './panes'
 import { PAGE_WIDTH, STATUS_ITEMS, type AppSettings } from './settings'
-import { aiSettingsSchema, exportSettingsSchema } from './exportSettings'
+import { aiSettingsSchema, exportSettingsSchema, voiceSettingsSchema } from './exportSettings'
 
 export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
 import type { NameSuggestion } from './world/nameCatcher'
@@ -246,7 +246,7 @@ export interface WorldInbox {
 export interface AiJobInfo {
   /** The request id. */
   id: string
-  kind: 'ask' | 'edit' | 'world' | 'names'
+  kind: 'ask' | 'edit' | 'world' | 'names' | 'voices'
   seriesId: string
   /** The conversation it belongs to (ask and edit), as it was when asked. */
   conversation: ConversationFile | null
@@ -269,6 +269,10 @@ export interface AiJobInfo {
     questions?: number
     /** Sorting names: names it found weren't names for the world. */
     skipped?: number
+    /** The audiobook script: where it was saved (null: not saved), and its size. */
+    saved?: string | null
+    chapters?: number
+    lines?: number
   } | null
   startedAt: string
   endedAt: string | null
@@ -660,6 +664,7 @@ export const ipcInputs = {
       .optional(),
     export: exportSettingsSchema.optional(),
     ai: aiSettingsSchema.optional(),
+    voice: voiceSettingsSchema.optional(),
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
@@ -780,6 +785,16 @@ export const ipcInputs = {
       )
       .min(1)
       .max(300),
+  }),
+  /**
+   * The audiobook script for VoiceStudio (a chapter, a volume or the whole
+   * story): who speaks is marked by the AI first; then it asks where to save.
+   */
+  'voice:script': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    volumeId: id('volume').nullable(),
+    chapterId: id('chapter').nullable(),
   }),
   /** Answers a question the AI asked. */
   'inbox:answer': z.object({
@@ -974,6 +989,7 @@ export interface IpcResults {
   'inbox:accept': { item: InboxItem; entryId: string | null; relationshipId: string | null }
   'inbox:answer': null
   'inbox:undo': InboxItem
+  'voice:script': { saved: string | null; chapters: number; lines: number }
   'ai:sortNames': { applied: number; suggestions: number; skipped: number }
   'inbox:restore': null
   'ai:scope': {

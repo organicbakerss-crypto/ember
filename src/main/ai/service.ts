@@ -16,6 +16,9 @@ import type { AiStatus } from '@shared/ipc'
 import { AppError } from '../errors'
 import type { LibraryHost } from '../libraryHost'
 import { chapterTextHash } from '../library/library'
+import type { Speaker } from '@shared/schema'
+import { audiobookScript, docBlocks, segments } from '@shared/voice/script'
+import { numberedParts, parseSpeakers, resolveSpeaker, speakersMessages } from './speakers'
 import { Ollama, type ChatMessage } from './ollama'
 import {
   chapterParts,
@@ -673,6 +676,142 @@ export class AiService {
       }
       if (notNames.length) await library.world.rejectNames(input.worldId, notNames, true)
       return { applied, suggestions, skipped: notNames.length }
+    })
+  }
+
+  /**
+   * The audiobook script for a chapter, a volume or the whole story: who says
+   * each line is marked by the AI (only for chapters changed since they were
+   * last marked), narration goes to the chapter's narrator.
+   */
+  async voiceScript(
+    input: {
+      requestId: string
+      seriesId: string
+      volumeId: string | null
+      chapterId: string | null
+    },
+    onProgress: (text: string) => void,
+  ): Promise<{ script: string; title: string; chapters: number; lines: number }> {
+    const library = this.options.host.current
+    const series = await library.getSeries(input.seriesId)
+    const view = series.worldId ? await library.world.view(series.worldId) : null
+    const entries = view?.entries ?? []
+    const all = (await library.storySummaries(input.seriesId)).filter(
+      (s) =>
+        (!input.chapterId || s.chapter.id === input.chapterId) &&
+        (!input.volumeId || s.chapter.volumeId === input.volumeId),
+    )
+    if (!all.length) throw new AppError('invalid-input', 'There are no chapters to read.')
+    let provider: Provider | null = null
+    return this.track(input.requestId, async (signal) => {
+      const chapters: Parameters<typeof audiobookScript>[0] = []
+      let lineCount = 0
+      for (const [i, s] of all.entries()) {
+        const { seriesId, volumeId, id: chapterId } = s.chapter
+        const chapter = await library.readChapter(seriesId, volumeId, chapterId)
+        const segs = segments(docBlocks(chapter.content))
+        const pov = chapter.povEntryId
+          ? (entries.find((e) => e.id === chapter.povEntryId) ?? null)
+          : null
+        const povSpeaker = pov
+          ? { entryId: pov.id, name: pov.name }
+          : chapter.pov
+            ? { entryId: null, name: chapter.pov }
+            : null
+        let marked = await library.readSpeakers(seriesId, volumeId, chapterId)
+        if (!marked || marked.textHash !== s.textHash) {
+          onProgress(`Marking who speaks (chapter ${i + 1} of ${all.length})…`)
+          provider ??= await this.client()
+          const parts = numberedParts(segs, READ_WORDS[provider.kind])
+          let narratorName = ''
+          const byNumber = new Map<number, string>()
+          let offset = 0
+          for (const part of parts) {
+            if (part.count || !narratorName) {
+              const reply = await provider.chat({
+                messages: speakersMessages({
+                  chapterTitle: chapter.title,
+                  text: part.text,
+                  cast: entries.map((e) => e.name).slice(0, 200),
+                  pov: povSpeaker?.name ?? null,
+                }),
+                json: true,
+                temperature: 0.1,
+                signal,
+              })
+              const got = parseSpeakers(reply)
+              narratorName ||= got.narrator
+              // Numbers run through the whole chapter; a part may number from 1 again.
+              for (const [n, name] of got.speakers) {
+                byNumber.set(n > offset ? n : n + offset, name)
+              }
+            }
+            offset += part.count
+          }
+          const aiNarrator = narratorName ? resolveSpeaker(narratorName, entries, null) : null
+          const narrator = povSpeaker && aiNarrator ? povSpeaker : aiNarrator
+          const lines: Record<string, Speaker> = {}
+          let n = 0
+          for (const seg of segs) {
+            if (seg.kind !== 'quote') continue
+            n++
+            const who = resolveSpeaker(byNumber.get(n) ?? '', entries, narrator)
+            if (who && seg.key) lines[seg.key] = who
+          }
+          marked = {
+            formatVersion: 1,
+            chapterId,
+            textHash: s.textHash,
+            narrator,
+            lines,
+            createdAt: new Date().toISOString(),
+          }
+          await library.saveSpeakers(seriesId, volumeId, marked)
+          // Told by someone other than the POV says: say so (nothing is changed).
+          if (
+            series.worldId &&
+            povSpeaker?.entryId &&
+            aiNarrator?.entryId &&
+            aiNarrator.entryId !== povSpeaker.entryId
+          ) {
+            await library.world.addFindings(
+              series.worldId,
+              { seriesId, volumeId, chapterId, chapterTitle: chapter.title },
+              [
+                {
+                  kind: 'continuity',
+                  text: `“${chapter.title || 'Untitled'}” reads as told by ${aiNarrator.name}, but its POV is ${povSpeaker.name}. The audio uses ${povSpeaker.name}; change the POV if that’s wrong.`,
+                  quote: null,
+                  entryId: aiNarrator.entryId,
+                },
+              ],
+              false,
+            )
+          }
+        }
+        const narratorTag = marked.narrator?.name || 'Narrator'
+        const lines = segs.map((seg) => ({
+          kind: seg.kind,
+          text: seg.text,
+          voice:
+            seg.kind === 'quote'
+              ? (seg.key && marked.lines[seg.key]?.name) || 'Other'
+              : narratorTag,
+        }))
+        lineCount += lines.filter((l) => l.kind !== 'break').length
+        chapters.push({
+          heading: `${s.chapter.label}${chapter.title ? `: ${chapter.title}` : ''}`,
+          lines,
+        })
+      }
+      const one = input.chapterId ? all[0]!.chapter : null
+      return {
+        script: audiobookScript(chapters),
+        title: one ? one.title || one.label : series.name,
+        chapters: chapters.length,
+        lines: lineCount,
+      }
     })
   }
 }

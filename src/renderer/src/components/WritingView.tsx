@@ -4,6 +4,7 @@ import { offerScope, requestEdit, requestPrompt, useScopeAnswers } from '../ai/s
 import { STORY_PROMPTS } from '../ai/storyPrompts'
 import { updateWorld } from '../ai/worldUpdate'
 import { Recap } from '../ai/Recap'
+import { ReadAloud } from '../voice/ReadAloud'
 import type {
   WorldSummary,
   CaptureContext,
@@ -128,6 +129,31 @@ export function WritingView(props: {
   const editWithAi = (draft: string) => {
     requestEdit(series.id, draft)
     if (!props.aiBeside) props.onToggleAi?.()
+  }
+  // Voice: reading aloud (the blocks being read), and the audiobook script for VoiceStudio.
+  const voiceOn = settings.voice.enabled
+  const [reading, setReading] = useState<{ pos: number; text: string | null }[] | null>(null)
+  const markReading = useCallback((pos: number | null) => editor.current?.markReading(pos), [])
+  const stopReading = useCallback(() => setReading(null), [])
+  const readAloud = () => {
+    const blocks = editor.current?.readingBlocks() ?? []
+    if (blocks.some((b) => b.text?.trim())) setReading(blocks)
+    else actions.toast('There’s nothing here to read.')
+  }
+  const audiobookScript = (chapterId: string | null) => {
+    actions.toast(
+      'Making the audiobook script: the AI marks who says each line. You’ll be asked where to save it.',
+    )
+    void flushAll().then(() =>
+      api
+        .invoke('voice:script', {
+          requestId: `${Date.now()}-script`,
+          seriesId: series.id,
+          volumeId: volume.id,
+          chapterId,
+        })
+        .catch(() => {}),
+    )
   }
   /** Asks the AI (beside the page) for something about the whole story: a blurb, a synopsis. */
   const askAboutStory = (text: string) => {
@@ -493,6 +519,31 @@ export function WritingView(props: {
     (i) => i.type === 'arc' && selectedId && i.chapterIds.includes(selectedId),
   )
 
+  const voiceCommands = voiceOn
+    ? [
+        ...(selectedId
+          ? [{ id: 'voice-read', title: 'Read aloud from here', run: readAloud }]
+          : []),
+        ...(aiOn
+          ? [
+              ...(selectedId
+                ? [
+                    {
+                      id: 'voice-script-chapter',
+                      title: 'Audiobook script for VoiceStudio: this chapter',
+                      run: () => audiobookScript(selectedId),
+                    },
+                  ]
+                : []),
+              {
+                id: 'voice-script-book',
+                title: `Audiobook script for VoiceStudio: ${book ? 'the book' : 'this volume'}`,
+                run: () => audiobookScript(null),
+              },
+            ]
+          : []),
+      ]
+    : []
   const commands: Command[] = [
     { id: 'new-chapter', title: 'New chapter', run: () => void createChapter() },
     { id: 'find', title: 'Find in volume', shortcut: `${MOD}F`, run: openSearch },
@@ -580,6 +631,7 @@ export function WritingView(props: {
             : []),
         ]
       : []),
+    ...voiceCommands,
     { id: 'settings', title: 'Settings', run: () => setSettingsOpen(true) },
     ...(book
       ? []
@@ -692,6 +744,7 @@ export function WritingView(props: {
                   ),
               },
               { label: 'Import from Word (.docx)…', onSelect: () => setImporting(true) },
+              ...voiceCommands.map((c) => ({ label: c.title, onSelect: c.run })),
               ...(aiOn
                 ? [
                     {
@@ -923,6 +976,15 @@ export function WritingView(props: {
       <main className="page-area">
         {settingsOpen && <SettingsWindow onClose={() => setSettingsOpen(false)} />}
         {aiOn && !focusMode && <Recap seriesId={series.id} chapterId={selectedId} />}
+        {reading && (
+          <ReadAloud
+            key={selectedId ?? ''}
+            blocks={reading}
+            settings={settings.voice}
+            mark={markReading}
+            onClose={stopReading}
+          />
+        )}
         {/* The editor stays loaded behind Settings, keeping undo history and scroll position. */}
         <div className="page-area-inner" hidden={settingsOpen}>
           {selectedId && view && selectedId in view.chapters ? (

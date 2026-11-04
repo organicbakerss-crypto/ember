@@ -406,4 +406,98 @@ describe('the AI service', () => {
     ])
     expect(fake.requests[0]!.messages[1]!.content).toContain('Halloween: “Halloween was there.”')
   })
+
+  it('makes the audiobook script: who says each line, narration by the narrator, marked once', async () => {
+    const ref = await story()
+    const ashley = await lib.world.createEntry(ref.worldId, { name: 'Ashley', template: 'person' })
+    const guy = await lib.world.createEntry(ref.worldId, { name: 'Guy', template: 'person' })
+    await lib.saveChapter(ref.seriesId, ref.volumeId, ref.chapterId, {
+      povEntryId: guy.id,
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: '“Hey,” I shot back. “Ease up.”' }],
+          },
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: '“Are you serious?”' },
+              { type: 'hardBreak' },
+              { type: 'text', text: ' She looked annoyed.' },
+            ],
+          },
+          { type: 'sceneBreak' },
+          { type: 'paragraph', content: [{ type: 'text', text: '“Ew. Grape.”' }] },
+        ],
+      },
+    })
+    fake = await startFakeOllama(() =>
+      JSON.stringify({
+        narrator: 'Guy',
+        speakers: { '1': 'narrator', '2': 'narrator', '3': 'Ashley', '4': 'unknown' },
+      }),
+    )
+    const r = await service({}).voiceScript(
+      { requestId: 'v1', seriesId: ref.seriesId, volumeId: null, chapterId: ref.chapterId },
+      () => {},
+    )
+    expect(fake.requests[0]!.messages[1]!.content).toContain(
+      '[1] “Hey,” I shot back. [2] “Ease up.”',
+    )
+    expect(r.script).toBe(
+      [
+        '# Ch 1: Arrival',
+        '[voice:Guy] “Hey,”',
+        '[voice:Guy] I shot back.',
+        '[voice:Guy] “Ease up.”',
+        '[voice:Ashley] “Are you serious?”',
+        '[voice:Guy] She looked annoyed.',
+        '[pause 1s]',
+        '[voice:Other] “Ew. Grape.”',
+        '',
+      ].join('\n'),
+    )
+    expect(r).toMatchObject({ chapters: 1, lines: 6 })
+    const marked = await lib.readSpeakers(ref.seriesId, ref.volumeId, ref.chapterId)
+    expect(marked?.lines['are you serious']).toEqual({ entryId: ashley.id, name: 'Ashley' })
+    // Unchanged chapter: not marked again.
+    await service({}).voiceScript(
+      { requestId: 'v2', seriesId: ref.seriesId, volumeId: null, chapterId: ref.chapterId },
+      () => {},
+    )
+    expect(fake.requests).toHaveLength(1)
+  })
+
+  it('flags a chapter that reads as told by someone other than its POV', async () => {
+    const ref = await story()
+    const a = await lib.world.createEntry(ref.worldId, { name: 'Guy A', template: 'person' })
+    await lib.world.createEntry(ref.worldId, { name: 'Guy B', template: 'person' })
+    await lib.saveChapter(ref.seriesId, ref.volumeId, ref.chapterId, { povEntryId: a.id })
+    fake = await startFakeOllama(() => JSON.stringify({ narrator: 'Guy B', speakers: {} }))
+    const r = await service({}).voiceScript(
+      { requestId: 'v1', seriesId: ref.seriesId, volumeId: null, chapterId: ref.chapterId },
+      () => {},
+    )
+    // The POV the writer set is used; the mismatch is flagged, nothing changed.
+    expect(r.script).toContain('[voice:Guy A] Mara ran to the harbour.')
+    const items = (await lib.world.inbox(ref.worldId, false)).captured
+    expect(items.map((i) => [i.kind, i.text])).toEqual([
+      [
+        'continuity',
+        '“Arrival” reads as told by Guy B, but its POV is Guy A. The audio uses Guy A; change the POV if that’s wrong.',
+      ],
+    ])
+  })
+
+  it('third person: narration is the Narrator', async () => {
+    const ref = await story()
+    fake = await startFakeOllama(() => JSON.stringify({ narrator: '', speakers: {} }))
+    const r = await service({}).voiceScript(
+      { requestId: 'v1', seriesId: ref.seriesId, volumeId: null, chapterId: null },
+      () => {},
+    )
+    expect(r.script).toContain('[voice:Narrator] Mara ran to the harbour.')
+  })
 })

@@ -5,6 +5,7 @@ import type { ChapterFile, ChapterType } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
 import { ReadOnlyNote } from '../panes/ReadOnlyNote'
 import { useDocLease } from '../panes/useDocLease'
+import { markReadingTr } from './readingMark'
 import { RECALC_DELAY_MS, type ActiveEcho, type AnalysisOptions } from './analysisDecorations'
 import { PAPER_SIZES } from '@shared/settings'
 import { useSettings } from '../useTheme'
@@ -42,6 +43,10 @@ export interface EditorHandle {
   getDoc: () => JSONContent | null
   /** Replaces the whole chapter as one undoable step (an AI edit). Returns whether it did. */
   replaceDoc: (doc: JSONContent) => boolean
+  /** Blocks to read aloud, from the one with the cursor on (text null: a scene break). */
+  readingBlocks: () => { pos: number; text: string | null }[]
+  /** Shows (and scrolls to) the block being read aloud; null clears it. */
+  markReading: (pos: number | null) => void
 }
 
 /** A search match to select once the chapter is open. */
@@ -401,6 +406,35 @@ function EditorPage(
         return false
       })
       return parts.join('\n\n')
+    },
+    readingBlocks() {
+      const from = editor.state.selection.from
+      const blocks: { pos: number; text: string | null; end: number }[] = []
+      editor.state.doc.forEach((node, offset) => {
+        if (node.type.name === 'sceneBreak') blocks.push({ pos: offset, text: null, end: offset })
+        else if (node.isTextblock) {
+          blocks.push({ pos: offset, text: node.textContent, end: offset + node.nodeSize })
+        } else {
+          node.descendants((child, at) => {
+            if (!child.isTextblock) return true
+            const pos = offset + 1 + at
+            blocks.push({ pos, text: child.textContent, end: pos + child.nodeSize })
+            return false
+          })
+        }
+      })
+      const start = Math.max(
+        0,
+        blocks.findIndex((b) => b.end >= from),
+      )
+      return blocks.slice(start).map(({ pos, text }) => ({ pos, text }))
+    },
+    markReading(pos: number | null) {
+      if (editor.isDestroyed) return
+      editor.view.dispatch(markReadingTr(editor.state, pos))
+      if (pos === null) return
+      const dom = editor.view.nodeDOM(pos)
+      if (dom instanceof HTMLElement) dom.scrollIntoView({ block: 'center', behavior: 'smooth' })
     },
     getDoc() {
       if (readOnly || contentError) return null

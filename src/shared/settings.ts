@@ -60,7 +60,19 @@ export interface AppSettings {
   world: WorldSettings
   export: ExportSettings
   ai: AiSettings
+  voice: VoiceSettings
 }
+
+/** Voice (read aloud, the audiobook script): on this computer only. Off by default. */
+export interface VoiceSettings {
+  enabled: boolean
+  /** The computer's voice for reading aloud ("" = the system's default). */
+  systemVoice: string
+  /** Reading speed (1 = normal). */
+  rate: number
+}
+
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { enabled: false, systemVoice: '', rate: 1 }
 
 /** AI on this computer (never synced). Off until turned on in Settings → AI. */
 export interface AiSettings {
@@ -190,4 +202,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   world: DEFAULT_WORLD_SETTINGS,
   export: DEFAULT_EXPORT_SETTINGS,
   ai: DEFAULT_AI_SETTINGS,
+  voice: DEFAULT_VOICE_SETTINGS,
 }

@@ -1,5 +1,6 @@
 /** Registers every IPC request handler. Inputs are validated before they reach the library. */
 import {
+  app,
   BrowserWindow,
   dialog,
   ipcMain,
@@ -27,6 +28,8 @@ import type { z } from 'zod'
 import type { AppSettingsStore } from './appSettings'
 import { confirmFlushed } from './closeGuard'
 import { applySpelling } from './spelling'
+import { writeFileAtomic } from './fs/atomicWrite'
+import { join } from 'node:path'
 import { setCaptureContext } from './capture'
 import { AppError } from './errors'
 import type { LibraryHost } from './libraryHost'
@@ -200,6 +203,50 @@ export function registerIpc(
         },
         (_onToken, onProgress) => ai.sortNames(input, onProgress),
       ),
+    'voice:script': (input, event) =>
+      jobs.run(
+        {
+          id: input.requestId,
+          kind: 'voices',
+          seriesId: input.seriesId,
+          conversation: null,
+          volumeId: input.volumeId,
+          chapterId: input.chapterId,
+          chapterTitle: '',
+          sent: null,
+          origin: event.sender.id,
+        },
+        async (_onToken, onProgress) => {
+          const made = await ai.voiceScript(input, onProgress)
+          onProgress('')
+          const window = BrowserWindow.fromWebContents(event.sender)
+          const options: Electron.SaveDialogOptions = {
+            title: 'Save the audiobook script',
+            defaultPath: join(
+              app.getPath('documents'),
+              `${made.title.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Story'} - audiobook script.txt`,
+            ),
+            filters: [{ name: 'Text', extensions: ['txt'] }],
+          }
+          const choice =
+            window && !window.isDestroyed()
+              ? await dialog.showSaveDialog(window, options)
+              : await dialog.showSaveDialog(options)
+          let saved: string | null = null
+          if (!choice.canceled && choice.filePath) {
+            await writeFileAtomic(choice.filePath, made.script)
+            saved = choice.filePath
+          }
+          return {
+            summary: '',
+            applied: 0,
+            suggestions: 0,
+            saved,
+            chapters: made.chapters,
+            lines: made.lines,
+          }
+        },
+      ) as Promise<{ saved: string | null; chapters: number; lines: number }>,
     'ai:jobs': (input) => jobs.list(input.seriesId),
     'ai:jobSeen': (input) => {
       jobs.seen(input.id)

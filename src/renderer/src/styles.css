@@ -1457,6 +1457,26 @@ kbd {
 .page-area {
   position: relative;
 }
+/* Reading aloud: the paragraph being read, and the player. */
+.reading-now {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 4px;
+}
+.read-aloud {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
 /* "Where you left off": the last few chapters, after a break. */
 .recap {
   position: absolute;

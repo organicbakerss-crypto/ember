@@ -508,6 +508,29 @@ export const chapterSummaryFileSchema = z.looseObject({
 })
 export type ChapterSummaryFile = z.infer<typeof chapterSummaryFileSchema>
 
+/* ---------- who says what (made by the AI, kept with the volume) ---------- */
+
+const speakerSchema = z.looseObject({
+  /** The world entry, when the speaker is one. */
+  entryId: id('entry').nullable().catch(null).default(null),
+  /** The name to use (the script's voice tag); '' when unknown. */
+  name: z.string().max(200).catch(''),
+})
+export type Speaker = z.infer<typeof speakerSchema>
+
+export const chapterSpeakersFileSchema = z.looseObject({
+  formatVersion,
+  chapterId: id('chapter'),
+  /** The chapter text this was made from (sha256). */
+  textHash: z.string(),
+  /** Who tells the chapter: a first-person narrator, or nobody (a plain narrator). */
+  narrator: speakerSchema.nullable().catch(null).default(null),
+  /** Who says each line of dialogue, by the line's key (its first words). */
+  lines: z.record(z.string(), speakerSchema).catch({}).default({}),
+  createdAt: timestamp,
+})
+export type ChapterSpeakersFile = z.infer<typeof chapterSpeakersFileSchema>
+
 /* ---------- AI conversations (kept with their story) ---------- */
 
 export const conversationMessageSchema = z.looseObject({
