@@ -63,6 +63,32 @@ export interface AppSettings {
   export: ExportSettings
   ai: AiSettings
   voice: VoiceSettings
+  /** Backups of the library to a folder (this computer only). */
+  backup: BackupSettings
+}
+
+export interface BackupSettings {
+  enabled: boolean
+  /** The folder backups go in ('' until one is chosen). */
+  folder: string
+  /** How often, in hours. */
+  everyHours: number
+  /** How many backups to keep. */
+  keep: number
+}
+
+export const DEFAULT_BACKUP_SETTINGS: BackupSettings = {
+  enabled: false,
+  folder: '',
+  everyHours: 24,
+  keep: 10,
+}
+
+/** One backup in the folder. */
+export interface BackupInfo {
+  file: string
+  at: string
+  size: number
 }
 
 /** Voice (read aloud, the audiobook script): on this computer only. Off by default. */
@@ -228,4 +254,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   export: DEFAULT_EXPORT_SETTINGS,
   ai: DEFAULT_AI_SETTINGS,
   voice: DEFAULT_VOICE_SETTINGS,
+  backup: DEFAULT_BACKUP_SETTINGS,
 }

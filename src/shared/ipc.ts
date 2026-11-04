@@ -7,7 +7,13 @@
 import { z } from 'zod'
 import { MAX_COVER_BYTES, MAX_MAP_BYTES, type CoverInfo, type CoverTarget } from './media'
 import { docKeySchema, paneRouteSchema, type PaneRoute } from './panes'
-import { PAGE_WIDTH, STATUS_ITEMS, type AppSettings } from './settings'
+import {
+  PAGE_WIDTH,
+  STATUS_ITEMS,
+  type AppSettings,
+  type BackupInfo,
+  type BackupSettings,
+} from './settings'
 import { aiSettingsSchema, exportSettingsSchema, voiceSettingsSchema } from './exportSettings'
 
 export { DEFAULT_APP_SETTINGS, PAGE_WIDTH, type AppSettings } from './settings'
@@ -694,6 +700,18 @@ export const ipcInputs = {
     pageWidth: z.number().int().min(PAGE_WIDTH.min).max(PAGE_WIDTH.max).optional(),
   }),
   /** Sent by a window once it has saved everything, in reply to `window:flush`. */
+  /** Backups: their settings, the ones in the folder, and whether one is running. */
+  'backup:status': z.void(),
+  'backup:configure': z.object({
+    enabled: z.boolean().optional(),
+    everyHours: z.number().int().min(1).max(720).optional(),
+    keep: z.number().int().min(1).max(500).optional(),
+  }),
+  /** Asks for the folder (a system dialog); null if cancelled. */
+  'backup:chooseFolder': z.void(),
+  'backup:now': z.void(),
+  /** Shows the backups folder in the file manager. */
+  'backup:open': z.void(),
   /** Puts the window in full screen, or back. */
   'window:fullScreen': z.object({ on: z.boolean() }),
   'window:flushed': z.void(),
@@ -1048,6 +1066,16 @@ export interface IpcResults {
   'volume:names': string[]
   'settings:get': AppSettings
   'settings:update': AppSettings
+  'backup:status': {
+    settings: BackupSettings
+    backups: BackupInfo[]
+    running: boolean
+    lastError: string | null
+  }
+  'backup:configure': BackupSettings
+  'backup:chooseFolder': string | null
+  'backup:now': BackupInfo
+  'backup:open': null
   'window:fullScreen': null
   'window:flushed': null
   'window:open': null

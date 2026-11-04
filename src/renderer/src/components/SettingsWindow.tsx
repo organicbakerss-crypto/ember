@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { BackupSettingsSection } from './BackupSettings'
 import {
   PAGE_WIDTH,
   PAPER_SIZES,
@@ -34,6 +35,7 @@ const CATEGORIES: Category[] = [
   { id: 'analysis', label: 'Writing analysis', render: () => <AnalysisSettingsSection /> },
   { id: 'status', label: 'Status bar', render: () => <StatusBarSettings /> },
   { id: 'library', label: 'Library', render: () => <LibrarySettings /> },
+  { id: 'backups', label: 'Backups', render: () => <BackupSettingsSection /> },
   { id: 'shortcuts', label: 'Keyboard shortcuts', render: () => <ShortcutsList /> },
   { id: 'world', label: 'World', render: () => <WorldSettings /> },
   { id: 'import', label: 'Import & export', render: () => <ImportExportSettings /> },

@@ -27,6 +27,7 @@ import {
 import type { z } from 'zod'
 import type { AppSettingsStore } from './appSettings'
 import { confirmFlushed } from './closeGuard'
+import { listBackups, type BackupService } from './backup'
 import { applySpelling } from './spelling'
 import { writeFileAtomic } from './fs/atomicWrite'
 import { join } from 'node:path'
@@ -54,6 +55,7 @@ export function registerIpc(
   sync: SyncService,
   ai: AiService,
   voice: VoiceService,
+  backup: BackupService,
 ): { libraryChanged: (change: LibraryChange) => void } {
   const { manager, leases } = windows
   // Asking the other windows what they show (for a torn-off AI window).
@@ -596,6 +598,43 @@ export function registerIpc(
       // The personal dictionary syncs (nothing else in settings does).
       if (input.dictionary) sync.noteChange()
       return next
+    },
+    'backup:status': async () => {
+      const s = (await settings.read()).backup
+      return {
+        settings: s,
+        backups: s.folder ? await listBackups(s.folder) : [],
+        running: backup.busy,
+        lastError: backup.lastError,
+      }
+    },
+    'backup:configure': async (input) => {
+      const current = (await settings.read()).backup
+      const changes = Object.fromEntries(
+        Object.entries(input).filter(([, v]) => v !== undefined),
+      ) as Partial<typeof current>
+      return (await settings.update({ backup: { ...current, ...changes } })).backup
+    },
+    'backup:chooseFolder': async (_input, event) => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const options = {
+        title: 'Folder for backups',
+        properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[],
+      }
+      const picked = window
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options)
+      const folder = picked.canceled ? null : (picked.filePaths[0] ?? null)
+      if (!folder) return null
+      const current = (await settings.read()).backup
+      await settings.update({ backup: { ...current, folder } })
+      return folder
+    },
+    'backup:now': () => backup.runNow(),
+    'backup:open': async () => {
+      const folder = (await settings.read()).backup.folder
+      if (folder) await shell.openPath(folder)
+      return null
     },
     'window:fullScreen': (input, event) => {
       BrowserWindow.fromWebContents(event.sender)?.setFullScreen(input.on)

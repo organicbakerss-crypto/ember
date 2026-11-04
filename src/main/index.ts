@@ -7,6 +7,7 @@ import { DeviceSettingsStore } from './deviceSettings'
 import { DocLeases } from './docLeases'
 import { WindowManager, type WindowOptions } from './windows'
 import { IPC_EVENT_PREFIX } from '@shared/ipc'
+import { BackupService } from './backup'
 import { captureMenuItems } from './capture'
 import { attachScreenshotKey } from './screenshot'
 import { broadcast, registerIpc } from './ipc'
@@ -178,7 +179,22 @@ void app.whenReady().then(async () => {
     settings: async () => (await appSettings.read()).voice,
     host,
   })
-  ipc = registerIpc(host, appSettings, { manager, leases }, syncService, ai, voice)
+  // Backups of the library to a folder, when they're turned on (checked now and then).
+  const backup = new BackupService({
+    settings: async () => (await appSettings.read()).backup,
+    library: () => {
+      try {
+        const lib = host.current
+        return { root: lib.paths.root, localDir: lib.paths.localDir }
+      } catch {
+        return null
+      }
+    },
+    trash: (path) => shell.trashItem(path),
+  })
+  backup.start()
+  app.on('before-quit', () => backup.stop())
+  ipc = registerIpc(host, appSettings, { manager, leases }, syncService, ai, voice, backup)
   handleMediaRequests(host)
   await manager.start()
 

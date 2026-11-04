@@ -11,6 +11,7 @@ import {
   DEFAULT_EXPORT_SETTINGS,
   DEFAULT_AI_SETTINGS,
   DEFAULT_VOICE_SETTINGS,
+  DEFAULT_BACKUP_SETTINGS,
   DEFAULT_WORLD_SETTINGS,
   PAGE_WIDTH,
   STATUS_ITEMS,
@@ -70,6 +71,20 @@ const appSettingsSchema = z.looseObject({
   export: exportSettingsSchema.catch(DEFAULT_EXPORT_SETTINGS).default(DEFAULT_EXPORT_SETTINGS),
   ai: aiSettingsSchema.catch(DEFAULT_AI_SETTINGS).default(DEFAULT_AI_SETTINGS),
   voice: voiceSettingsSchema.catch(DEFAULT_VOICE_SETTINGS).default(DEFAULT_VOICE_SETTINGS),
+  backup: z
+    .object({
+      enabled: z.boolean().catch(false),
+      folder: z.string().max(4000).catch(''),
+      everyHours: z
+        .number()
+        .int()
+        .min(1)
+        .max(24 * 30)
+        .catch(24),
+      keep: z.number().int().min(1).max(500).catch(10),
+    })
+    .catch(DEFAULT_BACKUP_SETTINGS)
+    .default(DEFAULT_BACKUP_SETTINGS),
 })
 
 export class AppSettingsStore {
