@@ -103,3 +103,32 @@ export function planPassages(
   }
   return out
 }
+
+/**
+ * Whether enough speech is made to play straight to the end without
+ * running out, judged from how fast it's being made so far; if not, about
+ * how many seconds until it will be. Speech keeps being made while it waits
+ * (and while it plays), so the wait is shorter than making it all.
+ */
+export function readyToPlay(input: {
+  /** What's been made so far: its characters, seconds of audio, and seconds it took. */
+  madeChars: number
+  madeAudio: number
+  madeTook: number
+  /** Seconds of audio made and not yet played. */
+  buffered: number
+  /** Characters still to make. */
+  remainingChars: number
+  /** Allowance for it slowing down (1.15 = 15%). */
+  margin?: number
+}): { ready: boolean; waitSecs: number | null } {
+  if (input.remainingChars <= 0) return { ready: true, waitSecs: 0 }
+  if (input.madeAudio <= 0) return { ready: false, waitSecs: null }
+  const m = input.margin ?? 1.15
+  const perChar = input.madeAudio / Math.max(1, input.madeChars) // audio seconds per character
+  const r = input.madeTook / input.madeAudio // seconds to make one second of audio
+  const remainingAudio = input.remainingChars * perChar
+  if (remainingAudio * r * m <= input.buffered) return { ready: true, waitSecs: 0 }
+  const wait = (remainingAudio * r * m - input.buffered) / (m + 1 / r)
+  return { ready: false, waitSecs: Math.max(0, Math.ceil(wait)) }
+}

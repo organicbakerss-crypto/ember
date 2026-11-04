@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { planPassages, type Passage } from '@shared/voice/passages'
+import { planPassages, readyToPlay, type Passage } from '@shared/voice/passages'
 import { api, describeError, useIpcEvent } from '../api'
 
-/** How many passages are made ahead of the one playing. */
-const AHEAD = 2
 /** Below this (of full scale) counts as silence when trimming a clip's ends. */
 const SILENCE = 0.01
 /** Silence kept at a trimmed end, in seconds. */
@@ -29,8 +27,10 @@ function trimmed(ctx: AudioContext, buf: AudioBuffer): AudioBuffer {
 /**
  * Reads the chapter aloud with VoiceStudio, each character in their voice:
  * who says what comes from the AI's marking, the voices from the story's
- * cast. Passages are made a little ahead, trimmed, and played back to back
- * with the app's own pauses. "Preparing…" while it waits; it never skips.
+ * cast. Speech is made in order from where reading starts; playing waits
+ * until enough is made to go straight through ("starting in about…"), then
+ * the passages play back to back, trimmed, with the app's own pauses. It
+ * never skips; making stops when reading does.
  */
 export function StudioReader(props: {
   seriesId: string
@@ -59,10 +59,9 @@ export function StudioReader(props: {
     let stopped = false
     const ctx = new AudioContext()
     ctxRef.current = ctx
-    const made = new Map<number, Promise<AudioBuffer>>()
-    const make = (p: Passage) =>
+    const make = (p: Passage, fresh = false) =>
       api
-        .invoke('voice:speak', { text: p.text, voice: p.voice })
+        .invoke('voice:speak', { text: p.text, voice: p.voice, fresh })
         .then((wav) => ctx.decodeAudioData(wav.slice().buffer))
         .then((buf) => trimmed(ctx, buf))
     const run = async () => {
@@ -72,22 +71,76 @@ export function StudioReader(props: {
       ])
       const passages = planPassages(blocks, speakers, cast)
       if (!passages.length) return onClose()
-      // One at a time, in order (VoiceStudio makes one passage at a time anyway).
-      let queue: Promise<unknown> = Promise.resolve()
-      const fetch = (i: number) => {
-        if (i < passages.length && !made.has(i)) {
-          const next = queue.then(() => make(passages[i]!))
-          queue = next.catch(() => {})
-          made.set(i, next)
+      const total = passages.reduce((n, p) => n + p.text.length, 0)
+
+      // Speech is made in order, one passage after another, while this is open
+      // (and only then): how long each took tells how long to wait before playing.
+      const made: (AudioBuffer | undefined)[] = []
+      const stats = { chars: 0, audio: 0, took: 0 }
+      let failure: unknown = null
+      // `version` goes up each time a passage is made (or making fails).
+      const waker: { wake: (() => void) | null; version: number } = { wake: null, version: 0 }
+      const making = (async () => {
+        for (let i = 0; i < passages.length && !stopped; i++) {
+          const started = performance.now()
+          try {
+            made[i] = await make(passages[i]!)
+          } catch (err) {
+            failure = err
+            waker.version++
+            waker.wake?.()
+            return
+          }
+          stats.chars += passages[i]!.text.length
+          stats.audio += made[i]!.duration
+          stats.took += (performance.now() - started) / 1000
+          waker.version++
+          waker.wake?.()
         }
-        return made.get(i)
-      }
-      for (let i = 0; i < passages.length; i++) {
+      })()
+      void making
+      /** Resolves when something new is made since `seen` (at once if it already was). */
+      const next = (seen: number) =>
+        new Promise<void>((r) => {
+          if (waker.version !== seen) r()
+          else waker.wake = r
+        })
+
+      // Wait until enough is made to play straight through.
+      for (;;) {
+        const seen = waker.version
         if (stopped) return
-        void fetch(i)
-        for (let k = 1; k <= AHEAD; k++) void fetch(i + k)?.catch(() => {})
-        setState({ text: 'Preparing…', at: i + 1, of: passages.length })
-        const buf = await fetch(i)!
+        if (failure) throw failure
+        const madeCount = made.filter(Boolean).length
+        const buffered = made.reduce((n, b) => n + (b?.duration ?? 0), 0)
+        const check = readyToPlay({
+          madeChars: stats.chars,
+          madeAudio: stats.audio,
+          madeTook: stats.took,
+          buffered,
+          remainingChars: total - stats.chars,
+        })
+        if (check.ready) break
+        setState({
+          text:
+            check.waitSecs === null
+              ? 'Preparing…'
+              : `Preparing… starting in about ${check.waitSecs < 90 ? `${check.waitSecs} seconds` : `${Math.round(check.waitSecs / 60)} minutes`}`,
+          at: madeCount,
+          of: passages.length,
+        })
+        await next(seen)
+      }
+
+      for (let i = 0; i < passages.length; i++) {
+        // Ran out after all (it slowed down): wait for this one, saying so.
+        while (!made[i]) {
+          const seen = waker.version
+          if (stopped) return
+          if (failure) throw failure
+          setState({ text: 'Preparing…', at: i + 1, of: passages.length })
+          await next(seen)
+        }
         if (stopped) return
         const p = passages[i]!
         if (p.pauseBefore) await new Promise((r) => setTimeout(r, p.pauseBefore))
@@ -95,12 +148,12 @@ export function StudioReader(props: {
         setState({ text: 'Reading aloud', at: i + 1, of: passages.length })
         await new Promise<void>((resolve) => {
           const src = ctx.createBufferSource()
-          src.buffer = buf
+          src.buffer = made[i]!
           src.connect(ctx.destination)
           src.onended = () => resolve()
           src.start()
         })
-        made.delete(i)
+        made[i] = undefined
       }
       if (!stopped) onClose()
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { forSpeech, planPassages } from './passages'
+import { forSpeech, planPassages, readyToPlay } from './passages'
 
 const cast = { narrator: 'Calm', other: 'Plain', characters: { Ashley: 'Bright', Guy: 'Deep' } }
 
@@ -56,5 +56,33 @@ describe('passages to read aloud', () => {
     expect(forSpeech('“Well, yeah—but that was like… a whole *eight* days ago.”')).toBe(
       'Well, yeah, but that was like... a whole eight days ago.',
     )
+  })
+
+  it('waits until enough is made to play through, by how fast it’s going', () => {
+    // Twice as fast as it plays: ready once a little is made.
+    expect(
+      readyToPlay({
+        madeChars: 200,
+        madeAudio: 10,
+        madeTook: 5,
+        buffered: 10,
+        remainingChars: 200,
+      }),
+    ).toEqual({ ready: true, waitSecs: 0 })
+    // As slow as it plays: wait, about half the time the rest takes.
+    const slow = readyToPlay({
+      madeChars: 200,
+      madeAudio: 10,
+      madeTook: 10,
+      buffered: 10,
+      remainingChars: 2000,
+    })
+    expect(slow.ready).toBe(false)
+    expect(slow.waitSecs).toBeGreaterThan(40)
+    expect(slow.waitSecs).toBeLessThan(70)
+    // Nothing made yet: can't tell.
+    expect(
+      readyToPlay({ madeChars: 0, madeAudio: 0, madeTook: 0, buffered: 0, remainingChars: 100 }),
+    ).toEqual({ ready: false, waitSecs: null })
   })
 })
