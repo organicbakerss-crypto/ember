@@ -509,6 +509,21 @@ Sync is per file and local-first: the local copy is the truth, the cloud is a ma
 - **The harness** (`src/main/sync/sync.test.ts`): two computers make 120 random steps each run (edits of the same and different chapters, deletions, syncs with dropped requests and lost replies, the app killed mid-apply, typing while a download lands, restarts), then must agree exactly, and every version not replaced or deleted by the user must still exist. Planting either of two bugs (overwrite on conflict; skip the "changed meanwhile" check) makes it fail. Real libraries are tested too (`library.test.ts`), and the whole app end to end with two instances against an S3-like server.
 - **Not built (lean):** clean-up of old blobs in the cloud (a year of writing is tens of MB of the 10 GB free); live sync while typing; merging two edits of one chapter.
 
+### Sync audit (Nov 2026)
+
+**Syncs automatically:** series (`series.json`, cover, saved AI conversations in `ai/`), volumes (`volume.json` with goals, chapter-heading choice and Finished; `outline.json`; every chapter; cover), worlds (`world.json` with pins and which parts are on; every entry; images; maps; relationships; templates; inbox; turned-down suggestions; board layout; relationship types), the personal dictionary, and one version per chapter per finished day of History (fetched on request).
+
+**Never syncs:** `library.json`; the device folder (sync records, History newer than a day, Trash, set-aside conflicts, hash cache); app settings (theme, page, analysis, status bar, world display, export style, AI choice); keys and logins (Cloudflare token, ChatGPT login); window layout and the library's location; small view choices kept in the window (panel open, split size, pin bar, Rhythm/Echo, recent entries).
+
+**Weak spots, to fix before the world AI lands:**
+1. A file other than a chapter or an entry changed on both computers before they synced keeps this computer's version; the other is set aside in `.ember-local/sync/conflicts` with only a notice. Covers outlines (a reorder on each side: one is lost; chapters never are), maps, the board, templates, relationships, the inbox and AI conversations (the same conversation continued on two computers). Fix: merge what can be merged (inbox and conversations by item, outline by chapter), and a Conflicts list to see and restore set-aside versions.
+2. The inbox is one file. "Update the world" will write to it a lot; it should become one file per item (like entries) so two computers never collide on it.
+3. Map, board and template editors aren't paused while sync writes those files (chapters and entry pages are). An edit made at that moment in a screen showing the old version can win. Fix: pause them too, as chapters are.
+4. The dictionary's "latest change wins" uses each computer's clock.
+5. A world's manifest lists every file and is uploaded whole on each change to that world: fine at today's size, about 300 KB a change at 2,000 entries. Split it per folder if worlds get that big.
+6. Sync runs only while the app is open; quitting sends what's left (up to 8 seconds).
+7. Not yet run against real Cloudflare for weeks; the harness and end-to-end runs use stand-ins.
+
 ## Smart Storage
 
 **Measured after sync (Nov 2026): 20 MB, of which about 19 MB is images; all the writing and history is under 1 MB.** Compressing old volumes' text would save almost nothing yet, so the first steps go at what actually grows (below); Smart Storage itself was then dropped (Nov 2026): not needed. What matters is that old work never moves: **reading never writes.** Opening, scrolling or searching an old volume changes no file, so sync sends nothing for it until something in it is actually edited (tested in `storyTypes.test.ts`, and checked end to end).
