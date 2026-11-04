@@ -799,7 +799,11 @@ Build in this order. Each milestone ends with a working app the user can actuall
 7b. **Story types:** single books, short stories and collections, worlds optional and unlinkable, smaller worlds. (Done; see Story types.)
 8. **Settings sync:** only the personal dictionary syncs; everything else stays per computer. (Done. Smart Storage dropped: not needed.)
 9. **World extras:** nothing left here; maps moved to 4b and time (the timeline) to 4d.
-10. **AI layer:** provider interface, Ollama, reading scope, grammar preview, brainstorm and chat panel (10a: done). Then ChatGPT sign-in. Then the world side: lookup tools, the "Update the worldbuilding" pipeline, AI suggestions, AI questions, and the test world.
+10. **AI layer** (in steps):
+   - **10a: Chat.** Provider interface, Ollama, reading scope, brainstorm and chat pane, saved conversations. (Done.)
+   - **10b: ChatGPT and Edit chapter.** Sign in with ChatGPT; Edit chapter with compare and per-change undo; time limits. (Done.)
+   - **10c: Sync ready for the world AI.** The inbox as one file per item; merge where possible (inbox and conversations by item, chapter order by chapter) and a Conflicts list to see and restore set-aside versions; pause the map, board and template screens while sync writes them. (Sync audit weak spots 1 to 3.)
+   - **10d: Update the world.** Lookup tools, the "Update the worldbuilding" pipeline into the inbox, offered after Keep in Edit chapter and on demand; AI questions to the inbox; the test world.
 11. **Companion:** preset system and locked rules, sprite renderer, Capri and the butler, on-page behaviour.
 12. **Voice:** push-to-talk, whisper.cpp, Piper or Kokoro. Then the ElevenLabs option.
 13. **Themes:** done early (after 4e): High Contrast and eighteen more skinned themes (see Themes). Left for later: the faint glow on the active line in Cyberpunk.
