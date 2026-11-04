@@ -19,6 +19,7 @@ export function ReadAloud(props: {
   const { blocks, settings, mark, onClose } = props
   const [at, setAt] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
   const stopped = useRef(false)
 
   useEffect(() => {
@@ -46,12 +47,21 @@ export function ReadAloud(props: {
       u.rate = settings.rate
       u.onend = () => play(i + 1)
       u.onerror = (e) => {
-        if (e.error !== 'interrupted' && e.error !== 'canceled') play(i + 1)
+        if (e.error === 'interrupted' || e.error === 'canceled') return
+        // Speaking failed: stop here (skipping on would race to the end, saying nothing).
+        stopped.current = true
+        setProblem(noVoiceHelp())
       }
       speechSynthesis.speak(u)
     }
     speechSynthesis.cancel()
-    play(0)
+    if (!speechSynthesis.getVoices().length) {
+      // Voices can arrive a moment late; if there are none after that, say why.
+      timer = setTimeout(() => {
+        if (speechSynthesis.getVoices().length) play(0)
+        else setProblem(noVoiceHelp())
+      }, 600)
+    } else play(0)
     return () => {
       stopped.current = true
       clearTimeout(timer)
@@ -66,6 +76,14 @@ export function ReadAloud(props: {
     setPaused(!paused)
   }
 
+  if (problem) {
+    return (
+      <div className="read-aloud" role="region" aria-label="Reading aloud">
+        <span className="small">{problem}</span>
+        <button onClick={onClose}>Close</button>
+      </div>
+    )
+  }
   return (
     <div className="read-aloud" role="region" aria-label="Reading aloud">
       <span className="small">
@@ -75,4 +93,11 @@ export function ReadAloud(props: {
       <button onClick={onClose}>Stop</button>
     </div>
   )
+}
+
+/** What to do when this computer has no voice to read with. */
+function noVoiceHelp(): string {
+  return navigator.userAgent.includes('Linux')
+    ? 'This computer has no voice to read with. On Linux, install speech-dispatcher and espeak-ng (for example: sudo apt install speech-dispatcher espeak-ng), then restart the app. VoiceStudio’s voices come next.'
+    : 'This computer’s voice couldn’t be used. Check Settings → Voice, and that a voice is installed (on a Mac: System Settings → Accessibility → Spoken Content).'
 }

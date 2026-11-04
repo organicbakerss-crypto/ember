@@ -90,6 +90,9 @@ let sync: SyncService | null = null
 
 app.on('second-instance', () => windows?.focusMain())
 
+// Reading aloud: on Linux, Chromium only uses the system's voices (speech-dispatcher) when asked.
+if (process.platform === 'linux') app.commandLine.appendSwitch('enable-speech-dispatcher')
+
 void app.whenReady().then(async () => {
   setAppMenu()
   const settings = new DeviceSettingsStore(app.getPath('userData'))
