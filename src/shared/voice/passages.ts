@@ -25,11 +25,47 @@ export interface Passage {
 
 export const PAUSE = { voices: 150, scene: 900 }
 
+/**
+ * Text as a voice model reads it best: plain quotes (or none), dashes and
+ * ellipses as pauses it knows, no stray symbols. Fancy punctuation is what
+ * most often makes it stumble.
+ */
+export function forSpeech(text: string): string {
+  return text
+    .replace(/[“”„‟"]/g, '')
+    .replace(/[‘’‚‛]/g, "'")
+    .replace(/\s*[—–]\s*/g, ', ')
+    .replace(/…|\.{3,}/g, '...')
+    .replace(/[*_~#<>[\]{}|\\]/g, '')
+    .replace(/\s*,\s*([.!?])/g, '$1')
+    .replace(/,\s*,/g, ',')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Splits text into pieces of at most `max` characters, at sentence ends where it can. */
+export function bySentence(text: string, max: number): string[] {
+  const sentences = text.match(/[^.!?]+(?:[.!?]+["”’)]*|$)\s*/g) ?? [text]
+  const out: string[] = []
+  let cur = ''
+  for (const raw of sentences) {
+    const sentence = raw.trim()
+    if (!sentence) continue
+    if (cur && cur.length + sentence.length + 1 > max) {
+      out.push(cur)
+      cur = ''
+    }
+    cur = cur ? `${cur} ${sentence}` : sentence
+  }
+  if (cur) out.push(cur)
+  return out
+}
+
 export function planPassages(
   blocks: Block[],
   speakers: { narrator: string | null; lines: Record<string, string> },
   cast: Cast,
-  sizes = { first: 220, max: 700 },
+  sizes = { first: 200, max: 350 },
 ): Passage[] {
   const voiceOf = (who: string | null, narration: boolean) => {
     if (who && cast.characters[who]) return cast.characters[who]!
@@ -47,20 +83,23 @@ export function planPassages(
       seg.kind === 'quote'
         ? voiceOf((seg.key && speakers.lines[seg.key]) || null, false)
         : voiceOf(speakers.narrator, true)
-    const last = out[out.length - 1]
-    const limit = out.length === 1 ? sizes.first : sizes.max
-    if (last && !pause && last.voice === voice && last.text.length + seg.text.length < limit) {
-      last.text += ` ${seg.text}`
-      if (last.blocks[last.blocks.length - 1] !== seg.block) last.blocks.push(seg.block)
-      continue
+    // A long paragraph is read in sentence-sized pieces (long passages make it stumble).
+    for (const piece of bySentence(seg.text, sizes.max)) {
+      const last = out[out.length - 1]
+      const limit = out.length === 1 ? sizes.first : sizes.max
+      if (last && !pause && last.voice === voice && last.text.length + piece.length < limit) {
+        last.text += ` ${piece}`
+        if (last.blocks[last.blocks.length - 1] !== seg.block) last.blocks.push(seg.block)
+        continue
+      }
+      out.push({
+        blocks: [seg.block],
+        voice,
+        text: piece,
+        pauseBefore: out.length ? pause || (last && last.voice !== voice ? PAUSE.voices : 0) : 0,
+      })
+      pause = 0
     }
-    out.push({
-      blocks: [seg.block],
-      voice,
-      text: seg.text,
-      pauseBefore: out.length ? pause || (last && last.voice !== voice ? PAUSE.voices : 0) : 0,
-    })
-    pause = 0
   }
   return out
 }

@@ -159,9 +159,12 @@ export class VoiceStudio {
     speed?: number
     /** Diffusion steps: 8 fast, 16 balanced, 32 best. */
     steps?: number
+    /** ISO code (e.g. en); left out, each voice speaks its own. */
+    language?: string
   }): Promise<Uint8Array> {
     const data = await this.tool('generate_speech', {
       text: input.text,
+      ...(input.language ? { language: input.language } : {}),
       ...(input.voiceId ? { profile_id: input.voiceId } : {}),
       speed: input.speed ?? 1,
       steps: input.steps ?? 16,

@@ -30,4 +30,5 @@ export const voiceSettingsSchema = z.object({
   studioUrl: z.string().trim().max(300).catch('').default(''),
   studioKey: z.string().trim().max(300).catch('').default(''),
   quality: z.enum(['fast', 'balanced', 'best']).catch('balanced').default('balanced'),
+  language: z.string().trim().max(20).catch('en').default('en'),
 })

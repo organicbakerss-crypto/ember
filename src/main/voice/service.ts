@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_STUDIO_URL, type VoiceSettings } from '@shared/settings'
 import { cleanDictation } from '@shared/voice/dictation'
+import { forSpeech } from '@shared/voice/passages'
 import { writeFileAtomic } from '../fs/atomicWrite'
 import { sha256 } from '../fs/jsonFile'
 import { AppError } from '../errors'
@@ -82,7 +83,7 @@ export class VoiceService {
   }
 
   /** Speech for a passage in a voice (by its name in VoiceStudio; '' = its default), as WAV. */
-  async speak(input: { text: string; voice: string }): Promise<Uint8Array> {
+  async speak(input: { text: string; voice: string; fresh?: boolean }): Promise<Uint8Array> {
     const s = await this.studio()
     if (!s) throw new AppError('invalid-input', 'VoiceStudio isn’t in use (Settings → Voice).')
     let voiceId: string | null = null
@@ -92,14 +93,23 @@ export class VoiceService {
     }
     const steps = STEPS[s.settings.quality]
     const speed = s.settings.rate
+    const language = s.settings.language
+    // Plain punctuation: fancy quotes, dashes and ellipses make it stumble.
+    const text = forSpeech(input.text)
+    if (!text) throw new AppError('invalid-input', 'Nothing to say.')
     const dir = join(this.options.host.current.paths.localDir, 'voice-cache')
-    const file = join(dir, `${sha256(`${s.url}|${voiceId}|${speed}|${steps}|${input.text}`)}.wav`)
-    try {
-      return new Uint8Array(await fs.promises.readFile(file))
-    } catch {
-      // Not made yet.
+    const file = join(
+      dir,
+      `${sha256(`${s.url}|${voiceId}|${speed}|${steps}|${language}|${text}`)}.wav`,
+    )
+    if (!input.fresh) {
+      try {
+        return new Uint8Array(await fs.promises.readFile(file))
+      } catch {
+        // Not made yet.
+      }
     }
-    const audio = await s.studio.speak({ text: input.text, voiceId, speed, steps })
+    const audio = await s.studio.speak({ text, voiceId, speed, steps, language })
     await fs.promises.mkdir(dir, { recursive: true })
     await writeFileAtomic(file, audio).catch(() => {})
     return audio

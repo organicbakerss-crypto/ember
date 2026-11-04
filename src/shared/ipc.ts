@@ -799,7 +799,12 @@ export const ipcInputs = {
   /** Whether VoiceStudio is running (and will be used), and its voices. */
   'voice:status': z.void(),
   /** Speech for a passage, in a VoiceStudio voice (by name; '' its default), as WAV. */
-  'voice:speak': z.object({ text: z.string().min(1).max(5000), voice: z.string().max(200) }),
+  'voice:speak': z.object({
+    text: z.string().min(1).max(5000),
+    voice: z.string().max(200),
+    /** Make it again (Redo), not the kept one. */
+    fresh: z.boolean().optional(),
+  }),
   /** What was said in a recording (VoiceStudio), tidied with the story's names. */
   'voice:transcribe': z.object({
     audio: z.instanceof(Uint8Array).refine((d) => d.byteLength <= 50_000_000),

@@ -78,6 +78,8 @@ export interface VoiceSettings {
   studioKey: string
   /** VoiceStudio's quality: faster or better sounding. */
   quality: 'fast' | 'balanced' | 'best'
+  /** The language VoiceStudio speaks (ISO code, e.g. en; '' = each voice's own). */
+  language: string
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
@@ -88,6 +90,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   studioUrl: '',
   studioKey: '',
   quality: 'balanced',
+  language: 'en',
 }
 
 /** Where VoiceStudio is by default (on this computer). */

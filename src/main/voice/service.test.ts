@@ -50,10 +50,13 @@ describe('VoiceStudio', () => {
     const wav = await v.speak({ text: 'Ew. Grape.', voice: 'Ashley voice' })
     expect(Buffer.from(wav.slice(0, 4)).toString()).toBe('RIFF')
     expect(fake.spoken).toEqual([
-      { text: 'Ew. Grape.', profile_id: 'p2', speed: 1.2, steps: 8, format: 'wav' },
+      { text: 'Ew. Grape.', language: 'en', profile_id: 'p2', speed: 1.2, steps: 8, format: 'wav' },
     ])
-    await v.speak({ text: 'Ew. Grape.', voice: 'Ashley voice' })
+    await v.speak({ text: '“Ew. Grape.”', voice: 'Ashley voice' }) // the same, once cleaned
     expect(fake.spoken).toHaveLength(1)
+    await v.speak({ text: 'Ew. Grape.', voice: 'Ashley voice', fresh: true }) // Redo
+    expect(fake.spoken).toHaveLength(2)
+    fake.spoken.pop()
     // An unknown voice name uses VoiceStudio's default.
     await v.speak({ text: 'Hello.', voice: 'Nobody' })
     expect(fake.spoken[1]).not.toHaveProperty('profile_id')

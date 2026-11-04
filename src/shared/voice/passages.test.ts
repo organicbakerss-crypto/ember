@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planPassages } from './passages'
+import { forSpeech, planPassages } from './passages'
 
 const cast = { narrator: 'Calm', other: 'Plain', characters: { Ashley: 'Bright', Guy: 'Deep' } }
 
@@ -37,5 +37,24 @@ describe('passages to read aloud', () => {
     const p = planPassages(long, { narrator: null, lines: {} }, cast)
     expect(p[0]!.text.length).toBeLessThan(250)
     expect(p[1]!.text.length).toBeGreaterThan(p[0]!.text.length)
+  })
+
+  it('reads a long paragraph in sentence-sized pieces, never mid-sentence', () => {
+    const para = Array.from(
+      { length: 20 },
+      (_, i) => `This is sentence ${i} of a long paragraph.`,
+    ).join(' ')
+    const p = planPassages([{ text: para }], { narrator: null, lines: {} }, cast)
+    expect(p.length).toBeGreaterThan(2)
+    for (const x of p) {
+      expect(x.text.length).toBeLessThanOrEqual(350)
+      expect(x.text.endsWith('.')).toBe(true)
+    }
+  })
+
+  it('cleans text for the voice: no fancy quotes, dashes as pauses', () => {
+    expect(forSpeech('“Well, yeah—but that was like… a whole *eight* days ago.”')).toBe(
+      'Well, yeah, but that was like... a whole eight days ago.',
+    )
   })
 })
