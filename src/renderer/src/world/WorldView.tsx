@@ -47,6 +47,8 @@ export function WorldView(props: {
   worldId: string
   /** Entry to open (e.g. from a linked name in a chapter). */
   entryId?: string
+  /** Open at the inbox instead. */
+  inbox?: boolean
   /** Changes on each request to show `entryId`, so asking again for the same entry still shows it. */
   entryToken?: number
   /** Opens the writing view beside this one (split screen); unset when it already is. */
@@ -87,9 +89,11 @@ export function WorldView(props: {
 
   const [nav, setNav] = useState<{ stack: Place[]; at: number }>(() => {
     const lens = loadLocal(lensKey) as Lens | null
-    const start: Place = props.entryId
-      ? { kind: 'entry', entryId: props.entryId }
-      : { kind: 'lens', lens: lens && LENSES.includes(lens) ? lens : 'where' }
+    const start: Place = props.inbox
+      ? { kind: 'inbox' }
+      : props.entryId
+        ? { kind: 'entry', entryId: props.entryId }
+        : { kind: 'lens', lens: lens && LENSES.includes(lens) ? lens : 'where' }
     return { stack: [start], at: 0 }
   })
   const place = nav.stack[nav.at]!
@@ -130,12 +134,14 @@ export function WorldView(props: {
   )
 
   // An entry asked for from outside (a linked name in a chapter).
-  const request = `${props.entryId ?? ''}:${props.entryToken ?? 0}`
+  const request = `${props.inbox ? 'inbox' : (props.entryId ?? '')}:${props.entryToken ?? 0}`
   const [wanted, setWanted] = useState(request)
   if (request !== wanted) {
     setWanted(request)
-    if (props.entryId) {
-      const next: Place = { kind: 'entry', entryId: props.entryId }
+    if (props.inbox || props.entryId) {
+      const next: Place = props.inbox
+        ? { kind: 'inbox' }
+        : { kind: 'entry', entryId: props.entryId! }
       setNav((n) => {
         const stack = [...n.stack.slice(0, n.at + 1), next]
         return { stack, at: stack.length - 1 }

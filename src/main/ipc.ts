@@ -1,5 +1,13 @@
 /** Registers every IPC request handler. Inputs are validated before they reach the library. */
-import { BrowserWindow, dialog, ipcMain, session, shell, type IpcMainInvokeEvent } from 'electron'
+import {
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  session,
+  shell,
+  webContents,
+  type IpcMainInvokeEvent,
+} from 'electron'
 import { tokenPageUrl } from './sync/cloudflare'
 import type { DocLeases } from './docLeases'
 import { copyForRoyalRoad, exportVolume } from './export/service'
@@ -23,6 +31,7 @@ import { AppError } from './errors'
 import type { LibraryHost } from './libraryHost'
 import type { SyncService } from './sync/service'
 import type { AiService } from './ai/service'
+import { AiJobs } from './ai/jobs'
 
 type Handlers = {
   [C in IpcChannel]: (
@@ -42,6 +51,20 @@ export function registerIpc(
   // Asking the other windows what they show (for a torn-off AI window).
   const scopeAsks = new Map<string, (scope: IpcResult<'ai:scope'>) => void>()
   let scopeAskId = 0
+  // AI work runs here, apart from the window that asked (it keeps going if that pane closes).
+  const jobs = new AiJobs({
+    token: (requestId, text) => broadcast('ai:token', { requestId, text }),
+    progress: (requestId, text) => broadcast('ai:progress', { requestId, text }),
+    changed: (job) => {
+      broadcast('ai:job', job)
+      if (job.state === 'running') return
+      // Tell the window that asked (or any, if it's gone) that it's finished.
+      const target = webContents.fromId(job.origin) ?? BrowserWindow.getAllWindows()[0]?.webContents
+      if (target && !target.isDestroyed()) {
+        target.send(`${IPC_EVENT_PREFIX}ai:jobDone`, job)
+      }
+    },
+  })
   const handlers: Handlers = {
     'ai:scope': (input, event) =>
       new Promise((resolve) => {
@@ -73,35 +96,78 @@ export function registerIpc(
       copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
     'ai:status': (input) => ai.status(input),
-    'ai:ask': (input, event) =>
-      ai.ask(
-        input,
-        (text) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send(`${IPC_EVENT_PREFIX}ai:token`, { requestId: input.requestId, text })
-          }
+    'ai:ask': async (input, event) => {
+      // Saved now, so the question is kept whatever happens; again with the answer.
+      await host.current.saveConversation(input.seriesId, input.conversation)
+      return jobs.run(
+        {
+          id: input.requestId,
+          kind: 'ask',
+          seriesId: input.seriesId,
+          conversation: input.conversation,
+          volumeId: input.scope?.volumeId ?? null,
+          chapterId: input.scope?.chapterId ?? null,
+          chapterTitle: '',
+          sent: null,
+          origin: event.sender.id,
         },
-        (text) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, {
-              requestId: input.requestId,
-              text,
-            })
-          }
+        (onToken, onProgress) => ai.ask(input, onToken, onProgress),
+        async (job) => {
+          if (!job.text) return
+          const now = new Date().toISOString()
+          await host.current.saveConversation(input.seriesId, {
+            ...input.conversation,
+            updatedAt: now,
+            messages: [
+              ...input.conversation.messages,
+              { role: 'assistant', content: job.text, at: now, read: null },
+            ],
+          })
         },
+      )
+    },
+    'ai:editChapter': async (input, event) => {
+      await host.current.saveConversation(input.seriesId, input.conversation)
+      return jobs.run(
+        {
+          id: input.requestId,
+          kind: 'edit',
+          seriesId: input.seriesId,
+          conversation: input.conversation,
+          volumeId: input.volumeId,
+          chapterId: input.chapterId,
+          chapterTitle: input.chapterTitle,
+          sent: input.chapter,
+          origin: event.sender.id,
+        },
+        (onToken) => ai.editChapter(input, onToken),
+      )
+    },
+    'ai:updateWorld': async (input, event) =>
+      jobs.run(
+        {
+          id: input.requestId,
+          kind: 'world',
+          seriesId: input.seriesId,
+          conversation: null,
+          volumeId: input.volumeId,
+          chapterId: input.chapterId,
+          chapterTitle:
+            (
+              await host.current
+                .readChapter(input.seriesId, input.volumeId, input.chapterId)
+                .catch(() => null)
+            )?.title ?? '',
+          sent: null,
+          origin: event.sender.id,
+        },
+        (_onToken, onProgress) => ai.updateWorld(input, onProgress),
       ),
-    'ai:editChapter': (input, event) =>
-      ai.editChapter(input, (text) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(`${IPC_EVENT_PREFIX}ai:token`, { requestId: input.requestId, text })
-        }
-      }),
-    'ai:updateWorld': (input, event) =>
-      ai.updateWorld(input, (text) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(`${IPC_EVENT_PREFIX}ai:progress`, { requestId: input.requestId, text })
-        }
-      }),
+    'ai:jobs': (input) => jobs.list(input.seriesId),
+    'ai:jobSeen': (input) => {
+      jobs.seen(input.id)
+      return null
+    },
     'ai:summaries': async (input) =>
       (await host.current.storySummaries(input.seriesId)).map((s) => ({
         chapter: s.chapter,

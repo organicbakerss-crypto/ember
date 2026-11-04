@@ -242,6 +242,32 @@ export interface WorldInbox {
   names: NameSuggestion[]
 }
 
+/** AI work, running in the background of the app. */
+export interface AiJobInfo {
+  /** The request id. */
+  id: string
+  kind: 'ask' | 'edit' | 'world'
+  seriesId: string
+  /** The conversation it belongs to (ask and edit), as it was when asked. */
+  conversation: ConversationFile | null
+  volumeId: string | null
+  chapterId: string | null
+  chapterTitle: string
+  /** Edit: the chapter as sent (Markdown), to check nothing changed before the edit goes in. */
+  sent: string | null
+  state: 'running' | 'done' | 'failed' | 'cancelled'
+  /** The answer so far (or the edited chapter). */
+  text: string
+  progress: string
+  error: string | null
+  /** Update the world: what it found. */
+  result: { summary: string; suggestions: number; continuity: number; questions: number } | null
+  startedAt: string
+  endedAt: string | null
+  /** The window that asked (its web contents id). */
+  origin: number
+}
+
 /** A chapter in reading order with the AI's summary of it. */
 export interface ChapterSummaryInfo {
   chapter: StoryChapter
@@ -675,6 +701,9 @@ export const ipcInputs = {
   /** Chat, brainstorm or ask the story about what the writer is reading (streams `ai:token`). */
   'ai:ask': z.object({
     requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    /** The conversation with the new message: saved now, and with the answer when it comes. */
+    conversation: conversationFileSchema,
     mode: z.enum(['chat', 'brainstorm', 'ask']),
     messages: z
       .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(20000) }))
@@ -697,6 +726,10 @@ export const ipcInputs = {
   'ai:editChapter': z.object({
     requestId: z.string().min(1).max(80),
     seriesId: id('series'),
+    volumeId: id('volume'),
+    chapterId: id('chapter'),
+    /** The conversation with the request (saved now). */
+    conversation: conversationFileSchema,
     instruction: z.string().trim().min(1).max(20000),
     chapterTitle: z.string().max(300),
     chapter: z.string().max(500000),
@@ -705,6 +738,10 @@ export const ipcInputs = {
       .max(40),
   }),
   'ai:cancel': z.object({ requestId: z.string().min(1).max(80) }),
+  /** The story's AI work: running, and finished but not yet shown. */
+  'ai:jobs': z.object({ seriesId: id('series') }),
+  /** A pane has shown a finished job's result. */
+  'ai:jobSeen': z.object({ id: z.string().min(1).max(80) }),
   /** Reads a chapter for the world: summary kept, findings to the inbox (progress as `ai:progress`). */
   'ai:updateWorld': z.object({
     requestId: z.string().min(1).max(80),
@@ -896,6 +933,8 @@ export interface IpcResults {
   'ai:ask': { text: string }
   'ai:editChapter': { text: string }
   'ai:cancel': null
+  'ai:jobs': AiJobInfo[]
+  'ai:jobSeen': null
   'ai:updateWorld': { summary: string; suggestions: number; continuity: number; questions: number }
   'ai:summaries': ChapterSummaryInfo[]
   'inbox:accept': { item: InboxItem; entryId: string | null; relationshipId: string | null }
@@ -973,6 +1012,10 @@ export interface IpcEvents {
   'ai:scopeRequest': { requestId: string; seriesId: string }
   /** What a long AI job is doing now ("Reading part 2 of 3…"). */
   'ai:progress': { requestId: string; text: string }
+  /** AI work started, finished, failed or stopped (to every window). */
+  'ai:job': AiJobInfo
+  /** AI work this window asked for is finished (to that window only). */
+  'ai:jobDone': AiJobInfo
   /** More of an AI answer. */
   'ai:token': { requestId: string; text: string }
 }

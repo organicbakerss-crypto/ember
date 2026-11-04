@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isBook, worldLinkMenu } from './worldLink'
 import { offerScope, requestEdit, useScopeAnswers } from '../ai/scope'
-import { updateWorld, worldUpdateNote } from '../ai/worldUpdate'
+import { updateWorld } from '../ai/worldUpdate'
 import { Recap } from '../ai/Recap'
 import type {
   WorldSummary,
@@ -128,18 +128,15 @@ export function WritingView(props: {
     requestEdit(series.id, draft)
     if (!props.aiBeside) props.onToggleAi?.()
   }
-  /** Reads the chapter for the world; what it finds waits in the world's inbox. */
+  /** Reads the chapter for the world, in the background; what it finds waits in the world's inbox. */
   const worldFromChapter = async (chapterId: string) => {
     const title = liveMeta[chapterId]?.title || view?.chapters[chapterId]?.title || ''
-    actions.toast(`Reading “${title || 'Untitled'}” for the world…`)
-    try {
-      await flushAll()
-      const r = await updateWorld({ seriesId: series.id, volumeId: volume.id, chapterId })
-      actions.toast(worldUpdateNote(title, r))
-    } catch (err) {
-      const e = describeError(err)
-      if (e.code !== 'cancelled') actions.toast(e.message)
-    }
+    actions.toast(
+      `Reading “${title || 'Untitled'}” for the world. Carry on; you’ll be told when it’s done.`,
+    )
+    await flushAll()
+    // Done (or not) is announced wherever the writer is then.
+    void updateWorld({ seriesId: series.id, volumeId: volume.id, chapterId }).catch(() => {})
   }
   const [exporting, setExporting] = useState<{ chapterId: string | null; only?: boolean } | null>(
     null,

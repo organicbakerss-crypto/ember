@@ -15,6 +15,8 @@ import { WorldView } from '../world/WorldView'
 import { WritingView, type ChapterTarget } from './WritingView'
 import { isBook } from './worldLink'
 import { AiView } from '../ai/AiView'
+import { worldUpdateNote } from '../ai/worldUpdate'
+import { useOverlays } from './overlays'
 
 interface WriteSide {
   seriesId: string
@@ -26,6 +28,8 @@ interface WriteSide {
 interface WorldSide {
   worldId: string
   entryId?: string
+  /** Open at the inbox. */
+  inbox?: boolean
   /** Changes on each request to show `entryId`. */
   token?: number
 }
@@ -61,7 +65,13 @@ function startRoute(detached: PaneRoute | null): Route {
   if (detached.kind === 'ai') {
     return { view: 'ai', seriesId: detached.seriesId, volumeId: detached.volumeId }
   }
-  return { view: 'world', worldId: detached.worldId, entryId: detached.entryId, token: 1 }
+  return {
+    view: 'world',
+    worldId: detached.worldId,
+    entryId: detached.entryId,
+    inbox: detached.inbox,
+    token: 1,
+  }
 }
 
 /** A pane docked back (or sent here) from a torn-off window: beside the current view, or instead. */
@@ -77,7 +87,12 @@ function withDocked(current: Route, route: PaneRoute): Route {
     }
   }
   if (route.kind === 'world') {
-    const world = { worldId: route.worldId, entryId: route.entryId, token: Date.now() }
+    const world = {
+      worldId: route.worldId,
+      entryId: route.entryId,
+      inbox: route.inbox,
+      token: Date.now(),
+    }
     if (current.view === 'volume') return { view: 'split', write: current, world }
     if (current.view === 'split') return { ...current, world }
     if (current.view === 'splitAi') return { view: 'split', write: current.write, world }
@@ -111,6 +126,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
   // Where each pane is now, as it reports it (for popping out, and for a torn-off window).
   const at = useRef<{ write?: PaneRoute; world?: PaneRoute; ai?: PaneRoute }>({})
   const word = useWords()
+  const { toast } = useOverlays()
 
   const refresh = useCallback(() => {
     api.invoke('library:snapshot').then(setSnapshot, (err) => setError(describeError(err).message))
@@ -271,6 +287,55 @@ export function Home(props: { detached?: PaneRoute | null }) {
     if (detachedTitle) document.title = detachedTitle
   }, [detachedTitle])
 
+  /** The world's inbox: beside the writing view (or in a window of its own from a torn-off pane). */
+  const openInbox = (worldId: string) => {
+    const write =
+      route.view === 'volume'
+        ? route
+        : route.view === 'split' || route.view === 'splitAi'
+          ? route.write
+          : null
+    if (detached || route.view === 'ai') {
+      void api.invoke('window:open', { route: { kind: 'world', worldId, inbox: true } })
+      return
+    }
+    const world = { worldId, inbox: true, token: Date.now() }
+    setRoute(write ? { view: 'split', write, world } : { view: 'world', ...world })
+    setActiveSide('world')
+  }
+
+  // AI work runs in the background: say when it's done, wherever the writer is.
+  useIpcEvent('ai:jobDone', (job) => {
+    const worldId = seriesOf(job.seriesId)?.worldId
+    if (job.kind === 'world') {
+      if (job.state === 'done' && job.result) {
+        toast(
+          worldUpdateNote(job.chapterTitle, job.result),
+          worldId ? { label: 'Open the inbox', run: () => openInbox(worldId) } : undefined,
+        )
+      } else if (job.state === 'failed') {
+        toast(
+          `Updating the world from “${job.chapterTitle || 'Untitled'}” didn’t work: ${job.error}`,
+        )
+      }
+      return
+    }
+    const aiOpen =
+      route.view === 'ai' || (route.view === 'splitAi' && route.write.seriesId === job.seriesId)
+    if (aiOpen || job.state === 'cancelled') return
+    const write = route.view === 'volume' && route.seriesId === job.seriesId ? route : null
+    const open = write
+      ? {
+          label: 'Open the AI',
+          run: () => setRoute((r) => (r.view === 'volume' ? { view: 'splitAi', write: r } : r)),
+        }
+      : undefined
+    if (job.state === 'failed') toast(`The AI couldn’t finish: ${job.error}`, open)
+    else if (job.kind === 'edit') {
+      toast(`The AI’s edit of “${job.chapterTitle || 'Untitled'}” is ready to look over.`, open)
+    } else toast('The AI has answered. It’s saved in the conversation.', open)
+  })
+
   if (error) return <p className="error page-message">{error}</p>
   if (!snapshot) return null
 
@@ -408,9 +473,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
           seriesId={side.seriesId}
           volumeId={side.volumeId}
           onRoute={reportAi}
-          onOpenWorld={(worldId) =>
-            void api.invoke('window:open', { route: { kind: 'world', worldId } })
-          }
+          onOpenInbox={openInbox}
         />
       </PaneFrame>
     )
@@ -485,6 +548,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
         key={world.worldId}
         worldId={world.worldId}
         entryId={world.entryId}
+        inbox={world.inbox}
         entryToken={world.token}
         series={snapshot.series}
         writeLabel={fromVolume?.name}

@@ -18,6 +18,8 @@ export const paneRouteSchema = z.discriminatedUnion('kind', [
     kind: z.literal('world'),
     worldId: id('world'),
     entryId: id('entry').optional(),
+    /** Open at the inbox. */
+    inbox: z.boolean().optional(),
   }),
   /** The AI, for a story (it reads from that story's writing view). */
   z.object({

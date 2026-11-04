@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { ConversationSummary } from '@shared/ipc'
+import type { AiJobInfo, ConversationSummary } from '@shared/ipc'
 import type { PaneRoute } from '@shared/panes'
 import type { ConversationFile, ConversationMessage } from '@shared/schema'
 import { newId } from '@shared/ids'
@@ -41,6 +41,8 @@ const CONTEXT_MESSAGES = 20
 const STICK_PX = 48
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length
+/** An id for one request to the AI. */
+const newRequestId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 const empty = (): Thread => ({ id: null, createdAt: null, messages: [] })
 
 /* ---------- formatted answers ---------- */
@@ -125,8 +127,8 @@ export function AiView(props: {
   seriesId: string
   volumeId: string
   onRoute?: (route: PaneRoute) => void
-  /** Opens the story's world (after it was updated). */
-  onOpenWorld?: (worldId: string) => void
+  /** Opens the story's world at its inbox (after it was updated). */
+  onOpenInbox?: (worldId: string) => void
 }) {
   const { seriesId } = props
   const { settings } = useSettings()
@@ -174,6 +176,9 @@ export function AiView(props: {
   const stick = useRef(true)
   // The answer as it streams in (to keep what came if it's stopped).
   const partial = useRef('')
+  /** Requests this pane is waiting on itself (the rest it picks up from the background). */
+  const awaiting = useRef(new Set<string>())
+  const mounted = useRef(false)
   const local = useLocalScope(seriesId)
   // "Edit with AI" from the ⋯ menu: tick Edit chapter and fill in the request.
   const asked = editRequest(seriesId)
@@ -291,30 +296,38 @@ export function AiView(props: {
     })
   }
 
-  /** Saves a conversation with the story (after each answer). */
-  const save = (into: Mode, current: Thread, msgs: Message[]) => {
+  /** A conversation as a file (a new one gets its id here). */
+  const asFile = (into: Mode, current: Thread, msgs: Message[]): ConversationFile => {
     const now = new Date().toISOString()
-    const id = current.id ?? newId('conversation')
-    const createdAt = current.createdAt ?? now
     const first = msgs.find((m) => m.role === 'user')?.content ?? 'Conversation'
-    const conversation: ConversationFile = {
+    return {
       formatVersion: 1,
-      id,
+      id: current.id ?? newId('conversation'),
       mode: into,
       title:
         first.replace(/^>.*$/gm, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Conversation',
-      createdAt,
+      createdAt: current.createdAt ?? now,
       updatedAt: now,
       messages: msgs,
     }
-    setThreads((t) => ({ ...t, [into]: { id, createdAt, messages: msgs } }))
+  }
+  const threadOf = (c: ConversationFile): Thread => ({
+    id: c.id,
+    createdAt: c.createdAt,
+    messages: c.messages,
+  })
+
+  /** Saves a conversation with the story (after an edit is reviewed). */
+  const save = (into: Mode, current: Thread, msgs: Message[]) => {
+    const conversation = asFile(into, current, msgs)
+    setThreads((t) => ({ ...t, [into]: threadOf(conversation) }))
     void api
       .invoke('ai:saveConversation', { seriesId, conversation })
       .then(refreshPast)
       .catch((err) => setError(`Couldn’t save the conversation: ${describeError(err).message}`))
   }
 
-  /** Edit chapter: the AI edits the open chapter; the change goes in, then side by side. */
+  /** Edit chapter: the AI edits the open chapter (in the background); then it goes in, side by side. */
   const runEdit = async (instruction: string) => {
     const into = mode
     const current = thread
@@ -332,25 +345,21 @@ export function AiView(props: {
     }
     const { volumeId, chapterId, chapterTitle } = editor
     const md = docToMarkdown(oldDoc as { content?: DocNode[] })
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const requestId = newRequestId()
     const now = new Date().toISOString()
     const read = `Edit chapter: “${chapterTitle || 'Untitled'}”, ~${words(md)} words`
-    const history: Message[] = [
+    const conversation = asFile(into, current, [
       ...current.messages,
       { role: 'user', content: instruction, at: now, read },
-    ]
-    setThreads((t) => ({ ...t, [into]: { ...current, messages: history } }))
+    ])
+    setThreads((t) => ({ ...t, [into]: threadOf(conversation) }))
     setDraft('')
     setError(null)
     setBusy({ id: requestId, mode: into, edit: true })
     setEditWords(0)
     stick.current = true
     partial.current = ''
-    const reply = (content: string) =>
-      save(into, current, [
-        ...history,
-        { role: 'assistant', content, at: new Date().toISOString(), read: null },
-      ])
+    awaiting.current.add(requestId)
     try {
       // The version before goes into History first.
       await flushAll()
@@ -358,6 +367,9 @@ export function AiView(props: {
       const answer = await api.invoke('ai:editChapter', {
         requestId,
         seriesId,
+        volumeId,
+        chapterId,
+        conversation,
         instruction,
         chapterTitle,
         chapter: md,
@@ -365,36 +377,74 @@ export function AiView(props: {
           .slice(-CONTEXT_MESSAGES)
           .map((m) => ({ role: m.role, content: m.content })),
       })
-      const result = editedDoc(oldDoc as { content?: DocNode[] }, answer.text)
-      const changes = result.pairs.filter((p) => !p.same).length
-      if (!changes) {
-        reply(`No changes needed in “${chapterTitle || 'Untitled'}”.`)
-        return
-      }
-      // Typed in meanwhile? Then nothing is changed.
-      const now2 = editor.doc()
-      if (!now2 || docToMarkdown(now2 as { content?: DocNode[] }) !== md) {
-        reply('The chapter changed while the AI was working, so nothing was changed. Ask again.')
-        return
-      }
-      if (!editor.replace(result.doc)) {
-        reply('The chapter couldn’t be edited here (another window has it).')
-        return
-      }
-      setCompare({
-        result,
-        chapterTitle,
+      // Closed meanwhile: the edit waits for the AI to be opened again.
+      if (!mounted.current) return
+      void api.invoke('ai:jobSeen', { id: requestId })
+      applyEdit({
+        text: answer.text,
+        sent: md,
         volumeId,
         chapterId,
-        finish: reply,
+        chapterTitle,
+        mode: into,
+        conversation,
       })
     } catch (err) {
+      if (!mounted.current) return
+      void api.invoke('ai:jobSeen', { id: requestId })
       const e = describeError(err)
       if (e.code !== 'cancelled') setError(e.message)
-      setThreads((t) => ({ ...t, [into]: { ...t[into], messages: history } }))
     } finally {
-      setBusy(null)
+      awaiting.current.delete(requestId)
+      if (mounted.current) setBusy(null)
     }
+  }
+
+  /** An edit the AI made: into the chapter (if it's still as sent), then side by side. */
+  const applyEdit = (job: {
+    text: string
+    sent: string
+    volumeId: string
+    chapterId: string
+    chapterTitle: string
+    mode: Mode
+    conversation: ConversationFile
+  }) => {
+    const current = threadOf(job.conversation)
+    const reply = (content: string) =>
+      save(job.mode, current, [
+        ...job.conversation.messages,
+        { role: 'assistant', content, at: new Date().toISOString(), read: null },
+      ])
+    const name = job.chapterTitle || 'Untitled'
+    const editor = localEditor(seriesId)
+    const now = editor?.chapterId === job.chapterId ? editor.doc() : null
+    if (!editor || !now) {
+      reply(
+        `The edit of “${name}” was ready, but the chapter wasn’t open beside the AI, so nothing was changed. Open it and ask again.`,
+      )
+      return
+    }
+    if (docToMarkdown(now as { content?: DocNode[] }) !== job.sent) {
+      reply('The chapter changed while the AI was working, so nothing was changed. Ask again.')
+      return
+    }
+    const result = editedDoc(now as { content?: DocNode[] }, job.text)
+    if (!result.pairs.some((p) => !p.same)) {
+      reply(`No changes needed in “${name}”.`)
+      return
+    }
+    if (!editor.replace(result.doc)) {
+      reply('The chapter couldn’t be edited here (another window has it).')
+      return
+    }
+    setCompare({
+      result,
+      chapterTitle: job.chapterTitle,
+      volumeId: job.volumeId,
+      chapterId: job.chapterId,
+      finish: reply,
+    })
   }
 
   const finishCompare = async (outcome: { kept: boolean; undone: number; changes: number }) => {
@@ -422,7 +472,7 @@ export function AiView(props: {
     }
   }
 
-  /** Reads a chapter for the world: what it finds goes to the world's inbox. */
+  /** Reads a chapter for the world (in the background): what it finds goes to the world's inbox. */
   const updateWorld = async (target?: { volumeId: string; chapterId: string; title: string }) => {
     if (worldJob || busy) return
     let at = target
@@ -434,12 +484,13 @@ export function AiView(props: {
       }
       at = { volumeId: scope.volumeId, chapterId: scope.chapterId, title: scope.chapterTitle }
     }
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const id = newRequestId()
     setOffer(null)
     setError(null)
     setWorldNote(null)
     setProgress('')
     setWorldJob({ id, title: at.title })
+    awaiting.current.add(id)
     try {
       const r = await api.invoke('ai:updateWorld', {
         requestId: id,
@@ -447,13 +498,20 @@ export function AiView(props: {
         volumeId: at.volumeId,
         chapterId: at.chapterId,
       })
+      if (!mounted.current) return
+      void api.invoke('ai:jobSeen', { id })
       setWorldNote(worldUpdateNote(at.title, r))
     } catch (err) {
+      if (!mounted.current) return
+      void api.invoke('ai:jobSeen', { id })
       const e = describeError(err)
       if (e.code !== 'cancelled') setError(e.message)
     } finally {
-      setWorldJob(null)
-      setProgress('')
+      awaiting.current.delete(id)
+      if (mounted.current) {
+        setWorldJob(null)
+        setProgress('')
+      }
     }
   }
 
@@ -466,7 +524,7 @@ export function AiView(props: {
     }
     const into = mode
     const current = thread
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const requestId = newRequestId()
     const scope = await fetchScope(seriesId)
     const kind =
       reach === 'story'
@@ -495,10 +553,11 @@ export function AiView(props: {
       : question
     const now = new Date().toISOString()
     const history: Message[] = [...current.messages, { role: 'user', content, at: now, read }]
+    const conversation = asFile(into, current, history)
     setThreads((t) => ({
       ...t,
       [into]: {
-        ...current,
+        ...threadOf(conversation),
         messages: [...history, { role: 'assistant', content: '', at: now, read: null }],
       },
     }))
@@ -508,9 +567,13 @@ export function AiView(props: {
     setBusy({ id: requestId, mode: into })
     stick.current = true
     partial.current = ''
+    awaiting.current.add(requestId)
     try {
+      // It runs in the background: closing the AI doesn't stop it, and the answer is saved there.
       const answer = await api.invoke('ai:ask', {
         requestId,
+        seriesId,
+        conversation,
         mode: into,
         messages: history
           .slice(-CONTEXT_MESSAGES)
@@ -528,28 +591,119 @@ export function AiView(props: {
                 }
               : null,
       })
-      save(into, current, [
-        ...history,
-        { role: 'assistant', content: answer.text, at: new Date().toISOString(), read: null },
-      ])
+      if (!mounted.current) return
+      void api.invoke('ai:jobSeen', { id: requestId })
+      finishAnswer(into, conversation, answer.text, null)
     } catch (err) {
-      const e = describeError(err)
-      if (e.code !== 'cancelled') setError(e.message)
-      const got = partial.current
-      if (got) {
-        // Stopped part-way: keep what came.
-        save(into, current, [
-          ...history,
-          { role: 'assistant', content: got, at: new Date().toISOString(), read: null },
-        ])
-      } else {
-        setThreads((t) => ({ ...t, [into]: { ...t[into], messages: history } }))
-      }
+      if (!mounted.current) return
+      void api.invoke('ai:jobSeen', { id: requestId })
+      finishAnswer(into, conversation, partial.current, err)
     } finally {
-      setBusy(null)
-      setProgress('')
+      awaiting.current.delete(requestId)
+      if (mounted.current) {
+        setBusy(null)
+        setProgress('')
+      }
     }
   }
+
+  /** An answer finished (or stopped part-way, keeping what came); it's already saved. */
+  const finishAnswer = (into: Mode, conversation: ConversationFile, text: string, err: unknown) => {
+    if (err) {
+      const e = describeError(err)
+      if (e.code !== 'cancelled') setError(e.message)
+    }
+    const msgs: Message[] = text
+      ? [
+          ...conversation.messages,
+          { role: 'assistant', content: text, at: new Date().toISOString(), read: null },
+        ]
+      : conversation.messages
+    setThreads((t) => ({ ...t, [into]: { ...threadOf(conversation), messages: msgs } }))
+    refreshPast()
+  }
+
+  /** Work that was running (or finished) while this pane was closed: carry on showing it. */
+  const resume = (job: AiJobInfo) => {
+    if (awaiting.current.has(job.id)) return
+    const conv = job.conversation
+    const into = (conv?.mode ?? 'chat') as Mode
+    if (job.kind === 'world') {
+      if (job.state === 'running') {
+        setWorldJob({ id: job.id, title: job.chapterTitle })
+        setProgress(job.progress)
+        return
+      }
+      void api.invoke('ai:jobSeen', { id: job.id })
+      setWorldJob((w) => (w?.id === job.id ? null : w))
+      setProgress('')
+      if (job.result) setWorldNote(worldUpdateNote(job.chapterTitle, job.result))
+      else if (job.state === 'failed') setError(job.error)
+      return
+    }
+    if (!conv) return
+    if (job.state === 'running') {
+      setMode(into)
+      partial.current = job.text
+      if (job.kind === 'edit') {
+        setEditMode(true)
+        setEditWords(words(job.text))
+        setThreads((t) => ({ ...t, [into]: threadOf(conv) }))
+      } else {
+        const now = new Date().toISOString()
+        setThreads((t) => ({
+          ...t,
+          [into]: {
+            ...threadOf(conv),
+            messages: [
+              ...conv.messages,
+              { role: 'assistant', content: job.text, at: now, read: null },
+            ],
+          },
+        }))
+      }
+      setBusy({ id: job.id, mode: into, edit: job.kind === 'edit' })
+      return
+    }
+    // Finished while closed.
+    void api.invoke('ai:jobSeen', { id: job.id })
+    setBusy((b) => (b?.id === job.id ? null : b))
+    setMode(into)
+    if (job.kind === 'ask') {
+      finishAnswer(into, conv, job.text, job.state === 'failed' ? new Error(job.error ?? '') : null)
+    } else if (job.state === 'done' && job.volumeId && job.chapterId && job.sent !== null) {
+      applyEdit({
+        text: job.text,
+        sent: job.sent,
+        volumeId: job.volumeId,
+        chapterId: job.chapterId,
+        chapterTitle: job.chapterTitle,
+        mode: into,
+        conversation: conv,
+      })
+    } else {
+      setThreads((t) => ({ ...t, [into]: threadOf(conv) }))
+      if (job.state === 'failed') setError(job.error)
+    }
+  }
+  useEffect(() => {
+    mounted.current = true
+    api.invoke('ai:jobs', { seriesId }).then(
+      (jobs) => {
+        if (mounted.current) for (const j of jobs) resume(j)
+      },
+      () => {},
+    )
+    return () => {
+      mounted.current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesId])
+  useIpcEvent('ai:job', (job) => {
+    if (job.seriesId !== seriesId) return
+    // Work started elsewhere (the ⋯ menu), or finished while this pane only watched it.
+    if (job.kind === 'world' || (job.state !== 'running' && job.id === busy?.id)) resume(job)
+  })
 
   /** Highlighting part of an answer offers to reply to just that. */
   const onMouseUp = () => {
@@ -716,10 +870,10 @@ export function AiView(props: {
             {worldNote && !worldJob && (
               <div className="ai-message assistant ai-world-note">
                 <p>{worldNote}</p>
-                {worldId && props.onOpenWorld && (
+                {worldId && props.onOpenInbox && (
                   <div className="ai-actions small">
-                    <button className="link" onClick={() => props.onOpenWorld!(worldId)}>
-                      Open the world
+                    <button className="link" onClick={() => props.onOpenInbox!(worldId)}>
+                      Open the inbox
                     </button>
                   </div>
                 )}
