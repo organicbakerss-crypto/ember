@@ -11,7 +11,7 @@ import {
 } from 'electron'
 import { tokenPageUrl } from './sync/cloudflare'
 import type { DocLeases } from './docLeases'
-import { copyForRoyalRoad, exportVolume } from './export/service'
+import { copyForRoyalRoad, exportVolume, exportWorldPdf } from './export/service'
 import { readDocx } from './import/docx'
 import type { WindowManager } from './windows'
 import {
@@ -437,6 +437,10 @@ export function registerIpc(
     'series:create': (input) => host.current.createSeries(input),
     'series:rename': (input) => host.current.renameSeries(input.seriesId, input.name),
     'series:describe': (input) => host.current.describeSeries(input.seriesId, input.description),
+    'series:modules': (input) => host.current.setSeriesModules(input.seriesId, input),
+    'publishing:list': (input) => host.current.publishingList(input.seriesId),
+    'world:exportPdf': (input, event) =>
+      exportWorldPdf(host.current, BrowserWindow.fromWebContents(event.sender), input.worldId),
     'world:rename': (input) => host.current.renameWorld(input.worldId, input.name),
     'arc:delete': (input) =>
       host.current.deleteArc(input.seriesId, input.volumeId, input.arcId, input.chapters),

@@ -28,6 +28,7 @@ import {
   CHAPTER_STATUSES,
   type ChapterLabel,
   type ChapterStatus,
+  type PublishInfo,
   type OutlineArc,
   type OutlineFile,
 } from '@shared/schema'
@@ -95,6 +96,8 @@ interface BinderProps {
   onMergeNext: (chapterId: string) => void
   onDuplicate: (chapterId: string) => void
   onSetLabel: (chapterId: string, label: ChapterLabel | null) => void
+  /** Set when the story tracks publishing. */
+  onSetPublished?: (chapterId: string, publish: PublishInfo | null) => void
   /** Copies a chapter for pasting into Royal Road. */
   onCopyForRoyalRoad?: (chapterId: string) => void
   /** Exports one chapter (opens the export dialog with it chosen). */
@@ -236,6 +239,40 @@ export function Binder(props: BinderProps) {
           onSelect: () => props.onSetLabel(id, label),
         })),
       },
+      ...(props.onSetPublished
+        ? [
+            {
+              label: 'Publishing',
+              submenu: [
+                {
+                  label: 'Posted today',
+                  checked: view.chapters[id]?.publish?.status === 'posted',
+                  onSelect: () =>
+                    props.onSetPublished?.(id, {
+                      status: 'posted' as const,
+                      date: new Date().toISOString().slice(0, 10),
+                      url: view.chapters[id]?.publish?.url ?? '',
+                    }),
+                },
+                {
+                  label: 'Scheduled (set the date in Publishing)',
+                  checked: view.chapters[id]?.publish?.status === 'scheduled',
+                  onSelect: () =>
+                    props.onSetPublished?.(id, {
+                      status: 'scheduled' as const,
+                      date: view.chapters[id]?.publish?.date ?? '',
+                      url: '',
+                    }),
+                },
+                {
+                  label: 'Not posted',
+                  checked: !view.chapters[id]?.publish,
+                  onSelect: () => props.onSetPublished?.(id, null),
+                },
+              ],
+            },
+          ]
+        : []),
       {
         label: 'Split at the cursor',
         disabled: id !== props.selectedId,
@@ -287,6 +324,7 @@ export function Binder(props: BinderProps) {
       <ChapterRow
         meta={meta(id)}
         status={view.chapters[id]?.status ?? null}
+        publish={props.onSetPublished ? (view.chapters[id]?.publish ?? null) : null}
         label={view.chapters[id]?.label ?? null}
         selected={id === props.selectedId}
         scenes={id === props.selectedId ? props.scenes : []}
@@ -551,6 +589,7 @@ function ChapterRow(props: {
   meta: ChapterMeta
   status: ChapterStatus | null
   label: ChapterLabel | null
+  publish: PublishInfo | null
   selected: boolean
   scenes: Scene[]
   renaming: boolean
@@ -585,6 +624,16 @@ function ChapterRow(props: {
           onRename={props.onRename}
         />
         {meta.type === 'interlude' && <span className="binder-tag">Interlude</span>}
+        {props.publish && (
+          <span
+            className={`binder-publish ${props.publish.status}`}
+            title={`${props.publish.status === 'posted' ? 'Posted' : 'Scheduled'}${props.publish.date ? ` ${props.publish.date}` : ''}`}
+          >
+            {props.publish.status === 'posted'
+              ? '● posted'
+              : `◷ ${props.publish.date.slice(5) || 'scheduled'}`}
+          </span>
+        )}
         {props.status && (
           <span className={`binder-status status-${props.status}`}>
             {props.status === 'done' ? '✓ ' : ''}

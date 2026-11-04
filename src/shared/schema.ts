@@ -64,10 +64,28 @@ export const seriesFileSchema = z.looseObject({
     })
     .optional()
     .catch(undefined),
+  /** Optional modules this story uses (off unless turned on; no trace of them when off). */
+  modules: z
+    .looseObject({
+      publishing: z.boolean().catch(false).default(false),
+      authorNotes: z.boolean().catch(false).default(false),
+    })
+    .optional()
+    .catch(undefined),
   createdAt: timestamp,
   updatedAt: timestamp,
 })
 export type SeriesFile = z.infer<typeof seriesFileSchema>
+
+/** Where a chapter is in being published (the publishing module). */
+export const publishSchema = z.looseObject({
+  status: z.enum(['posted', 'scheduled']),
+  /** The day it was posted or is scheduled for (YYYY-MM-DD; '' if not set). */
+  date: z.string().max(40).catch(''),
+  /** Where it's posted. */
+  url: z.string().max(2000).catch(''),
+})
+export type PublishInfo = z.infer<typeof publishSchema>
 
 /* ---------- volume ---------- */
 
@@ -147,6 +165,11 @@ export const chapterFileSchema = z.looseObject({
   /** Unknown values (from a newer app) read as none rather than failing the chapter. */
   status: z.enum(CHAPTER_STATUSES).nullable().catch(null).default(null),
   label: z.enum(CHAPTER_LABELS).nullable().catch(null).default(null),
+  /** Royal Road-style author's notes, shown to readers before and after the chapter. */
+  authorNoteBefore: z.string().max(20000).catch('').default(''),
+  authorNoteAfter: z.string().max(20000).catch('').default(''),
+  /** Posted or scheduled (the publishing module); null: not yet. */
+  publish: publishSchema.nullable().catch(null).default(null),
   content: richTextDocSchema,
   createdAt: timestamp,
   updatedAt: timestamp,

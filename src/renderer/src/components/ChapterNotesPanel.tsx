@@ -6,7 +6,7 @@ const SAVE_DELAY_MS = 600
 let requests = 0
 const newRequestId = () => `synopsis-${Date.now()}-${++requests}`
 
-type Fields = { synopsis: string; notes: string }
+type Fields = { synopsis: string; notes: string; authorNoteBefore: string; authorNoteAfter: string }
 
 /**
  * The open chapter's synopsis (what happens in it, in a few lines) and the
@@ -19,6 +19,8 @@ export function ChapterNotesPanel(props: {
   chapterId: string | null
   chapterTitle: string
   aiOn: boolean
+  /** The story uses author's notes (the module is on). */
+  authorNotes?: boolean
 }) {
   if (!props.chapterId) {
     return (
@@ -37,6 +39,7 @@ function ChapterNotes(props: {
   chapterId: string
   chapterTitle: string
   aiOn: boolean
+  authorNotes?: boolean
 }) {
   const { seriesId, volumeId, chapterId } = props
   const [fields, setFields] = useState<Fields | null>(null)
@@ -52,7 +55,12 @@ function ChapterNotes(props: {
       (c) => {
         // Typed while it was being read: what's on screen wins (it's about to be saved).
         if (Object.keys(pending.current).length) return
-        setFields({ synopsis: c.synopsis ?? '', notes: c.notes })
+        setFields({
+          synopsis: c.synopsis ?? '',
+          notes: c.notes,
+          authorNoteBefore: c.authorNoteBefore ?? '',
+          authorNoteAfter: c.authorNoteAfter ?? '',
+        })
       },
       (err: unknown) => setError(describeError(err).message),
     )
@@ -174,6 +182,36 @@ function ChapterNotes(props: {
               onChange={(e) => change('notes', e.target.value)}
             />
           </label>
+          {props.authorNotes && (
+            <>
+              <h3 className="panel-heading small muted">For readers</h3>
+              {(
+                [
+                  ['authorNoteBefore', 'Author’s note before the chapter'],
+                  ['authorNoteAfter', 'Author’s note after the chapter'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="notes-field">
+                  <span>{label}</span>
+                  <textarea
+                    rows={4}
+                    value={fields[key]}
+                    placeholder="Shown to readers, e.g. on Royal Road. Not part of the chapter."
+                    maxLength={20000}
+                    onChange={(e) => change(key, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="small notes-copy"
+                    disabled={!fields[key].trim()}
+                    onClick={() => void navigator.clipboard.writeText(fields[key])}
+                  >
+                    Copy
+                  </button>
+                </label>
+              ))}
+            </>
+          )}
         </>
       )}
     </div>

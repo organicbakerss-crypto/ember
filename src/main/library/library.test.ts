@@ -155,6 +155,7 @@ describe('chapters and the outline', () => {
       povEntryId: null,
       status: null,
       label: null,
+      publish: null,
     })
   })
 
@@ -232,6 +233,30 @@ describe('chapters and the outline', () => {
       title: 'One',
       status: null,
       label: null,
+    })
+  })
+
+  it('tracks publishing per chapter, lists it for the story, and turns modules on per story', async () => {
+    const { ref } = await makeVolume()
+    const a = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'A' })
+    const b = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'B' })
+    await lib.saveChapter(...ref, a.id, {
+      publish: { status: 'posted', date: '2026-11-01', url: 'https://example.com/a' },
+      authorNoteAfter: 'Thanks for reading!',
+    })
+    expect((await lib.getOutline(...ref)).chapters[a.id]?.publish?.status).toBe('posted')
+    const rows = await lib.publishingList(ref[0])
+    expect(rows.map((r) => [r.label, r.title, r.publish?.status ?? null])).toEqual([
+      ['Ch 1', 'A', 'posted'],
+      ['Ch 2', 'B', null],
+    ])
+    expect((await lib.readChapter(...ref, a.id)).authorNoteAfter).toBe('Thanks for reading!')
+    expect((await lib.readChapter(...ref, b.id)).authorNoteBefore).toBe('')
+    const on = await lib.setSeriesModules(ref[0], { publishing: true })
+    expect(on.modules).toEqual({ publishing: true, authorNotes: false })
+    expect((await lib.setSeriesModules(ref[0], { authorNotes: true })).modules).toEqual({
+      publishing: true,
+      authorNotes: true,
     })
   })
 

@@ -107,6 +107,11 @@ export function chapterBodyHtml(
   )}`
 }
 
+/** Rich text (an entry's page, say) as HTML, with its fonts and colours. */
+export function blocksToHtml(blocks: Block[], style: ExportStyle): string {
+  return blocksHtml(blocks, style, { styled: true })
+}
+
 /** The book's typography, shared by EPUB and PDF. */
 export function bookCss(style: ExportStyle): string {
   const paragraphs =

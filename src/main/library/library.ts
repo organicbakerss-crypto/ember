@@ -47,6 +47,7 @@ import type {
   LibraryProblem,
   LibrarySnapshot,
   OutlineView,
+  PublishingRow,
   SearchResult,
   SeriesSummary,
   SnapshotInfo,
@@ -81,7 +82,18 @@ type UnitType = ManifestFile['unitType']
 export type ChapterPatch = Partial<
   Pick<
     ChapterFile,
-    'title' | 'type' | 'pov' | 'povEntryId' | 'notes' | 'synopsis' | 'status' | 'label' | 'content'
+    | 'title'
+    | 'type'
+    | 'pov'
+    | 'povEntryId'
+    | 'notes'
+    | 'synopsis'
+    | 'status'
+    | 'label'
+    | 'authorNoteBefore'
+    | 'authorNoteAfter'
+    | 'publish'
+    | 'content'
   >
 >
 
@@ -401,6 +413,7 @@ export class Library {
             povEntryId: file.povEntryId ?? null,
             status: file.status,
             label: file.label,
+            publish: file.publish,
           }
         : {
             id: chapterId,
@@ -410,6 +423,7 @@ export class Library {
             povEntryId: null,
             status: null,
             label: null,
+            publish: null,
           }
     }
 
@@ -668,6 +682,9 @@ export class Library {
       synopsis: '',
       status: null,
       label: null,
+      authorNoteBefore: '',
+      authorNoteAfter: '',
+      publish: null,
       content: emptyDoc(),
       createdAt: time,
       updatedAt: time,
@@ -1084,6 +1101,58 @@ export class Library {
     })
     this.onChange({ kind: 'series', seriesId })
     return updated
+  }
+
+  /** Turns a story's optional modules on or off. */
+  async setSeriesModules(
+    seriesId: string,
+    change: { publishing?: boolean; authorNotes?: boolean },
+  ): Promise<SeriesFile> {
+    const updated = await this.lock.run(`series:${seriesId}`, async () => {
+      const series = await this.getSeries(seriesId)
+      const current = series.modules ?? { publishing: false, authorNotes: false }
+      const modules = {
+        ...current,
+        ...(change.publishing === undefined ? {} : { publishing: change.publishing }),
+        ...(change.authorNotes === undefined ? {} : { authorNotes: change.authorNotes }),
+      }
+      const next = { ...series, modules, updatedAt: this.timestamp() }
+      await writeJsonFile(this.paths.seriesFile(seriesId), next)
+      return next
+    })
+    this.onChange({ kind: 'series', seriesId })
+    return updated
+  }
+
+  /** Every chapter of a story with its publishing details, in reading order. */
+  async publishingList(seriesId: string): Promise<PublishingRow[]> {
+    const series = (await this.snapshot()).series.find((s) => s.id === seriesId)
+    if (!series) throw new AppError('not-found', 'That story is gone.')
+    const rows: PublishingRow[] = []
+    for (const volume of series.volumes) {
+      const chapters: ChapterFile[] = []
+      for (const chapterId of await this.chaptersInOrder(seriesId, volume.id)) {
+        try {
+          chapters.push(await this.readChapter(seriesId, volume.id, chapterId))
+        } catch (err) {
+          if (!(err instanceof AppError)) throw err
+        }
+      }
+      const labels = chapterLabels(chapters.map((c) => c.type))
+      chapters.forEach((c, i) =>
+        rows.push({
+          volumeId: volume.id,
+          volumeName: volume.name,
+          chapterId: c.id,
+          label: labels[i]!,
+          title: c.title,
+          status: c.status,
+          publish: c.publish,
+          words: docWordCount(c.content),
+        }),
+      )
+    }
+    return rows
   }
 
   /** The voices a story is read with (VoiceStudio voice names), kept with the story. */

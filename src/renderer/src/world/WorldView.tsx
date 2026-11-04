@@ -138,6 +138,16 @@ export function WorldView(props: {
     [worldId, lensKey],
   )
   const openEntry = useCallback((entryId: string) => go({ kind: 'entry', entryId }), [go])
+  const exportBible = () => {
+    toast('Putting the series bible together…')
+    api.invoke('world:exportPdf', { worldId }).then(
+      (done) => toast(`Exported ${done.entries} entries to ${done.path}`),
+      (err: unknown) => {
+        const e = describeError(err)
+        if (e.code !== 'cancelled') toast(e.message)
+      },
+    )
+  }
   const back = useCallback(() => setNav((n) => ({ ...n, at: Math.max(0, n.at - 1) })), [])
   const forward = useCallback(
     () => setNav((n) => ({ ...n, at: Math.min(n.stack.length - 1, n.at + 1) })),
@@ -224,6 +234,11 @@ export function WorldView(props: {
             title: `World: ${both(lens, LENS_LABELS[lens])}`,
             run: () => go({ kind: 'lens', lens }),
           })),
+          {
+            id: 'world-export',
+            title: 'Export the world (PDF series bible)',
+            run: exportBible,
+          },
           {
             id: 'world-inbox',
             title: `World: ${both('inbox', 'Inbox')}`,
@@ -358,6 +373,7 @@ export function WorldView(props: {
                 },
                 { label: 'Templates…', onSelect: () => setTemplatesOpen(true) },
                 { label: 'View the world as text', onSelect: showDigest },
+                { label: 'Export the world (PDF series bible)…', onSelect: exportBible },
                 {
                   label: 'Parts of this world',
                   submenu: (

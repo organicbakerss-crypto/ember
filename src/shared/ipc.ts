@@ -24,6 +24,7 @@ import {
   chapterTypeSchema,
   CHAPTER_LABELS,
   CHAPTER_STATUSES,
+  publishSchema,
   inboxItemSchema,
   factValueSchema,
   fieldIdSchema,
@@ -82,6 +83,19 @@ export interface VolumeSummary extends VolumeFile {
   wordCount: number
 }
 
+/** One chapter in the publishing tracker. */
+export interface PublishingRow {
+  volumeId: string
+  volumeName: string
+  chapterId: string
+  /** "Chapter 3" (or "Interlude"). */
+  label: string
+  title: string
+  status: ChapterFile['status']
+  publish: ChapterFile['publish']
+  words: number
+}
+
 export interface SeriesSummary extends SeriesFile {
   cover: CoverInfo | null
   /** In reading order. */
@@ -107,7 +121,10 @@ export interface OutlineView {
   /** Chapter metadata keyed by id (no content), for drawing the binder. */
   chapters: Record<
     string,
-    Pick<ChapterFile, 'id' | 'title' | 'type' | 'pov' | 'povEntryId' | 'status' | 'label'>
+    Pick<
+      ChapterFile,
+      'id' | 'title' | 'type' | 'pov' | 'povEntryId' | 'status' | 'label' | 'publish'
+    >
   >
   problems: LibraryProblem[]
 }
@@ -390,6 +407,16 @@ export const ipcInputs = {
   }),
   'series:rename': z.object({ seriesId: id('series'), name: nameSchema }),
   'series:describe': z.object({ seriesId: id('series'), description: z.string().max(10000) }),
+  /** Turns a story's optional modules on or off. */
+  'series:modules': z.object({
+    seriesId: id('series'),
+    publishing: z.boolean().optional(),
+    authorNotes: z.boolean().optional(),
+  }),
+  /** Every chapter of a story with its publishing details, in reading order. */
+  'publishing:list': z.object({ seriesId: id('series') }),
+  /** A world as a PDF series bible (asks where to save it). */
+  'world:exportPdf': z.object({ worldId: id('world') }),
   'world:rename': z.object({ worldId: id('world'), name: nameSchema }),
   'arc:delete': z.object({
     ...volumeRef,
@@ -641,6 +668,9 @@ export const ipcInputs = {
       synopsis: z.string().max(5000).optional(),
       status: z.enum(CHAPTER_STATUSES).nullable().optional(),
       label: z.enum(CHAPTER_LABELS).nullable().optional(),
+      authorNoteBefore: z.string().max(20000).optional(),
+      authorNoteAfter: z.string().max(20000).optional(),
+      publish: publishSchema.nullable().optional(),
       content: richTextDocSchema.optional(),
     }),
   }),
@@ -1022,6 +1052,9 @@ export interface IpcResults {
   'world:setFeatures': WorldFile
   'series:rename': SeriesFile
   'series:describe': SeriesFile
+  'series:modules': SeriesFile
+  'publishing:list': PublishingRow[]
+  'world:exportPdf': { path: string; entries: number }
   'world:rename': WorldFile
   'arc:delete': OutlineView
   'history:list': SnapshotInfo[]

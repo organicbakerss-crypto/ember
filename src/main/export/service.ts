@@ -29,6 +29,7 @@ import { writeFileAtomic } from '../fs/atomicWrite'
 import type { Library } from '../library/library'
 import { manuscriptDocx } from './docx'
 import { manuscriptEpub } from './epub'
+import { worldBibleHtml } from './worldBible'
 
 export type ExportFormat = 'docx' | 'pdf' | 'epub' | 'markdown'
 
@@ -162,4 +163,59 @@ export async function copyForRoyalRoad(
     }),
   ])
   return { title: chapter.title }
+}
+
+const IMAGE_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+}
+
+/** A world as a PDF series bible (asks where to save it). */
+export async function exportWorldPdf(
+  library: Library,
+  window: BrowserWindow | null,
+  worldId: string,
+): Promise<{ path: string; entries: number }> {
+  const view = await library.world.view(worldId)
+  const entries = []
+  for (const e of view.entries) {
+    try {
+      entries.push(await library.world.readEntry(worldId, e.id))
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err
+    }
+  }
+  if (!entries.length) throw new AppError('invalid-input', 'This world has no entries yet.')
+  const options: Electron.SaveDialogOptions = {
+    title: 'Export the world as a PDF',
+    defaultPath: join(app.getPath('documents'), `${fileName(view.world.name)} - series bible.pdf`),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  }
+  const choice = window
+    ? await dialog.showSaveDialog(window, options)
+    : await dialog.showSaveDialog(options)
+  if (choice.canceled || !choice.filePath) throw new AppError('cancelled', 'Export cancelled.')
+  const images = new Map<string, string | null>()
+  for (const e of entries) {
+    for (const file of [e.portrait?.file, ...e.gallery.map((p) => p.file)]) {
+      if (!file || images.has(file)) continue
+      const type = IMAGE_TYPES[file.split('.').pop() ?? '']
+      const data = await fs.promises
+        .readFile(library.world.imagePath(worldId, file))
+        .catch(() => null)
+      images.set(file, data && type ? `data:${type};base64,${data.toString('base64')}` : null)
+    }
+  }
+  const html = worldBibleHtml({
+    worldName: view.world.name,
+    entries,
+    templates: view.templates,
+    relationships: view.relationships,
+    relationshipTypes: view.relationshipTypes,
+    image: (file) => images.get(file) ?? null,
+  })
+  await writeFileAtomic(choice.filePath, await printPdf(html))
+  return { path: choice.filePath, entries: entries.length }
 }

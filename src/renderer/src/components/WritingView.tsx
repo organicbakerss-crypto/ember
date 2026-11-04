@@ -22,6 +22,7 @@ import type {
   ChapterStatus,
   OutlineArc,
   OutlineFile,
+  PublishInfo,
   RichTextDoc,
 } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
@@ -44,6 +45,7 @@ import { isMac, MOD, modKey, useCommands, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { ChapterNotesPanel } from './ChapterNotesPanel'
 import { CommentsPanel } from './CommentsPanel'
+import { PublishingPanel } from './PublishingPanel'
 import type { CommentInfo } from '../editor/comments'
 import { ManuscriptView } from '../manuscript/ManuscriptView'
 import { QuickAddDialog } from '../world/QuickAddDialog'
@@ -66,7 +68,16 @@ import { copyChapterForRoyalRoad, ExportDialog } from '../io/ExportDialog'
 import { ImportDialog } from '../io/ImportDialog'
 import { usePane } from '../panes/PaneContext'
 
-type Panel = 'binder' | 'search' | 'notes' | 'comments' | 'history' | 'diagnostics' | 'world' | 'ai'
+type Panel =
+  | 'binder'
+  | 'search'
+  | 'notes'
+  | 'comments'
+  | 'publishing'
+  | 'history'
+  | 'diagnostics'
+  | 'world'
+  | 'ai'
 
 /** A chapter to open, optionally showing the first use of a name. */
 export interface ChapterTarget {
@@ -507,10 +518,27 @@ export function WritingView(props: {
     }
   }
 
+  // Optional modules this story uses (off unless turned on).
+  const publishingOn = !!series.modules?.publishing
+  const authorNotesOn = !!series.modules?.authorNotes
+  const setModule = async (change: { publishing?: boolean; authorNotes?: boolean }) => {
+    try {
+      await api.invoke('series:modules', { seriesId: series.id, ...change })
+      if (change.publishing) openPanel('publishing')
+      if (change.authorNotes) openPanel('notes')
+    } catch (err) {
+      actions.toast(describeError(err).message)
+    }
+  }
+
   /** Sets a chapter's status or colour label (only that field is saved). */
   const markChapter = async (
     chapterId: string,
-    patch: { status?: ChapterStatus | null; label?: ChapterLabel | null },
+    patch: {
+      status?: ChapterStatus | null
+      label?: ChapterLabel | null
+      publish?: PublishInfo | null
+    },
   ) => {
     try {
       await api.invoke('chapter:save', { ...ref, chapterId, patch })
@@ -779,6 +807,20 @@ export function WritingView(props: {
       run: addComment,
     },
     { id: 'comments', title: 'Show the comments', run: () => openPanel('comments') },
+    publishingOn
+      ? { id: 'publishing', title: 'Publishing tracker', run: () => openPanel('publishing') }
+      : {
+          id: 'publishing-on',
+          title: 'Turn on the publishing tracker for this story',
+          run: () => void setModule({ publishing: true }),
+        },
+    authorNotesOn
+      ? { id: 'author-notes', title: 'Author’s notes', run: () => openPanel('notes') }
+      : {
+          id: 'author-notes-on',
+          title: 'Turn on author’s notes for this story',
+          run: () => void setModule({ authorNotes: true }),
+        },
     ...(selectedId
       ? [
           { id: 'split', title: 'Split the chapter at the cursor', run: () => void splitHere() },
@@ -1044,6 +1086,16 @@ export function WritingView(props: {
                     ? [worldLinkMenu(series, props.worlds, actions.toast)]
                     : []),
                   {
+                    label: 'Publishing tracker',
+                    checked: publishingOn,
+                    onSelect: () => void setModule({ publishing: !publishingOn }),
+                  },
+                  {
+                    label: 'Author’s notes',
+                    checked: authorNotesOn,
+                    onSelect: () => void setModule({ authorNotes: !authorNotesOn }),
+                  },
+                  {
                     label: 'Finished (keep less history)',
                     checked: volume.settings['finished'] === true,
                     onSelect: () =>
@@ -1122,6 +1174,16 @@ export function WritingView(props: {
           <path d="M6 3h9l4 4v14H6z" />
           <path d="M9 10h7M9 14h7M9 18h4" />
         </RailButton>
+        {publishingOn && (
+          <RailButton
+            label="Publishing"
+            active={panel === 'publishing'}
+            onClick={() => togglePanel('publishing')}
+          >
+            <path d="M4 5h16v14H4z" />
+            <path d="M8 3v4M16 3v4M4 10h16M9 15l2 2 4-4" />
+          </RailButton>
+        )}
         <RailButton
           label="Comments"
           active={panel === 'comments'}
@@ -1195,6 +1257,11 @@ export function WritingView(props: {
               onRenameChapter={renameChapter}
               onTrashChapter={trashChapter}
               onSetStatus={(chapterId, status) => void markChapter(chapterId, { status })}
+              onSetPublished={
+                publishingOn
+                  ? (chapterId, publish) => void markChapter(chapterId, { publish })
+                  : undefined
+              }
               onSplit={() => void splitHere()}
               onMergeNext={(chapterId) => void mergeNext(chapterId)}
               onDuplicate={(chapterId) => void duplicate(chapterId)}
@@ -1244,6 +1311,17 @@ export function WritingView(props: {
               chapterId={selectedId}
               chapterTitle={current?.title ?? ''}
               aiOn={aiOn}
+              authorNotes={authorNotesOn}
+            />
+          )}
+          {panel === 'publishing' && publishingOn && (
+            <PublishingPanel
+              seriesId={series.id}
+              onChanged={refresh}
+              onOpenChapter={(volumeId, chapterId) => {
+                if (volumeId === volume.id) select(chapterId)
+                else props.onOpenVolumeAt?.(volumeId, { chapterId, token: Date.now() })
+              }}
             />
           )}
           {panel === 'comments' && (

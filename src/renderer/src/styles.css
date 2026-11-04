@@ -4582,3 +4582,66 @@ kbd {
   gap: 0.5rem;
   color: #eee;
 }
+
+/* Publishing tracker */
+.publishing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.publishing-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.publishing-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.publishing-row {
+  padding: 0.35rem 0.4rem;
+  border-left: 3px solid var(--border);
+  border-radius: 4px;
+}
+.publishing-row.posted {
+  border-left-color: #4c9f5a;
+}
+.publishing-row.scheduled {
+  border-left-color: #3f7fd1;
+}
+.publishing-title {
+  font: inherit;
+  text-align: left;
+}
+.publishing-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+}
+.publishing-controls input[type='url'] {
+  flex: 1 1 8rem;
+}
+.binder-publish {
+  flex: none;
+  font-size: 0.68rem;
+  opacity: 0.8;
+}
+.binder-publish.posted {
+  color: #4c9f5a;
+}
+.binder-publish.scheduled {
+  color: #3f7fd1;
+}
+.binder-row.selected .binder-publish {
+  color: inherit;
+}
+.notes-panel .notes-copy {
+  align-self: flex-end;
+}
