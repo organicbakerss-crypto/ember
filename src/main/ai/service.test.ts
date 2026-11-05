@@ -545,7 +545,7 @@ describe('the AI service', () => {
     expect(system).toContain('handoff.md')
     expect(system).toContain('Odo is secretly a prince.')
     expect(system).toContain('never invent')
-    expect(r.lookedAt.join(' ')).toContain('passages')
+    expect(r.lookedAt.join(' ')).toContain('1 passage')
     expect(r.lookedAt.join(' ')).toContain('handoff.md')
   })
 
