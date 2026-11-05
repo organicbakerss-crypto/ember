@@ -52,6 +52,7 @@ import {
   type Containers,
 } from './model'
 import { useCollapsed } from './useCollapsed'
+import { chapterPovs, type PovPerson } from '@shared/world/povs'
 
 export const STATUS_NAMES: Record<ChapterStatus, string> = {
   draft: 'Draft',
@@ -107,6 +108,8 @@ interface BinderProps {
   revealArcId: string | null
   /** Current name of a world entry (a POV linked to a character follows renames). */
   entryName: (entryId: string) => string | undefined
+  /** The world's people, to find POVs named by scene headings. */
+  povPeople: readonly PovPerson[]
 }
 
 /** Arcs and chapters, reordered by drag-and-drop. Only outline.json changes. */
@@ -139,18 +142,36 @@ export function Binder(props: BinderProps) {
       type: stored?.type ?? 'chapter',
       pov: stored?.pov ?? null,
       povEntryId: stored?.povEntryId ?? null,
+      povs: stored?.povs ?? [],
     }
     const linked = m.povEntryId ? props.entryName(m.povEntryId) : undefined
     return linked ? { ...m, pov: linked } : m
   }
+  /** Every POV of a chapter: set by hand, then named by its scene headings. */
+  const povsOf = (id: string): string[] => {
+    const m = meta(id)
+    const found = chapterPovs(
+      {
+        ...m,
+        // The open chapter's scene openings too, so a new heading shows before it's saved.
+        headings: [
+          ...(view.chapters[id]?.headings ?? []),
+          ...(id === props.selectedId ? props.scenes.map((s) => s.label) : []),
+        ],
+      },
+      props.povPeople,
+    )
+    const names = found.map((p) => (p.entryId && props.entryName(p.entryId)) || p.name)
+    return [...new Set(names)]
+  }
   const povs = useMemo(() => {
-    const all = Object.keys(view.chapters).map((id) => meta(id).pov)
-    return [...new Set(all.filter((p): p is string => !!p))].sort()
+    const all = Object.keys(view.chapters).flatMap((id) => povsOf(id))
+    return [...new Set(all)].sort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view.chapters, props.liveMeta])
+  }, [view.chapters, props.liveMeta, props.povPeople, props.scenes, props.selectedId])
   const filtering = povFilter !== '' || statusFilter !== ''
   const visible = (id: string) =>
-    (povFilter === '' || meta(id).pov === povFilter) &&
+    (povFilter === '' || povsOf(id).includes(povFilter)) &&
     matchesStatus(view.chapters[id]?.status ?? null, statusFilter)
   const anyStatus = Object.values(view.chapters).some((c) => c.status)
 
@@ -343,6 +364,7 @@ export function Binder(props: BinderProps) {
     <SortableChapter key={id} id={id} disabled={filtering} hidden={!visible(id)}>
       <ChapterRow
         meta={meta(id)}
+        povNames={povsOf(id)}
         status={view.chapters[id]?.status ?? null}
         publish={props.onSetPublished ? (view.chapters[id]?.publish ?? null) : null}
         label={view.chapters[id]?.label ?? null}
@@ -607,6 +629,7 @@ function ArcHeader(props: {
 
 function ChapterRow(props: {
   meta: ChapterMeta
+  povNames: string[]
   status: ChapterStatus | null
   label: ChapterLabel | null
   publish: PublishInfo | null
@@ -660,7 +683,11 @@ function ChapterRow(props: {
             {STATUS_NAMES[props.status]}
           </span>
         )}
-        {meta.pov && <span className="binder-pov">{meta.pov}</span>}
+        {props.povNames.length > 0 && (
+          <span className="binder-pov" title={props.povNames.join(', ')}>
+            {props.povNames.join(' · ')}
+          </span>
+        )}
       </div>
       {props.scenes.length > 1 && (
         <ol className="binder-scenes">

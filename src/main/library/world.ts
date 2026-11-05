@@ -55,6 +55,7 @@ import { docParagraphs } from '@shared/analysis/doc'
 import { splitSentences } from '@shared/analysis/sentences'
 import { DEFAULT_FILLER_WORDS } from '@shared/analysis/fillers'
 import { catchNames } from '@shared/world/nameCatcher'
+import { chapterPovs } from '@shared/world/povs'
 import { entryText, worldDigest } from '@shared/world/digest'
 import { type StoryChapter, type WorldIndex } from '@shared/world/story'
 import { isBuiltIn, worldTemplates } from '@shared/world/templates'
@@ -74,6 +75,20 @@ export interface StoryText {
   chapter: StoryChapter
   paragraphs: string[]
   povEntryId: string | null
+  /** Every POV set by hand (the first is `povEntryId`). */
+  povEntryIds?: string[]
+  /** Its headings (scene headings can name a POV). */
+  headings?: string[]
+}
+
+/** Every POV of a chapter as entry ids: set by hand, and named by its scene headings. */
+function povIds(text: StoryText, people: WorldEntryFile[]): string[] {
+  const set = text.povEntryIds ?? (text.povEntryId ? [text.povEntryId] : [])
+  const found = chapterPovs(
+    { povs: set.map((entryId) => ({ name: '', entryId })), headings: text.headings ?? [] },
+    people.map((p) => ({ id: p.id, name: p.name, aliases: p.aliases })),
+  )
+  return [...new Set(found.map((p) => p.entryId).filter((x): x is string => !!x))]
 }
 
 /** What the world store needs from the library. */
@@ -1364,6 +1379,7 @@ export class WorldStore {
     ])
     const matcher = nameMatcher(entryTerms(entries))
     const owner = ownerOf(entries)
+    const people = entries.filter((e) => e.template === 'person')
     const mentions: WorldIndex['mentions'] = {}
     const get = (id: string) => (mentions[id] ??= { chapters: [], counts: [], pov: [] })
     story.forEach((text, position) => {
@@ -1375,8 +1391,10 @@ export class WorldStore {
         get(id).chapters.push(position)
         get(id).counts.push(count)
       }
-      const pov = text.povEntryId && owner.get(text.povEntryId)
-      if (pov) get(pov).pov.push(position)
+      for (const id of povIds(text, people)) {
+        const pov = owner.get(id)
+        if (pov && !get(pov).pov.includes(position)) get(pov).pov.push(position)
+      }
     })
     return { chapters: story.map((s) => s.chapter), mentions }
   }
@@ -1393,10 +1411,12 @@ export class WorldStore {
 
   /** Chapters where an entry is mentioned, with the sentences it is mentioned in. */
   async appearances(worldId: string, entryId: string): Promise<Appearance[]> {
-    const [entry, story] = await Promise.all([
+    const [entry, story, { entries }] = await Promise.all([
       this.readEntry(worldId, entryId),
       this.cachedStory(worldId),
+      this.readAll(worldId),
     ])
+    const people = entries.filter((e) => e.template === 'person')
     const matcher = nameMatcher(entryTerms([entry]))
     const ids = new Set([entryId, ...entry.mergedFrom])
     const out: Appearance[] = []
@@ -1414,7 +1434,7 @@ export class WorldStore {
           }
         }
       }
-      const pov = !!text.povEntryId && ids.has(text.povEntryId)
+      const pov = povIds(text, people).some((id) => ids.has(id))
       if (count || pov) out.push({ chapter: text.chapter, position, count, pov, lines })
     })
     return out

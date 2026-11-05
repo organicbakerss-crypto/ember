@@ -642,10 +642,21 @@ export function WritingView(props: {
       .filter((e) => world && templateOf(world, e).lens === 'who')
       .map((e) => e.name)
     const used = view
-      ? Object.keys(view.chapters).map((id) => liveMeta[id]?.pov ?? view.chapters[id]?.pov)
+      ? Object.keys(view.chapters).flatMap((id) => {
+          const m = liveMeta[id] ?? view.chapters[id]
+          return m?.povs?.length ? m.povs.map((p) => p.name) : [m?.pov]
+        })
       : []
     return [...new Set([...fromWorld, ...used.filter((p): p is string => !!p).sort()])]
   }, [view, liveMeta, world])
+  // The world's people, so scene headings like "Mara" or "Mara interlude" count as POVs.
+  const povPeople = useMemo(
+    () =>
+      (world?.view.entries ?? [])
+        .filter((e) => world && templateOf(world, e).lens === 'who')
+        .map((e) => ({ id: e.id, name: e.name, aliases: e.aliases ?? [] })),
+    [world],
+  )
 
   const current = selectedId ? (liveMeta[selectedId] ?? view?.chapters[selectedId]) : undefined
   const currentTitle = current?.title ?? ''
@@ -1265,6 +1276,7 @@ export function WritingView(props: {
               onOpenManuscript={() => setManuscriptOpen(true)}
               view={view}
               liveMeta={liveMeta}
+              povPeople={povPeople}
               selectedId={selectedId}
               scenes={scenes}
               onSelect={select}

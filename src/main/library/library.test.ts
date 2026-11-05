@@ -153,6 +153,8 @@ describe('chapters and the outline', () => {
       type: 'chapter',
       pov: null,
       povEntryId: null,
+      povs: [],
+      headings: [],
       status: null,
       label: null,
       publish: null,

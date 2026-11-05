@@ -4908,3 +4908,25 @@ kbd {
   max-height: 30vh;
   overflow: auto;
 }
+
+/* A chapter's POVs, as removable chips before the add box. */
+.pov-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.15));
+  white-space: nowrap;
+}
+.pov-chip button {
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+}
+.pov-chip button:hover {
+  opacity: 1;
+}

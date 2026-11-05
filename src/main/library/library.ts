@@ -86,6 +86,7 @@ export type ChapterPatch = Partial<
     | 'type'
     | 'pov'
     | 'povEntryId'
+    | 'povs'
     | 'notes'
     | 'synopsis'
     | 'status'
@@ -428,6 +429,8 @@ export class Library {
             type: file.type,
             pov: file.pov,
             povEntryId: file.povEntryId ?? null,
+            povs: file.povs,
+            headings: docHeadings(file.content),
             status: file.status,
             label: file.label,
             publish: file.publish,
@@ -438,6 +441,8 @@ export class Library {
             type: 'chapter',
             pov: null,
             povEntryId: null,
+            povs: [],
+            headings: [],
             status: null,
             label: null,
             publish: null,
@@ -695,6 +700,7 @@ export class Library {
       title: input.title.trim(),
       type: input.type ?? 'chapter',
       pov: null,
+      povs: [],
       notes: '',
       synopsis: '',
       status: null,
@@ -970,6 +976,14 @@ export class Library {
             },
             paragraphs: docParagraphs(chapter.content),
             povEntryId: chapter.povEntryId ?? null,
+            povEntryIds: [
+              ...new Set(
+                [chapter.povEntryId, ...chapter.povs.map((p) => p.entryId)].filter(
+                  (x): x is string => !!x,
+                ),
+              ),
+            ],
+            headings: docHeadings(chapter.content),
           }),
         )
       }
@@ -2609,4 +2623,22 @@ async function isEmptyOrMissing(dir: string): Promise<boolean> {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return true
     throw err
   }
+}
+
+/** The text of a chapter's headings (scene headings, which can name a POV). */
+export function docHeadings(doc: unknown): string[] {
+  const out: string[] = []
+  const text = (n: { text?: string; content?: unknown[] }): string =>
+    (n.text ?? '') + (n.content ?? []).map((c) => text(c as typeof n)).join('')
+  const walk = (n: { type?: string; content?: unknown[] }) => {
+    if (out.length >= 40) return
+    if (n.type === 'heading') {
+      const t = text(n as { content?: unknown[] }).trim()
+      if (t) out.push(t.slice(0, 120))
+      return
+    }
+    for (const c of n.content ?? []) walk(c as typeof n)
+  }
+  walk(doc as { content?: unknown[] })
+  return out
 }

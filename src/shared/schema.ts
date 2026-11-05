@@ -159,6 +159,17 @@ export const chapterFileSchema = z.looseObject({
   pov: z.string().trim().max(200).nullable(),
   /** The world entry the POV refers to, when it is one (so renaming the character keeps the link). */
   povEntryId: id('entry').nullable().optional(),
+  /** All the chapter's points of view (the first is also `pov`); empty: just `pov`, if any. */
+  povs: z
+    .array(
+      z.looseObject({
+        name: z.string().trim().min(1).max(200),
+        entryId: id('entry').nullable().catch(null).default(null),
+      }),
+    )
+    .max(20)
+    .catch([])
+    .default([]),
   notes: z.string(),
   /** A short summary of the chapter, by the writer (or filled in by the AI when asked). */
   synopsis: z.string().max(5000).default(''),

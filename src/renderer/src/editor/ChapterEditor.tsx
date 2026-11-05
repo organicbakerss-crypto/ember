@@ -21,6 +21,7 @@ import {
 } from './comments'
 import { PAGE_GAP, usePages } from './usePages'
 import { useChapterSaver, type SaveState } from './useChapterSaver'
+import type { Pov } from '@shared/world/povs'
 
 export interface ChapterMeta {
   title: string
@@ -28,6 +29,8 @@ export interface ChapterMeta {
   pov: string | null
   /** The world entry the POV is, if it is one (the name shown follows the entry). */
   povEntryId?: string | null
+  /** Every POV set by hand (the first is also `pov`). */
+  povs?: Pov[]
 }
 
 export interface EditorHandle {
@@ -212,10 +215,29 @@ function EditorPage(
     type: chapter.type,
     pov: chapter.pov,
     povEntryId: chapter.povEntryId ?? null,
+    povs: chapter.povs ?? [],
   })
-  // A linked POV shows the entry's current name, so renaming the character carries through.
-  const povLabel =
-    (meta.povEntryId && props.nameIndex?.world.resolve(meta.povEntryId)?.name) || meta.pov || ''
+  // Linked POVs show the entry's current name, so renaming the character carries through.
+  const setPovs: Pov[] = meta.povs?.length
+    ? meta.povs
+    : meta.pov
+      ? [{ name: meta.pov, entryId: meta.povEntryId ?? null }]
+      : []
+  const povName = (p: Pov) =>
+    (p.entryId && props.nameIndex?.world.resolve(p.entryId)?.name) || p.name
+  const savePovs = (povs: Pov[]) =>
+    update({ povs, pov: povs[0]?.name ?? null, povEntryId: povs[0]?.entryId ?? null })
+  const [povDraft, setPovDraft] = useState('')
+  const addPov = (text: string) => {
+    const name = text.trim()
+    setPovDraft('')
+    if (!name) return
+    // Picking a name from the world links the POV to that entry.
+    const entry = props.nameIndex?.world.view.entries.find((x) => x.name === name)
+    const pov = { name: entry?.name ?? name, entryId: entry?.id ?? null }
+    if (setPovs.some((p) => povName(p).toLowerCase() === pov.name.toLowerCase())) return
+    savePovs([...setPovs, pov])
+  }
   // Content the editor can't represent is never edited or saved.
   const [contentError, setContentError] = useState<string | null>(null)
   const unreadable = useRef(false)
@@ -333,6 +355,7 @@ function EditorPage(
       type: chapter.type,
       pov: chapter.pov,
       povEntryId: chapter.povEntryId ?? null,
+      povs: chapter.povs ?? [],
     }
     setMeta(next)
     onMeta(next)
@@ -606,21 +629,43 @@ function EditorPage(
                 <option value="chapter">Chapter</option>
                 <option value="interlude">Interlude</option>
               </select>
-              <input
-                aria-label="Point of view"
-                disabled={readOnly}
-                placeholder="POV"
-                list="pov-options"
-                value={povLabel}
-                onChange={(e) => {
-                  const pov = e.target.value.trim() ? e.target.value : null
-                  // Picking a name from the world links the POV to that entry.
-                  const entry = pov
-                    ? props.nameIndex?.world.view.entries.find((x) => x.name === pov.trim())
-                    : undefined
-                  update({ pov, povEntryId: entry?.id ?? null })
-                }}
-              />
+              {setPovs.map((p, i) => (
+                <span key={`${p.entryId ?? p.name}-${i}`} className="pov-chip">
+                  {povName(p)}
+                  {!readOnly && (
+                    <button
+                      aria-label={`Remove POV ${povName(p)}`}
+                      title="Remove"
+                      onClick={() => savePovs(setPovs.filter((_, j) => j !== i))}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+              {!readOnly && (
+                <input
+                  aria-label="Point of view"
+                  placeholder={setPovs.length ? '+ POV' : 'POV'}
+                  list="pov-options"
+                  value={povDraft}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    // A pick from the list adds at once; typed names add on Enter or leaving.
+                    if (props.povOptions.includes(v)) addPov(v)
+                    else setPovDraft(v)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addPov(povDraft)
+                    } else if (e.key === 'Backspace' && !povDraft && setPovs.length) {
+                      savePovs(setPovs.slice(0, -1))
+                    }
+                  }}
+                  onBlur={() => addPov(povDraft)}
+                />
+              )}
               <datalist id="pov-options">
                 {props.povOptions.map((p) => (
                   <option key={p} value={p} />
