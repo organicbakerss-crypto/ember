@@ -579,12 +579,21 @@ function EditorPage(
           <article
             className={`page-content ${meta.type} ${paged ? '' : 'page'}`}
             style={paged ? { minHeight: pages * (pageHeight + PAGE_GAP) - PAGE_GAP } : undefined}
-            // Clicking the empty paper below the text puts the cursor at the end.
+            // Clicking the paper around the text: beside a line puts the cursor on that line;
+            // below the last line, at the end.
             onMouseDown={(e) => {
-              if (e.target === e.currentTarget && !contentError) {
-                e.preventDefault()
+              if (e.target !== e.currentTarget || contentError || e.button !== 0) return
+              const box = editor.view.dom.getBoundingClientRect()
+              if (e.clientY < box.top) return
+              e.preventDefault()
+              if (e.clientY > box.bottom) {
                 editor.commands.focus('end')
+                return
               }
+              const left = Math.min(Math.max(e.clientX, box.left + 1), box.right - 1)
+              const hit = editor.view.posAtCoords({ left, top: e.clientY })
+              if (hit) editor.chain().focus().setTextSelection(hit.pos).run()
+              else editor.commands.focus()
             }}
           >
             <div className="chapter-meta small">

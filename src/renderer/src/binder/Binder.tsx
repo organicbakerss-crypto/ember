@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   closestCenter,
   DndContext,
@@ -160,7 +160,18 @@ export function Binder(props: BinderProps) {
   )
 
   const rootIds = useMemo(() => new Set(containers[ROOT]), [containers])
+  // Just moved into another list (an arc, or out of one): the list shifts under the pointer, so
+  // until the screen has caught up the target stays put. Without this a chapter dragged out of
+  // an arc could bounce between the two lists without end (and the screen gave up).
+  const justMoved = useRef(false)
+  const lastOver = useRef<UniqueIdentifier | null>(null)
   const collision: CollisionDetection = (args) => {
+    if (justMoved.current && lastOver.current !== null) return [{ id: lastOver.current }]
+    const hit = pickTarget(args)
+    lastOver.current = hit[0]?.id ?? null
+    return hit
+  }
+  const pickTarget: CollisionDetection = (args) => {
     const id = String(args.active.id)
     const candidates = args.droppableContainers.filter(
       (c) => c.id !== id && (!isArcId(id) || rootIds.has(String(c.id))),
@@ -187,8 +198,17 @@ export function Binder(props: BinderProps) {
       : isArcId(over)
         ? ROOT
         : findContainer(containers, over)
-    // Moves between containers happen live; reordering inside one happens on drop.
-    if (from && to && from !== to) setContainers((c) => moveItem(c, active, over))
+    // Moves between containers happen live (at most once per frame); reordering inside one
+    // happens on drop.
+    if (from && to && from !== to && !justMoved.current) {
+      justMoved.current = true
+      setContainers((c) => moveItem(c, active, over))
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          justMoved.current = false
+        }),
+      )
+    }
   }
   const onDragEnd = (e: DragEndEvent) => {
     const active = String(e.active.id)
