@@ -4,20 +4,36 @@
 
 ## Targets
 
-These are measured on the big test library (90 chapters, about 196,000 words, a world of 300 entries). The **built** app is checked automatically after every round, and a change that breaks a target doesn't go in.
+There are two test libraries, and both are checked in the **built** app after every round. A change that breaks a target doesn't go in.
 
-| Action                                    | Today (built)               | Target                |
-| ----------------------------------------- | --------------------------- | --------------------- |
-| Start → bookshelf                         | 1.1 s                       | < 1 s                 |
-| Open a book                               | 0.4 s                       | < 0.2 s               |
-| Switch chapter                            | 0.2–0.4 s                   | < 0.1 s               |
-| Typing (any key, worst case)              | 30 ms                       | < 16 ms               |
-| World beside / World mode                 | 0.6–0.9 s                   | < 0.2 s               |
-| Any world change shown (save, undo, sync) | reloads everything (0.2 s+) | < 20 ms               |
-| Find in the whole story                   | 0.9 s                       | < 0.2 s               |
-| Manuscript                                | 2.2 s frozen                | < 0.3 s, never frozen |
-| Book mode                                 | 2.2 s frozen                | < 0.3 s, never frozen |
-| Saving a chapter                          | grows with the book         | the same at any size  |
+- **Big:** 90 chapters, about 196,000 words, a world of 300 entries.
+- **Stress:** 30 books, 750 chapters, **2.84 million words**, and a world of 1,000 entries. One book is a size ladder of single chapters of 500, 1k, 2k, 5k, 10k, 20k, 30k, 50k and 100k words.
+
+**The rule:**
+
+- What a writer waits for may depend on what's **on screen**. It must not depend on how long the chapter is, or how big the library is.
+- Whole-chapter and whole-library work happens once and is then kept up to date piece by piece, or runs in the background without ever freezing the screen.
+
+| Action                                                   | Today (built, stress library)             | Target                          |
+| -------------------------------------------------------- | ----------------------------------------- | ------------------------------- |
+| Start → bookshelf                                        | 2.0 s                                     | < 1 s                           |
+| Bookshelf after a new chapter, rename or move            | rebuilt in 1.1 s (re-reads every chapter) | < 20 ms                         |
+| Open a chapter, 2k / 30k / 100k words                    | 0.11 / 0.6 / 3.1 s                        | < 0.15 s at any size            |
+| Screen frozen after opening, 30k / 100k words            | 0.76 / 4.6 s                              | never more than 50 ms at a time |
+| Frozen at each pause in typing, 30k / 100k words         | 0.47 / 2.9 s                              | never more than 50 ms           |
+| Typing, key → screen (30k / 100k words)                  | 23 / 59 ms median                         | < 16 ms at any size             |
+| World beside / World mode (1,000 entries)                | 1.0 s                                     | < 0.2 s                         |
+| Any world change shown (save, undo, sync)                | reloads everything                        | < 20 ms                         |
+| Find in the whole story (2.84M words)                    | 1.7 s                                     | < 0.3 s                         |
+| Name catcher (inbox), AI summaries list, publishing list | 3.4 / 2.2 / 2.3 s                         | < 0.2 s                         |
+| Manuscript / Book mode of a 100k-word book               | 6.6 / 6.3 s frozen                        | < 0.3 s, never frozen           |
+| Saving a chapter                                         | grows with the book                       | the same at any size            |
+
+**Why bigger chapters are slower (profiled):**
+
+- About 95% of the freeze after opening a long chapter is **page-break layout**. It finds where every line of the whole chapter starts on screen, one line at a time, which costs about 15 ms per 1,000 words.
+- It runs twice on opening, and again at every pause in typing.
+- Everything else (building the page, word counts, highlights) is under 0.1 s even at 30,000 words.
 
 ## 0. Run the real app, not the dev build (first, almost free)
 
@@ -55,10 +71,18 @@ The fixes:
    - word counts on the bookshelf;
    - volume stats;
    - story-wide search.
-4. **Saves that don't grow with the book.** The manifest (sync's list of files) is updated in memory and written at most once a second, batching several saves into one write. Writing the chapter itself is unchanged and stays crash-safe: the manifest can always be rebuilt from the files, as sync already does when one is missing.
-5. **Heavy jobs off the main process.** The name catcher, the world digest for the AI, and exports run in a worker thread, so a long job can't hold up saving or opening things.
+4. **A bookshelf that doesn't re-read the library.** Word counts per chapter are kept in memory and on disk (with a fingerprint of the file), and refreshed only for the chapter that changed. A new chapter, rename or move then updates the shelf in milliseconds, instead of re-reading all 2.8 million words.
+5. **Saves that don't grow with the book.** The manifest (sync's list of files) is updated in memory and written at most once a second, batching several saves into one write. Writing the chapter itself is unchanged and stays crash-safe: the manifest can always be rebuilt from the files, as sync already does when one is missing.
+6. **Heavy jobs off the main process.** The name catcher, the world digest for the AI, and exports run in a worker thread, so a long job can't hold up saving or opening things.
 
 ## 3. Screens: draw only what's needed, when it's needed
+
+0. **Page breaks that don't freeze (first: this is the long-chapter freeze).**
+   - Measure whole paragraphs, one cheap measurement each. Look at individual lines only in the paragraph that crosses the bottom of a page.
+   - Lay out the pages on screen first, then the rest in small slices that never block a click or a key.
+   - While typing, re-measure only from the changed paragraph onwards, and only up to where the breaks stop moving.
+   - Never run the layout twice for one change.
+   - **Result:** opening a 100k-word chapter freezes for no more than 50 ms, and pausing while typing freezes for nothing.
 
 1. **Load screens when first opened.** World mode, maps, the board, Book mode, the Manuscript, the AI pane, voice, Settings and the export dialogs each become a separate piece that loads when used. Start-up then loads only the bookshelf and the writing view.
 2. **Typing does only the work of the paragraph being typed in.**
@@ -99,11 +123,12 @@ The fixes:
 
 ## Order of work
 
-1. **Section 0 and section 1** (the built app, packaging, the speed log and the speed check), so every later round is measured.
-2. **Section 2** (memory instead of disk, sending changes). This fixes the world beside, World mode, search, the inbox and saves.
-3. **Section 3.1–3.3** (start-up, typing, chapter switching).
-4. **Section 3.4–3.5** (Manuscript and Book mode).
-5. **Section 3.6–3.8 and section 4** (long lists, pictures, the audit fixes).
+1. **Section 3.0** (page breaks that don't freeze): the long-chapter freeze, felt now.
+2. **Section 0 and section 1** (the built app, packaging, the speed log and the speed check on both test libraries), so every later round is measured.
+3. **Section 2** (memory instead of disk, sending changes). This fixes the world beside, World mode, search, the inbox and saves.
+4. **Section 3.1–3.3** (start-up, typing, chapter switching).
+5. **Section 3.4–3.5** (Manuscript and Book mode).
+6. **Section 3.6–3.8 and section 4** (long lists, pictures, the audit fixes).
 
 After each round: the speed check, the full tests, and a real-app run. Nothing that keeps your words safe changes:
 
