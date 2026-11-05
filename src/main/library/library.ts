@@ -353,18 +353,35 @@ export class Library {
   }
 
   /** Total words across a volume's chapters. Unreadable chapters count as zero. */
+  /**
+   * Word counts by chapter file, kept while the file is unchanged (same size
+   * and time), so the bookshelf doesn't re-read every chapter of the library
+   * each time it's shown. A file changed by a save or by sync is read again.
+   */
+  private readonly wordCounts = new Map<string, { mtimeMs: number; size: number; words: number }>()
+
+  private async chapterWords(file: string): Promise<number> {
+    const stat = await fs.promises.stat(file)
+    const known = this.wordCounts.get(file)
+    if (known && known.mtimeMs === stat.mtimeMs && known.size === stat.size) return known.words
+    const chapter = await readJsonFile(file, chapterFileSchema)
+    const words = docWordCount(chapter.content)
+    this.wordCounts.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, words })
+    return words
+  }
+
   private async volumeWordCount(seriesId: string, volumeId: string): Promise<number> {
-    let total = 0
     const dir = this.paths.chaptersDir(seriesId, volumeId)
-    for (const chapterId of await this.chapterIdsOnDisk(seriesId, volumeId)) {
-      try {
-        const chapter = await readJsonFile(join(dir, `${chapterId}.json`), chapterFileSchema)
-        total += docWordCount(chapter.content)
-      } catch (err) {
-        if (!(err instanceof AppError)) throw err
-      }
-    }
-    return total
+    const counts = await Promise.all(
+      (await this.chapterIdsOnDisk(seriesId, volumeId)).map((chapterId) =>
+        this.chapterWords(join(dir, `${chapterId}.json`)).catch((err: unknown) => {
+          // Missing or unreadable: not counted (reported elsewhere, left alone).
+          if (err instanceof AppError || (err as NodeJS.ErrnoException).code === 'ENOENT') return 0
+          throw err
+        }),
+      ),
+    )
+    return counts.reduce((a, b) => a + b, 0)
   }
 
   async getSeries(seriesId: string): Promise<SeriesFile> {

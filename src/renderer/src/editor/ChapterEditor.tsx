@@ -263,13 +263,15 @@ function EditorPage(
     onUpdate: ({ editor: e }) => {
       if (unreadable.current || readOnly) return
       saver.changeContent()
-      onWords(docWords(e.state.doc))
-      onScenes(findScenes(e.state.doc))
-      props.onComments?.(listComments(e.state.doc))
-      // Stats recalculate a moment after typing stops, not on every key.
+      // Word count, scenes, comments and stats update a moment after typing stops, not on
+      // every key (each walks the whole chapter and redraws the writing view).
       clearTimeout(paragraphTimer.current)
       paragraphTimer.current = setTimeout(() => {
-        if (!e.isDestroyed) props.onParagraphs(editorParagraphs(e.state.doc))
+        if (e.isDestroyed) return
+        onWords(docWords(e.state.doc))
+        onScenes(findScenes(e.state.doc))
+        props.onComments?.(listComments(e.state.doc))
+        props.onParagraphs(editorParagraphs(e.state.doc))
       }, RECALC_DELAY_MS)
     },
     editorProps: { attributes: { class: 'chapter-content', spellcheck: 'true' } },
@@ -446,17 +448,20 @@ function EditorPage(
       const made = addCommentTr(editor.state)
       if (!made) return null
       editor.view.dispatch(made.tr)
+      props.onComments?.(listComments(editor.state.doc))
       return made.id
     },
     setCommentNote(id: string, note: string) {
       if (readOnly || contentError) return
       const tr = setNoteTr(editor.state, id, note)
       if (tr) editor.view.dispatch(tr)
+      props.onComments?.(listComments(editor.state.doc))
     },
     removeComment(id: string) {
       if (readOnly || contentError) return
       const tr = removeCommentTr(editor.state, id)
       if (tr) editor.view.dispatch(tr)
+      props.onComments?.(listComments(editor.state.doc))
     },
     showComment(id: string) {
       const c = listComments(editor.state.doc).find((x) => x.id === id)

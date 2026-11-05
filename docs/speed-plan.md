@@ -135,3 +135,31 @@ After each round: the speed check, the full tests, and a real-app run. Nothing t
 - writes stay atomic;
 - unreadable files are reported, not replaced;
 - sync keeps its rules.
+
+## Progress
+
+### Round 1 (Nov 2026): non-freezing page breaks, typing, the bookshelf
+
+**What changed:**
+
+- **Page breaks** (`editor/pagination.ts`):
+  - **Measuring:** each paragraph gets one measurement. Lines are measured only in the paragraph that crosses a page edge, with one position lookup per page instead of one per line.
+  - **While typing:** pages before the changed paragraph are kept. An edit inside one paragraph that doesn't change its height relays nothing.
+  - **Slicing:** the work runs in 12 ms slices, with the pages on screen done first.
+  - **Running once:** it no longer runs twice on opening (fonts and size changes only trigger it when they really change something).
+  - **Safety:** pending cursor moves and keys are read before each update, and an out-of-date layout is never applied.
+  - **Checked:** every line sits inside a page after opening, adding and deleting, at 5k and 30k words, the same as before.
+- **Typing:** word count, scenes, comments and stats update half a second after typing stops instead of on every key. The word count recounts only the paragraph that changed.
+- **Bookshelf:** each chapter's word count is kept while its file is unchanged (same size and time). Files changed by sync are recounted.
+
+**Results** (stress library, built app):
+
+|                                              | Before      | After         |
+| -------------------------------------------- | ----------- | ------------- |
+| 30k chapter: frozen after opening            | 0.76 s      | 0             |
+| 30k chapter: frozen at each pause in typing  | 0.47 s      | 0             |
+| 30k / 100k chapter: typing median            | 23 / 59 ms  | 13 / 24 ms    |
+| 100k chapter: shown / frozen after opening   | 3.1 / 4.6 s | 0.48 / 0.18 s |
+| 100k chapter: frozen at each pause in typing | 2.9 s       | 0.05 s        |
+| Manuscript of a 100k-word book: frozen       | 6.6 s       | 0.05 s        |
+| Bookshelf list (2.84M words)                 | 1.1 s       | 0.05 s        |

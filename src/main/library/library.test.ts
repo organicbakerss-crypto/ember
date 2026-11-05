@@ -446,6 +446,31 @@ describe('word counts', () => {
     expect((await lib.snapshot()).series[0]!.volumes[0]!.wordCount).toBe(3)
   })
 
+  it('keeps counts current after saves, outside changes (sync) and deletions', async () => {
+    const { ref } = await makeVolume()
+    const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
+    const a = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'A' })
+    const words = async () => (await lib.snapshot()).series[0]!.volumes[0]!.wordCount
+    await lib.saveChapter(...ref, a.id, { content: { type: 'doc', content: [para('one two')] } })
+    expect(await words()).toBe(2)
+    await lib.saveChapter(...ref, a.id, {
+      content: { type: 'doc', content: [para('one two three')] },
+    })
+    expect(await words()).toBe(3)
+    // Written by something else (sync), not through the library.
+    const path = join(lib.paths.chaptersDir(...ref), `${a.id}.json`)
+    const file = JSON.parse(await fs.promises.readFile(path, 'utf8')) as Record<string, unknown>
+    await fs.promises.writeFile(
+      path,
+      JSON.stringify({ ...file, content: { type: 'doc', content: [para('a b c d e f')] } }),
+    )
+    expect(await words()).toBe(6)
+    // A damaged chapter isn't counted (and isn't touched); a removed one is gone from the total.
+    await fs.promises.writeFile(path, '{ not json')
+    expect(await words()).toBe(0)
+    expect(await fs.promises.readFile(path, 'utf8')).toBe('{ not json')
+  })
+
   it('reports per-chapter counts and keeps the session start for the whole run', async () => {
     const { ref } = await makeVolume()
     const a = await lib.createChapter({ seriesId: ref[0], volumeId: ref[1], title: 'A' })

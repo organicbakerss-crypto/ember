@@ -31,6 +31,18 @@ function firstWords(text: string): string {
 }
 
 /** Word count straight from the editor's document (cheap enough to run on every change). */
+/** Word counts of blocks already counted: an edit leaves every other block's node as it was. */
+const blockWords = new WeakMap<PMNode, number>()
+
 export function docWords(doc: PMNode): number {
-  return countWords(doc.textBetween(0, doc.content.size, '\n', '\n'))
+  let total = 0
+  doc.forEach((block) => {
+    let words = blockWords.get(block)
+    if (words === undefined) {
+      words = countWords(block.textBetween(0, block.content.size, '\n', '\n'))
+      blockWords.set(block, words)
+    }
+    total += words
+  })
+  return total
 }
