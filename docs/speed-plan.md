@@ -1,0 +1,112 @@
+# Speed plan: making everything snappy
+
+**Goal:** everything a writer does answers within about a tenth of a second, and typing never waits. This must hold on a big library, not a toy one. The measurements behind this plan are in `docs/audit-2026-11b.md`.
+
+## Targets
+
+These are measured on the big test library (90 chapters, about 196,000 words, a world of 300 entries). The **built** app is checked automatically after every round, and a change that breaks a target doesn't go in.
+
+| Action                                    | Today (built)               | Target                |
+| ----------------------------------------- | --------------------------- | --------------------- |
+| Start → bookshelf                         | 1.1 s                       | < 1 s                 |
+| Open a book                               | 0.4 s                       | < 0.2 s               |
+| Switch chapter                            | 0.2–0.4 s                   | < 0.1 s               |
+| Typing (any key, worst case)              | 30 ms                       | < 16 ms               |
+| World beside / World mode                 | 0.6–0.9 s                   | < 0.2 s               |
+| Any world change shown (save, undo, sync) | reloads everything (0.2 s+) | < 20 ms               |
+| Find in the whole story                   | 0.9 s                       | < 0.2 s               |
+| Manuscript                                | 2.2 s frozen                | < 0.3 s, never frozen |
+| Book mode                                 | 2.2 s frozen                | < 0.3 s, never frozen |
+| Saving a chapter                          | grows with the book         | the same at any size  |
+
+## 0. Run the real app, not the dev build (first, almost free)
+
+Today the app is run with `npm run dev`, which is 2–3× slower everywhere:
+
+- it loads every screen twice on purpose (React's strict mode);
+- it builds code on first use;
+- it uses React's slower development version.
+
+The fixes:
+
+- **Package Ember** as a real app: an AppImage or pacman package for Arch, and a `.dmg` for the Intel Mac. It starts from the launcher like any app.
+- **Until then, use `npm run build && npm start`**, which runs the built app.
+- **Keep `npm run dev` for working on the code only.**
+
+## 1. Measure where it actually is (before changing anything)
+
+- **A speed log.** Every request to the main process and every screen load records how long it took. **Settings → Speed** shows the slowest recent ones, with a "Copy" button to send them over.
+- **Why it comes first:** the 10–15 s wait when opening the world beside didn't reproduce here (0.6 s). The log shows exactly what's slow on your own computer and library.
+- **A speed check script** (`npm run speed`) builds the big test library and times every action in the table above, in the built app.
+
+## 2. Main process: stop re-reading everything
+
+1. **Keep the world in memory.** Each world's parsed entries, maps, relationships, inbox and board stay loaded once read.
+   - A save updates the copy in memory as well as the file.
+   - A sync write, or a file changed outside the app, refreshes just that file.
+   - Name links (names typed on a page) are worked out per entry, and redone only for entries whose page or a name changed.
+   - **Result:** opening the world costs only the time to send it over, not a read of 300+ files.
+2. **Send changes, not reloads.** After a save, World mode receives "this entry changed" with the new entry, and patches what it shows. Today it reloads the whole world after every change. Undo, sync and the AI's changes work the same way.
+3. **Keep the story's text in memory too.** Per chapter, keep its plain paragraphs, word count and a fingerprint, and refresh only the chapter that was saved. Everything that reads the whole story then reads memory instead of disk:
+   - the name catcher;
+   - "where does this name appear";
+   - AI summaries;
+   - the publishing list;
+   - word counts on the bookshelf;
+   - volume stats;
+   - story-wide search.
+4. **Saves that don't grow with the book.** The manifest (sync's list of files) is updated in memory and written at most once a second, batching several saves into one write. Writing the chapter itself is unchanged and stays crash-safe: the manifest can always be rebuilt from the files, as sync already does when one is missing.
+5. **Heavy jobs off the main process.** The name catcher, the world digest for the AI, and exports run in a worker thread, so a long job can't hold up saving or opening things.
+
+## 3. Screens: draw only what's needed, when it's needed
+
+1. **Load screens when first opened.** World mode, maps, the board, Book mode, the Manuscript, the AI pane, voice, Settings and the export dialogs each become a separate piece that loads when used. Start-up then loads only the bookshelf and the writing view.
+2. **Typing does only the work of the paragraph being typed in.**
+   - Word count, scenes, comments and stats update for the changed paragraph only.
+   - Whole-chapter updates (the binder's scene list, the comments list) wait until typing pauses.
+   - Rhythm/Echo and the linked-name highlights recompute only the changed paragraph.
+3. **Switching chapters:**
+   - Keep the editor and swap its text instead of building a new one.
+   - Show the page first; do the page-break layout and analysis right after, in idle time.
+   - Read the next and previous chapters ahead, so switching to them is instant.
+4. **Manuscript:**
+   - Lay out pages chapter by chapter, only for the chapters on screen and nearby. The rest is done in idle moments, without freezing.
+   - Page breaks are measured per chapter and kept, so editing one chapter re-measures only that chapter.
+5. **Book mode:**
+   - Count pages chapter by chapter in idle moments, starting with the first.
+   - Only the four pages a turn can show are drawn, each with only its own page's text (not the whole chapter).
+   - "Go to chapter" waits only for the chapters before it.
+6. **Long lists draw only the rows on screen:** the Cast cards, the map's "not on the map yet" tray, search results, the binder for very long books, and the inbox.
+7. **Pictures at the size they're shown:**
+   - Make a small copy of each portrait when it's added (about 128 px), and a screen-sized copy of each map (about 2,000 px).
+   - Load the full map only when zooming in.
+   - Show a soft "loading" state instead of a grey box.
+   - Decode pictures off the main screen thread.
+8. **Work out once per change, not on every redraw.** The name index, name matcher, timeline and "last seen" are computed once per version of the world, not on each render.
+
+## 4. Fixes from the audit (alongside)
+
+1. **People board:**
+   - a readable starting layout (groups by faction and family, not one ring);
+   - filters: only this chapter's people, one faction, or a person and their links;
+   - names shown on hover when crowded;
+   - zoom.
+2. **World search** shows its results over the side panel, without pushing the lenses away, and the sideways scrollbar goes.
+3. **One view switch** at the top of the writing view: **Page · Manuscript · Book**. "World beside" is drawn the same size as the other buttons.
+4. **When → Not on the timeline yet:** compact rows (name, then "Place…" on hover), drag onto the timeline, and only the first few shown with "Show all".
+5. **Entries of an unknown kind** show as "Other kind", not quietly under How.
+6. **The map shows a loading state** while it decodes (see 3.7).
+
+## Order of work
+
+1. **Section 0 and section 1** (the built app, packaging, the speed log and the speed check), so every later round is measured.
+2. **Section 2** (memory instead of disk, sending changes). This fixes the world beside, World mode, search, the inbox and saves.
+3. **Section 3.1–3.3** (start-up, typing, chapter switching).
+4. **Section 3.4–3.5** (Manuscript and Book mode).
+5. **Section 3.6–3.8 and section 4** (long lists, pictures, the audit fixes).
+
+After each round: the speed check, the full tests, and a real-app run. Nothing that keeps your words safe changes:
+
+- writes stay atomic;
+- unreadable files are reported, not replaced;
+- sync keeps its rules.
