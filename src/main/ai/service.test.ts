@@ -525,4 +525,61 @@ describe('the AI service', () => {
     expect(fake.requests).toHaveLength(2)
     expect(again.lines['ew grape']).toBe('Ashley')
   })
+
+  it('never answers blind: with nothing chosen it looks up the world and the story first', async () => {
+    fake = await startFakeOllama(() => 'By the boats.')
+    const ref = await story()
+    const r = await service({}).ask(
+      {
+        requestId: 'r-look',
+        seriesId: ref.seriesId,
+        mode: 'chat',
+        messages: [{ role: 'user', content: 'Where was Odo waiting?' }],
+        scope: null,
+        attachments: [{ name: 'handoff.md', text: 'Odo is secretly a prince.' }],
+      },
+      () => {},
+    )
+    const system = fake.requests[0]!.messages[0]!.content
+    expect(system).toContain('Odo waited by the boats.')
+    expect(system).toContain('handoff.md')
+    expect(system).toContain('Odo is secretly a prince.')
+    expect(system).toContain('never invent')
+    expect(r.lookedAt.join(' ')).toContain('passages')
+    expect(r.lookedAt.join(' ')).toContain('handoff.md')
+  })
+
+  it('reads the whole story word for word, or in parts with running notes when it is long', async () => {
+    fake = await startFakeOllama((req) =>
+      req.messages[0]!.content.includes('running notes')
+        ? 'NOTES: Mara at the harbour.'
+        : 'Answer.',
+    )
+    const ref = await story()
+    const scope = { kind: 'full' as const, ...ref, volumeId: null, chapterId: null, text: '' }
+    const ask = (q: string) =>
+      service({}).ask(
+        { requestId: `r-${q}`, mode: 'ask', messages: [{ role: 'user', content: q }], scope },
+        () => {},
+      )
+    await ask('Who is at the harbour?')
+    expect(fake.requests.at(-1)!.messages[0]!.content).toContain('Odo waited by the boats.')
+    // A long story: read in parts, the answer from the notes.
+    const long = Array.from(
+      { length: 700 },
+      (_, i) => `Sentence ${i} of a long chapter goes on and on here.`,
+    )
+    const ch = await lib.createChapter({
+      seriesId: ref.seriesId,
+      volumeId: ref.volumeId,
+      title: 'Long',
+    })
+    await lib.saveChapter(ref.seriesId, ref.volumeId, ch.id, { content: doc(...long) })
+    const before = fake.requests.length
+    const r = await ask('Who is at the harbour?')
+    const sent = fake.requests.slice(before)
+    expect(sent.length).toBeGreaterThan(2)
+    expect(sent.at(-1)!.messages[0]!.content).toContain('NOTES: Mara at the harbour.')
+    expect(r.lookedAt.join(' ')).toContain('parts')
+  })
 })

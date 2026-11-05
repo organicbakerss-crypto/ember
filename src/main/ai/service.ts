@@ -10,6 +10,7 @@
  * anything.
  */
 import { docParagraphs } from '@shared/analysis/doc'
+import { findPassages, pickSummaries, searchTerms, storyParts, type LookupChapter } from './lookup'
 import { entryTerms, nameMatcher } from '@shared/names'
 import type { AiSettings } from '@shared/settings'
 import type { AiStatus } from '@shared/ipc'
@@ -44,6 +45,7 @@ const DEFAULT_CHATGPT_MODEL = 'gpt-6.1-sol'
 import {
   chatMessages,
   editMessages,
+  notesMessages,
   summaryMessages,
   type AiMode,
   type PromptContext,
@@ -59,6 +61,10 @@ const CHAPTER_WORDS = 2500
 
 export interface AskInput {
   requestId: string
+  /** The story asked about (also when nothing in it is being read). */
+  seriesId?: string
+  /** Files the writer attached to the conversation, as text. */
+  attachments?: { name: string; text: string }[]
   mode: AiMode
   messages: { role: 'user' | 'assistant'; content: string }[]
   scope: {
@@ -85,6 +91,31 @@ interface Provider {
 }
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+const clipWords = (s: string, n: number) => {
+  const all = s.split(/(\s+)/)
+  return all.length > n * 2 ? `${all.slice(0, n * 2).join('')} […]` : s
+}
+
+/** How much goes to each kind of model (in words, or counts). */
+const LIMITS = {
+  ollama: {
+    fullStory: 5000,
+    readPart: 2500,
+    attachment: 3000,
+    beforeChapter: 1500,
+    summaries: 8,
+    passages: 6,
+  },
+  chatgpt: {
+    fullStory: 90000,
+    readPart: 40000,
+    attachment: 30000,
+    beforeChapter: 8000,
+    summaries: 20,
+    passages: 16,
+  },
+}
 
 /** How much of a chapter goes to the AI at once when reading it for the world. */
 const READ_WORDS = { ollama: 1500, chatgpt: 12000 }
@@ -243,63 +274,158 @@ export class AiService {
     input: AskInput,
     onToken: (text: string) => void,
     onProgress: (text: string) => void = () => {},
-  ): Promise<{ text: string }> {
+  ): Promise<{ text: string; lookedAt: string[] }> {
     const provider = await this.client()
     return this.track(input.requestId, async (signal) => {
-      const context = await this.context(input, provider, signal, onProgress)
+      const lookedAt: string[] = []
+      const context = await this.context(input, provider, signal, onProgress, lookedAt)
+      onProgress('')
       const text = await provider.chat({
         messages: chatMessages(context, input.messages),
         signal,
         onToken,
       })
-      return { text }
+      return { text, lookedAt }
     })
   }
 
-  /** What the model reads: the scope, the entries named in it, and for questions the digest. */
+  /** The story's chapters in order, with their summaries, for looking things up. */
+  private async lookupChapters(seriesId: string): Promise<(LookupChapter & { id: string })[]> {
+    const all = await this.options.host.current.storySummaries(seriesId)
+    const volumes = new Set(all.map((s) => s.chapter.volumeId)).size
+    return all.map((s) => ({
+      id: s.chapter.id,
+      label: `${volumes > 1 ? `${s.chapter.volumeName} › ` : ''}${s.chapter.label}`,
+      title: s.chapter.title,
+      paragraphs: s.paragraphs,
+      summary: s.current ? s.summary : null,
+    }))
+  }
+
+  /**
+   * What the model reads: the scope, the entries named in it, files attached,
+   * and (so it never answers blind) what it looked up for the question:
+   * chapter summaries first, then the world, then passages of the story.
+   */
   private async context(
     input: AskInput,
     provider: Provider,
     signal: AbortSignal,
     onProgress: (text: string) => void,
+    lookedAt: string[],
   ): Promise<PromptContext> {
     const context: PromptContext = { mode: input.mode, scope: null, entries: [] }
     const scope = input.scope
-    if (!scope) return context
+    const seriesId = scope?.seriesId ?? input.seriesId
+    const limit = LIMITS[provider.kind]
+    if (input.attachments?.length) {
+      context.attachments = input.attachments.map((a) => ({
+        name: a.name,
+        text: clipWords(a.text, limit.attachment),
+      }))
+      lookedAt.push(`attached: ${input.attachments.map((a) => a.name).join(', ')}`)
+    }
+    if (!seriesId) return context
     const library = this.options.host.current
-    let text = scope.text
-    if (scope.kind === 'story') {
-      const series = await library.getSeries(scope.seriesId)
-      text = await this.storyText(scope.seriesId, provider, signal, onProgress)
+    const series = await library.getSeries(seriesId)
+    const question = [...input.messages].reverse().find((m) => m.role === 'user')?.content ?? ''
+    let text = scope?.text ?? ''
+    let chapters: (LookupChapter & { id: string })[] | null = null
+    const story = async () => (chapters ??= await this.lookupChapters(seriesId))
+
+    if (scope?.kind === 'story') {
+      text = await this.storyText(seriesId, provider, signal, onProgress)
       context.scope = { kind: 'story', text, chapterTitle: series.name }
-    } else {
+      lookedAt.push('every chapter’s summary')
+    } else if (scope?.kind === 'full') {
+      const all = await story()
+      const total = all.reduce((n, c) => n + c.paragraphs.reduce((m, p) => m + words(p), 0), 0)
+      if (total <= limit.fullStory) {
+        text = storyParts(all, Number.MAX_SAFE_INTEGER).join('\n\n')
+        lookedAt.push(`the whole story word for word (~${total.toLocaleString('en')} words)`)
+      } else {
+        const parts = storyParts(all, limit.readPart)
+        let notes = ''
+        for (const [i, part] of parts.entries()) {
+          onProgress(`Reading the whole story: part ${i + 1} of ${parts.length}…`)
+          notes = (
+            await provider.chat({
+              messages: notesMessages(question, notes, part, i + 1, parts.length),
+              temperature: 0.2,
+              signal,
+            })
+          ).trim()
+        }
+        text = notes
+        context.readInParts = true
+        lookedAt.push(
+          `the whole story in ${parts.length} parts with running notes (~${total.toLocaleString('en')} words)`,
+        )
+      }
+      context.scope = { kind: 'full', text, chapterTitle: series.name }
+    } else if (scope) {
       if (!scope.volumeId || !scope.chapterId) {
         throw new AppError('invalid-input', 'Open a chapter for the AI to read.')
       }
-      const chapter = await library.readChapter(scope.seriesId, scope.volumeId, scope.chapterId)
+      const chapter = await library.readChapter(seriesId, scope.volumeId, scope.chapterId)
       if (scope.kind === 'chapter') {
         const paragraphs = docParagraphs(chapter.content)
         text = paragraphs.join('\n\n')
         if (words(text) > CHAPTER_WORDS) text = await this.summarise(paragraphs, provider, signal)
       }
       context.scope = { kind: scope.kind, text, chapterTitle: chapter.title }
+      lookedAt.push(
+        scope.kind === 'chapter'
+          ? `“${chapter.title || 'Untitled'}”`
+          : `${scope.kind === 'selection' ? 'your selection' : 'what’s on screen'} in “${chapter.title || 'Untitled'}”`,
+      )
+      // Brainstorming: the two chapters before it too.
+      if (input.mode === 'brainstorm') {
+        const all = await story()
+        const at = all.findIndex((c) => c.id === scope.chapterId)
+        context.before = all.slice(Math.max(0, at - 2), Math.max(0, at)).map((c) => ({
+          title: `${c.label} “${c.title || 'Untitled'}”`,
+          text: clipWords(c.paragraphs.join('\n\n'), limit.beforeChapter),
+        }))
+        if (context.before.length) lookedAt.push(`the ${context.before.length} chapters before it`)
+      }
     }
 
-    const series = await library.getSeries(scope.seriesId)
+    // The world: entries named in the text and the question; the digest for questions.
+    let names: string[] = []
     if (series.worldId) {
       const view = await library.world.view(series.worldId)
+      names = view.entries.flatMap((e) => [e.name, ...(e.aliases ?? [])])
       const counts = new Map<string, number>()
-      for (const m of nameMatcher(entryTerms(view.entries)).find(text)) {
-        counts.set(m.entryId, (counts.get(m.entryId) ?? 0) + 1)
-      }
+      const matcher = nameMatcher(entryTerms(view.entries))
+      // Named in the question first: that's what the writer is asking about.
+      for (const m of matcher.find(question))
+        counts.set(m.entryId, (counts.get(m.entryId) ?? 0) + 1000)
+      for (const m of matcher.find(text)) counts.set(m.entryId, (counts.get(m.entryId) ?? 0) + 1)
       const named = [...counts].sort((a, b) => b[1] - a[1]).slice(0, MAX_ENTRIES)
       for (const [entryId] of named) {
         const entry = await library.world.entryText(series.worldId, entryId).catch(() => '')
         if (entry) context.entries.push(entry.slice(0, MAX_ENTRY_CHARS))
       }
-      if (input.mode === 'ask' || scope.kind === 'story') {
+      if (context.entries.length)
+        lookedAt.push(plural(context.entries.length, 'world entry', 'world entries'))
+      if (input.mode === 'ask' || scope?.kind === 'story' || scope?.kind === 'full' || !scope) {
         context.digest = (await library.world.digest(series.worldId)).slice(0, MAX_DIGEST_CHARS)
+        lookedAt.push('the world overview')
       }
+    }
+
+    // Look up the question in the summaries and the story itself (not needed when it read it all).
+    if (scope?.kind !== 'story' && scope?.kind !== 'full' && question.trim()) {
+      onProgress('Looking through the story…')
+      const all = await story()
+      const terms = searchTerms(question, names)
+      const summaries = pickSummaries(all, terms, limit.summaries)
+      const passages = findPassages(all, terms, limit.passages)
+      if (summaries.length || passages.length) context.lookup = { summaries, passages }
+      if (summaries.length)
+        lookedAt.push(plural(summaries.length, 'chapter summary', 'chapter summaries'))
+      if (passages.length) lookedAt.push(plural(passages.length, 'passage', 'passages'))
     }
     return context
   }

@@ -37,6 +37,7 @@ import type { LibraryHost } from './libraryHost'
 import type { SyncService } from './sync/service'
 import type { AiService } from './ai/service'
 import { AiJobs } from './ai/jobs'
+import { Attachments } from './ai/attachments'
 import { AutoWorld } from './ai/autoWorld'
 import { docBlocks, segments } from '@shared/voice/script'
 import type { VoiceService } from './voice/service'
@@ -59,6 +60,7 @@ export function registerIpc(
 ): { libraryChanged: (change: LibraryChange) => void } {
   const { manager, leases } = windows
   // Asking the other windows what they show (for a torn-off AI window).
+  const attachments = new Attachments(() => join(host.current.paths.localDir, 'ai-attachments'))
   const scopeAsks = new Map<string, (scope: IpcResult<'ai:scope'>) => void>()
   let scopeAskId = 0
   // AI work runs here, apart from the window that asked (it keeps going if that pane closes).
@@ -145,6 +147,8 @@ export function registerIpc(
       copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
     'ai:status': (input) => ai.status(input),
+    'ai:attach': (input) => attachments.add(input.conversationId, input.name, input.data),
+    'ai:attachmentsHere': (input) => attachments.here(input.conversationId, input.ids),
     'ai:ask': async (input, event) => {
       // Saved now, so the question is kept whatever happens; again with the answer.
       await host.current.saveConversation(input.seriesId, input.conversation)
@@ -160,16 +164,32 @@ export function registerIpc(
           sent: null,
           origin: event.sender.id,
         },
-        (onToken, onProgress) => ai.ask(input, onToken, onProgress),
-        async (job) => {
+        async (onToken, onProgress) =>
+          ai.ask(
+            {
+              ...input,
+              attachments: input.attachmentIds?.length
+                ? await attachments.texts(input.conversation.id, input.attachmentIds)
+                : [],
+            },
+            onToken,
+            onProgress,
+          ),
+        async (job, outcome) => {
           if (!job.text) return
           const now = new Date().toISOString()
+          const looked = outcome.value?.lookedAt ?? []
           await host.current.saveConversation(input.seriesId, {
             ...input.conversation,
             updatedAt: now,
             messages: [
               ...input.conversation.messages,
-              { role: 'assistant', content: job.text, at: now, read: null },
+              {
+                role: 'assistant',
+                content: job.text,
+                at: now,
+                read: looked.length ? looked.join(', ') : null,
+              },
             ],
           })
         },

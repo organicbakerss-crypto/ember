@@ -860,6 +860,11 @@ Build in this order. Each milestone ends with a working app the user can actuall
 
 15. **Speed** (Nov 2026): a second full audit on a big test library (90 chapters, about 196,000 words, a world of 300 entries) with every screen and request timed: `docs/audit-2026-11b.md`. The refactoring plan to make everything answer within about a tenth of a second: `docs/speed-plan.md` (run the built app and package it; a speed log; keep worlds and story text in memory and send changes instead of reloads; load screens when first opened; per-paragraph work while typing; incremental Manuscript and Book layout; long lists and pictures; plus the audit's fixes).
 
+16. **Writer requests** (Nov 2026), done:
+    - **More than one POV per chapter.** A chapter keeps a list of POVs (chips in the chapter's POV box). Scene headings that name a person ("Mara", "Mara interlude", "Mara's POV") count too: the binder shows every POV, its filter matches any, and the world's POV lists include them.
+    - **Test scenes.** Alternate takes, practice, cut text: ordinary chapter files listed under `tests` in the outline (with the chapter they're kept with), not in the reading order. They save, sync, keep history and count toward words; the Manuscript, Book mode and exports leave them out; the world and find read them. In the binder under their chapter; drag one onto the page to put its text in (it goes to the trash, with Undo); right-click selected text → Move to a test scene.
+    - **The AI never answers blind.** Whatever it reads, it first looks up the question: chapter summaries that touch it, the world entries it names, then passages of the story itself; the answer is marked "Looked at …". Brainstorming also reads the two chapters before. "Whole story, word for word" sends the story as written, or reads it in parts keeping running notes when it's too long for the model. Files can be attached to a conversation (📎: .txt, .md, .docx, .html): their text stays on this computer (the library's local folder), the conversation and a note of the file sync.
+
 ## Open items
 
 None of these block milestone 1.

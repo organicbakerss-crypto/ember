@@ -837,13 +837,26 @@ export const ipcInputs = {
       .max(100),
     scope: z
       .object({
-        kind: z.enum(['selection', 'screen', 'chapter', 'story']),
+        kind: z.enum(['selection', 'screen', 'chapter', 'story', 'full']),
         seriesId: id('series'),
         volumeId: id('volume').nullable(),
         chapterId: id('chapter').nullable(),
         text: z.string().max(200000),
       })
       .nullable(),
+    /** Files attached to the conversation (read on this computer). */
+    attachmentIds: z.array(z.string().max(40)).max(20).optional(),
+  }),
+  /** Attaches a file to an AI conversation: kept as text on this computer only. */
+  'ai:attach': z.object({
+    conversationId: id('conversation'),
+    name: z.string().trim().min(1).max(300),
+    data: z.instanceof(Uint8Array),
+  }),
+  /** Which of a conversation's attachments are on this computer. */
+  'ai:attachmentsHere': z.object({
+    conversationId: id('conversation'),
+    ids: z.array(z.string().max(40)).max(50),
   }),
   /**
    * The AI's edit of the open chapter, as asked (streams `ai:token`). Nothing
@@ -1158,7 +1171,9 @@ export interface IpcResults {
   'sync:disconnect': SyncStatus
   'sync:openCloudflare': null
   'ai:status': AiStatus
-  'ai:ask': { text: string }
+  'ai:ask': { text: string; lookedAt: string[] }
+  'ai:attach': { id: string; name: string; words: number }
+  'ai:attachmentsHere': string[]
   'ai:editChapter': { text: string }
   'ai:cancel': null
   'ai:jobs': AiJobInfo[]

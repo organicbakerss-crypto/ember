@@ -23,11 +23,28 @@ import {
 type Mode = 'chat' | 'brainstorm' | 'ask'
 type Message = Pick<ConversationMessage, 'role' | 'content' | 'at' | 'read'>
 interface Thread {
-  /** Set once the conversation has been saved. */
+  /** Set once the conversation has been saved (or a file attached). */
   id: string | null
   createdAt: string | null
   messages: Message[]
+  /** Files attached (their text stays on the computer they were attached on). */
+  attachments?: Attached[]
 }
+
+interface Attached {
+  id: string
+  name: string
+  words: number
+}
+
+/** A conversation's attachment notes, as saved (loosely: unknown shapes are skipped). */
+const attachedOf = (c: { [key: string]: unknown }): Attached[] =>
+  Array.isArray(c['attachments'])
+    ? (c['attachments'] as unknown[]).filter(
+        (a): a is Attached =>
+          !!a && typeof (a as Attached).id === 'string' && typeof (a as Attached).name === 'string',
+      )
+    : []
 
 const MODES: { mode: Mode; label: string; hint: string }[] = [
   { mode: 'chat', label: 'Chat', hint: 'Talk about the story or your writing.' },
@@ -49,7 +66,7 @@ const STICK_PX = 48
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length
 /** How much the AI reads: what's selected or on screen, the whole chapter, or the whole story. */
-type Reach = 'here' | 'chapter' | 'story'
+type Reach = 'here' | 'chapter' | 'story' | 'full'
 
 /** One-click prompts above the message box (they read what the "Reads" choice says). */
 const QUICK: { label: string; mode: Mode; text: string }[] = [
@@ -176,6 +193,8 @@ export function AiView(props: {
   const [quote, setQuote] = useState<string | null>(null)
   /** How much the AI reads: what's selected or on screen, the whole chapter, or the whole story. */
   const [reach, setReach] = useState<Reach>('here')
+  /** Attachments of the open conversation that were attached on another computer. */
+  const [missing, setMissing] = useState<Set<string>>(() => new Set())
   /** What a long job is doing now ("Summarising chapters…"). */
   const [progress, setProgress] = useState('')
   /** Reading a chapter for the world: the job, and what it found. */
@@ -211,6 +230,8 @@ export function AiView(props: {
   const partial = useRef('')
   /** Requests this pane is waiting on itself (the rest it picks up from the background). */
   const awaiting = useRef(new Set<string>())
+  /** Requests whose answer already came back here (a late job event mustn't redo them). */
+  const answered = useRef(new Set<string>())
   const mounted = useRef(false)
   const local = useLocalScope(seriesId)
   // "Edit with AI" from the ⋯ menu: tick Edit chapter and fill in the request.
@@ -279,8 +300,8 @@ export function AiView(props: {
   })
 
   const scopeKind =
-    reach === 'story'
-      ? 'story'
+    reach === 'story' || reach === 'full'
+      ? reach
       : reach === 'chapter'
         ? 'chapter'
         : local?.selection
@@ -292,15 +313,17 @@ export function AiView(props: {
       : 'Editing: open a chapter beside the AI'
     : scopeKind === 'story'
       ? 'Reading: the whole story (a summary of each chapter)'
-      : !local
-        ? 'Reading: the chapter open in the writing view'
-        : !local.chapterId
-          ? 'Reading: nothing (no chapter open)'
-          : scopeKind === 'chapter'
-            ? `Reading: all of “${local.chapterTitle || 'Untitled'}”`
-            : scopeKind === 'selection'
-              ? `Reading: your selection, ~${words(local.selection!)} words`
-              : `Reading: what’s on screen in “${local.chapterTitle || 'Untitled'}”`
+      : scopeKind === 'full'
+        ? 'Reading: the whole story, word for word (in parts if it’s long)'
+        : !local
+          ? 'Reading: the chapter open in the writing view'
+          : !local.chapterId
+            ? 'Reading: nothing (no chapter open)'
+            : scopeKind === 'chapter'
+              ? `Reading: all of “${local.chapterTitle || 'Untitled'}”`
+              : scopeKind === 'selection'
+                ? `Reading: your selection, ~${words(local.selection!)} words`
+                : `Reading: what’s on screen in “${local.chapterTitle || 'Untitled'}”`
 
   const open = async (id: string) => {
     try {
@@ -308,8 +331,21 @@ export function AiView(props: {
       setMode(c.mode)
       setThreads((t) => ({
         ...t,
-        [c.mode]: { id: c.id, createdAt: c.createdAt, messages: c.messages },
+        [c.mode]: {
+          id: c.id,
+          createdAt: c.createdAt,
+          messages: c.messages,
+          attachments: attachedOf(c),
+        },
       }))
+      // Attachments are kept on the computer they were attached on.
+      const ids = attachedOf(c).map((a) => a.id)
+      if (ids.length) {
+        void api
+          .invoke('ai:attachmentsHere', { conversationId: c.id, ids })
+          .then((here) => setMissing(new Set(ids.filter((x) => !here.includes(x)))))
+          .catch(() => {})
+      } else setMissing(new Set())
       stick.current = true
       setListOpen(false)
     } catch (err) {
@@ -342,13 +378,47 @@ export function AiView(props: {
       createdAt: current.createdAt ?? now,
       updatedAt: now,
       messages: msgs,
+      attachments: current.attachments ?? [],
     }
   }
   const threadOf = (c: ConversationFile): Thread => ({
     id: c.id,
     createdAt: c.createdAt,
     messages: c.messages,
+    attachments: attachedOf(c),
   })
+
+  /** Attaches files to the current conversation (their text stays on this computer). */
+  const attach = async (files: FileList | null) => {
+    if (!files?.length) return
+    const current = threads[mode]
+    const conversationId = current.id ?? newId('conversation')
+    const createdAt = current.createdAt ?? new Date().toISOString()
+    const added: Attached[] = []
+    for (const file of Array.from(files)) {
+      try {
+        const data = new Uint8Array(await file.arrayBuffer())
+        added.push(await api.invoke('ai:attach', { conversationId, name: file.name, data }))
+      } catch (err) {
+        setError(describeError(err).message)
+      }
+    }
+    if (!added.length) return
+    setThreads((t) => ({
+      ...t,
+      [mode]: {
+        ...t[mode],
+        id: conversationId,
+        createdAt,
+        attachments: [...(t[mode].attachments ?? []), ...added],
+      },
+    }))
+  }
+  const detach = (id: string) =>
+    setThreads((t) => ({
+      ...t,
+      [mode]: { ...t[mode], attachments: (t[mode].attachments ?? []).filter((a) => a.id !== id) },
+    }))
 
   /** Saves a conversation with the story (after an edit is reviewed). */
   const save = (into: Mode, current: Thread, msgs: Message[]) => {
@@ -564,8 +634,8 @@ export function AiView(props: {
     const requestId = newRequestId()
     const scope = await fetchScope(seriesId)
     const kind =
-      reads === 'story'
-        ? 'story'
+      reads === 'story' || reads === 'full'
+        ? reads
         : reads === 'chapter'
           ? 'chapter'
           : scope?.selection
@@ -577,11 +647,13 @@ export function AiView(props: {
     const read =
       kind === 'story'
         ? 'the whole story (chapter summaries)'
-        : !scope?.chapterId
-          ? null
-          : kind === 'chapter'
-            ? `the whole chapter${where}`
-            : `${kind === 'selection' ? 'your selection' : 'what was on screen'}${where}, ~${words(scopeText)} words`
+        : kind === 'full'
+          ? 'the whole story, word for word'
+          : !scope?.chapterId
+            ? null
+            : kind === 'chapter'
+              ? `the whole chapter${where}`
+              : `${kind === 'selection' ? 'your selection' : 'what was on screen'}${where}, ~${words(scopeText)} words`
     const content = quote
       ? `${quote
           .split('\n')
@@ -615,8 +687,9 @@ export function AiView(props: {
         messages: history
           .slice(-CONTEXT_MESSAGES)
           .map((m) => ({ role: m.role, content: m.content })),
+        attachmentIds: (current.attachments ?? []).map((a) => a.id),
         scope:
-          kind === 'story'
+          kind === 'story' || kind === 'full'
             ? { kind, seriesId, volumeId: null, chapterId: null, text: '' }
             : scope?.chapterId
               ? {
@@ -630,7 +703,8 @@ export function AiView(props: {
       })
       if (!mounted.current) return
       void api.invoke('ai:jobSeen', { id: requestId })
-      finishAnswer(into, conversation, answer.text, null)
+      answered.current.add(requestId)
+      finishAnswer(into, conversation, answer.text, null, answer.lookedAt)
     } catch (err) {
       if (!mounted.current) return
       void api.invoke('ai:jobSeen', { id: requestId })
@@ -645,7 +719,13 @@ export function AiView(props: {
   }
 
   /** An answer finished (or stopped part-way, keeping what came); it's already saved. */
-  const finishAnswer = (into: Mode, conversation: ConversationFile, text: string, err: unknown) => {
+  const finishAnswer = (
+    into: Mode,
+    conversation: ConversationFile,
+    text: string,
+    err: unknown,
+    lookedAt: string[] = [],
+  ) => {
     if (err) {
       const e = describeError(err)
       if (e.code !== 'cancelled') setError(e.message)
@@ -653,7 +733,12 @@ export function AiView(props: {
     const msgs: Message[] = text
       ? [
           ...conversation.messages,
-          { role: 'assistant', content: text, at: new Date().toISOString(), read: null },
+          {
+            role: 'assistant',
+            content: text,
+            at: new Date().toISOString(),
+            read: lookedAt.length ? lookedAt.join(', ') : null,
+          },
         ]
       : conversation.messages
     setThreads((t) => ({ ...t, [into]: { ...threadOf(conversation), messages: msgs } }))
@@ -662,7 +747,7 @@ export function AiView(props: {
 
   /** Work that was running (or finished) while this pane was closed: carry on showing it. */
   const resume = (job: AiJobInfo) => {
-    if (awaiting.current.has(job.id)) return
+    if (awaiting.current.has(job.id) || answered.current.has(job.id)) return
     const conv = job.conversation
     const into = (conv?.mode ?? 'chat') as Mode
     if (job.kind === 'world') {
@@ -891,7 +976,11 @@ export function AiView(props: {
                 ) : (
                   <p className="muted">{(busy && i === messages.length - 1 && progress) || '…'}</p>
                 )}
-                {m.read && <div className="ai-read muted small">Read {m.read}</div>}
+                {m.read && (
+                  <div className="ai-read muted small">
+                    {m.role === 'assistant' ? 'Looked at' : 'Read'} {m.read}
+                  </div>
+                )}
                 {m.role === 'assistant' && m.content && !(busy && i === messages.length - 1) && (
                   <div className="ai-actions small">
                     <button className="link" onClick={() => void copy(i, m.content)}>
@@ -1013,7 +1102,8 @@ export function AiView(props: {
                 >
                   <option value="here">Selection or screen</option>
                   <option value="chapter">Whole chapter</option>
-                  <option value="story">Whole story</option>
+                  <option value="story">Whole story (summaries)</option>
+                  <option value="full">Whole story, word for word</option>
                 </select>
               </label>
             )}
@@ -1034,6 +1124,30 @@ export function AiView(props: {
               Edit chapter
             </label>
           </div>
+          {(threads[mode].attachments?.length ?? 0) > 0 && (
+            <div className="ai-attachments small">
+              {threads[mode].attachments!.map((a) => (
+                <span
+                  key={a.id}
+                  className={`ai-attachment ${missing.has(a.id) ? 'missing' : ''}`}
+                  title={
+                    missing.has(a.id)
+                      ? 'Attached on another computer: the AI can’t read it here'
+                      : `~${a.words.toLocaleString()} words, kept on this computer`
+                  }
+                >
+                  📎 {a.name}
+                  <button
+                    aria-label={`Remove ${a.name}`}
+                    type="button"
+                    onClick={() => detach(a.id)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <textarea
             ref={input}
             aria-label="Message to the AI"
@@ -1063,6 +1177,24 @@ export function AiView(props: {
             >
               {provider === 'chatgpt' ? 'ChatGPT' : 'Ollama'}
             </span>
+            {!editMode && (
+              <label
+                className="link ai-attach"
+                title="Attach a file (.txt, .md, .docx): the AI reads it with this conversation. The file stays on this computer."
+              >
+                📎 Attach
+                <input
+                  type="file"
+                  multiple
+                  hidden
+                  accept=".txt,.md,.markdown,.docx,.html,.htm,.json,.csv"
+                  onChange={(e) => {
+                    void attach(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+            )}
             <span className="status-spacer" />
             {busy || worldJob ? (
               <button

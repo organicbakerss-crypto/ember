@@ -7,7 +7,7 @@
 import type { ChatMessage } from './ollama'
 
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
-export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story'
+export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story' | 'full'
 
 const BASE = `You are a helpful assistant inside a novel-writing app. The writer writes their own prose: never rewrite or continue their text unless they clearly ask, and never claim to have changed their files. To show what you mean, give at most one example line. Be concise and concrete. Use plain text with short lists when helpful; no headings.
 How you give feedback:
@@ -28,6 +28,7 @@ const SCOPE_LABEL: Record<ScopeKind, string> = {
   screen: 'the part of the chapter on the writer’s screen',
   chapter: 'the whole chapter',
   story: 'the whole story',
+  full: 'the whole story, word for word',
 }
 
 export interface PromptContext {
@@ -37,17 +38,55 @@ export interface PromptContext {
   entries: string[]
   /** For "Ask the story": a compact summary of the whole world. */
   digest?: string
+  /** The whole story was read in parts: `scope.text` is the notes made on the way. */
+  readInParts?: boolean
+  /** What was looked up for the question (so the answer isn't blind). */
+  lookup?: { summaries: string[]; passages: string[] }
+  /** For brainstorming: the chapters just before the open one. */
+  before?: { title: string; text: string }[]
+  /** Files the writer attached to the conversation (kept on this computer). */
+  attachments?: { name: string; text: string }[]
 }
+
+const GROUNDED = `What you know about the writer's story comes only from what is given below. When it doesn't cover something, say so and say where it might be (a chapter, an entry), rather than guessing; never invent events, names or facts of the story.`
 
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
-  const parts = [BASE, MODES[context.mode]]
+  const parts = [BASE, MODES[context.mode], GROUNDED]
+  if (context.attachments?.length) {
+    parts.push(
+      `Files the writer attached to this conversation (notes, hand-offs; not the story itself):\n\n${context.attachments
+        .map((a) => `### ${a.name}\n<<<\n${a.text}\n>>>`)
+        .join('\n\n')}`,
+    )
+  }
+  if (context.before?.length) {
+    parts.push(
+      `The chapters just before the one being worked on, for context:\n\n${context.before
+        .map((c) => `### ${c.title}\n<<<\n${c.text}\n>>>`)
+        .join('\n\n')}`,
+    )
+  }
   if (context.scope) {
     const { kind, text, chapterTitle } = context.scope
     parts.push(
       kind === 'story'
         ? `Below is the whole story “${chapterTitle || 'Untitled'}” so far, as a short summary of each chapter in order (summaries, not the writer's own words). When you answer from it, say which chapter:\n\n<<<\n${text}\n>>>`
-        : `The writer is working on the chapter “${chapterTitle || 'Untitled'}”. Below is ${SCOPE_LABEL[kind]}:\n\n<<<\n${text}\n>>>`,
+        : kind === 'full' && context.readInParts
+          ? `You read the whole story “${chapterTitle || 'Untitled'}” in parts, keeping notes for the writer's question. Your notes:\n\n<<<\n${text}\n>>>`
+          : kind === 'full'
+            ? `Below is the whole story “${chapterTitle || 'Untitled'}” so far, word for word, chapter by chapter. When you answer from it, say which chapter:\n\n<<<\n${text}\n>>>`
+            : `The writer is working on the chapter “${chapterTitle || 'Untitled'}”. Below is ${SCOPE_LABEL[kind]}:\n\n<<<\n${text}\n>>>`,
+    )
+  }
+  if (context.lookup?.summaries.length) {
+    parts.push(
+      `Chapter summaries looked up for this question:\n\n${context.lookup.summaries.join('\n\n')}`,
+    )
+  }
+  if (context.lookup?.passages.length) {
+    parts.push(
+      `Passages from the story looked up for this question (the writer's own words, with where they are):\n\n${context.lookup.passages.join('\n\n')}`,
     )
   }
   if (context.entries.length) {
@@ -95,6 +134,26 @@ export function editMessages(input: {
 }
 
 /* ---------- long chapters ---------- */
+
+/** One step of reading the whole story in parts: the notes so far, updated with the next part. */
+export function notesMessages(
+  question: string,
+  notes: string,
+  part: string,
+  index: number,
+  count: number,
+): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content: `You are reading a novel in ${count} parts to answer the writer's question afterwards. Keep running notes: everything in the story that bears on the question (events, who, what changes, exact details, with the chapter each is in). Reply with the full updated notes only, at most 600 words; keep the notes so far unless the new part corrects them. Keep names exactly.`,
+    },
+    {
+      role: 'user',
+      content: `The writer's question: ${question || '(none: note the main events, characters and threads)'}\n\nYour notes so far:\n${notes || '(none yet)'}\n\nPart ${index} of ${count}:\n\n${part}`,
+    },
+  ]
+}
 
 export function summaryMessages(text: string, part: number, parts: number): ChatMessage[] {
   return [
