@@ -6,17 +6,10 @@ import { api, describeError } from '../api'
 import { Cover } from '../components/Cover'
 import { volumeCover } from '../covers'
 import { useSettings } from '../useTheme'
+import { curlShape, foldShade, polygon, reachable, type Pt } from './curl'
 import { lastSpread, leftOf, rightOf, turn, type Face } from './spreads'
 
 const TURN_MS = 450
-
-interface Flip {
-  dir: 1 | -1
-  /** 0 (flat where it started) to 1 (turned over). */
-  progress: number
-  /** Animating to the end ('go') or back to the start ('back'); null while dragged. */
-  settle: 'go' | 'back' | null
-}
 
 /**
  * Book mode: the book (or volume) read as a printed book, two pages side by
@@ -42,7 +35,7 @@ export function BookView(props: {
   const [size, setSize] = useState(() => pageSize())
   const [counts, setCounts] = useState<number[] | null>(null)
   const [spread, setSpread] = useState(-1)
-  const [flip, setFlip] = useState<Flip | null>(null)
+  const [curl, setCurl] = useState<{ dir: 1 | -1; corner: Pt; to: Pt } | null>(null)
   const measurer = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -108,21 +101,45 @@ export function BookView(props: {
   const last = lastSpread(total)
 
   const canTurn = (dir: 1 | -1) => (dir === 1 ? spread < last : spread > -1)
+  const W = size.width
+  const H = size.height
+
+  // A turn in progress: the corner held and where it's been pulled to (spine coordinates).
+  const anim = useRef<number | null>(null)
+  useEffect(() => () => cancelAnimationFrame(anim.current ?? 0), [])
+  const animate = (from: { dir: 1 | -1; corner: Pt; to: Pt }, complete: boolean, lift: number) => {
+    cancelAnimationFrame(anim.current ?? 0)
+    const target = complete ? { x: -from.dir * W, y: from.corner.y } : from.corner
+    const start = performance.now()
+    const ms = TURN_MS * (complete ? 1 : 0.6)
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / ms)
+      const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
+      const to = {
+        x: from.to.x + (target.x - from.to.x) * e,
+        // A turned page rises a little at the corner as it goes over.
+        y: from.to.y + (target.y - from.to.y) * e - Math.sin(Math.PI * e) * lift,
+      }
+      if (t < 1) {
+        setCurl({ ...from, to: reachable(to, from.corner, W, H) })
+        anim.current = requestAnimationFrame(step)
+      } else {
+        anim.current = null
+        setCurl(null)
+        if (complete) setSpread((sp) => sp + from.dir)
+      }
+    }
+    anim.current = requestAnimationFrame(step)
+  }
+
   const go = (dir: 1 | -1) => {
-    if (flip || !canTurn(dir)) return
+    if (curl || !canTurn(dir)) return
     if (still) {
-      setSpread((s) => s + dir)
+      setSpread((sp) => sp + dir)
       return
     }
-    setFlip({ dir, progress: 0, settle: null })
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => setFlip({ dir, progress: 1, settle: 'go' })),
-    )
-  }
-  const finish = () => {
-    if (!flip?.settle) return
-    if (flip.settle === 'go') setSpread((s) => s + flip.dir)
-    setFlip(null)
+    const corner = { x: dir * W, y: H }
+    animate({ dir, corner, to: corner }, true, H * 0.12)
   }
 
   const { onClose } = props
@@ -131,8 +148,8 @@ export function BookView(props: {
       if (e.key === 'Escape') onClose()
       else if (['ArrowRight', 'PageDown', ' '].includes(e.key)) go(1)
       else if (['ArrowLeft', 'PageUp'].includes(e.key)) go(-1)
-      else if (e.key === 'Home' && !flip) setSpread(-1)
-      else if (e.key === 'End' && !flip) setSpread(last)
+      else if (e.key === 'Home' && !curl) setSpread(-1)
+      else if (e.key === 'End' && !curl) setSpread(last)
       else return
       e.preventDefault()
       e.stopPropagation()
@@ -141,32 +158,39 @@ export function BookView(props: {
     return () => window.removeEventListener('keydown', onKey, true)
   })
 
-  // Dragging a page across turns it; letting go past a quarter finishes the turn.
-  const drag = useRef<{ dir: 1 | -1; x: number; moved: boolean } | null>(null)
+  // Pointer → spine coordinates (the spine is the middle of the open book).
+  const bookRef = useRef<HTMLDivElement>(null)
+  const toSpine = (e: React.PointerEvent): Pt => {
+    const box = bookRef.current!.getBoundingClientRect()
+    return { x: e.clientX - (box.left + W), y: e.clientY - box.top }
+  }
+  const drag = useRef<{ dir: 1 | -1; corner: Pt; start: Pt; moved: boolean } | null>(null)
   const onDown = (e: React.PointerEvent<HTMLElement>) => {
     const dir = e.currentTarget.dataset['side'] === 'left' ? -1 : 1
-    if (flip || !canTurn(dir) || e.button !== 0) return
-    drag.current = { dir, x: e.clientX, moved: false }
+    if (curl || !canTurn(dir) || e.button !== 0) return
+    e.preventDefault()
+    const at = toSpine(e)
+    // Hold the page by its nearer corner (top or bottom).
+    drag.current = { dir, corner: { x: dir * W, y: at.y < H / 2 ? 0 : H }, start: at, moved: false }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onMove = (e: React.PointerEvent) => {
     const d = drag.current
     if (!d) return
-    const delta = (d.x - e.clientX) * d.dir
-    if (!d.moved && delta < 8) return
+    const at = toSpine(e)
+    if (!d.moved && Math.hypot(at.x - d.start.x, at.y - d.start.y) < 6) return
     d.moved = true
-    if (still) return
-    const progress = Math.min(1, Math.max(0, delta / (2 * size.width)))
-    setFlip({ dir: d.dir, progress, settle: null })
+    if (still || spread === -1) return
+    setCurl({ dir: d.dir, corner: d.corner, to: reachable(at, d.corner, W, H) })
   }
   const onUp = (e: React.PointerEvent) => {
     const d = drag.current
     drag.current = null
     if (!d) return
-    if (!d.moved) {
+    if (!d.moved || spread === -1) {
       // A click: the cover opens; a bottom corner turns the page.
       const box = e.currentTarget.getBoundingClientRect()
-      const corner = Math.min(90, size.width * 0.22)
+      const corner = Math.min(90, W * 0.22)
       const inCorner =
         e.clientY > box.bottom - corner &&
         (d.dir === 1 ? e.clientX > box.right - corner : e.clientX < box.left + corner)
@@ -174,11 +198,13 @@ export function BookView(props: {
       return
     }
     if (still) {
-      setSpread((s) => s + d.dir)
+      setSpread((sp) => sp + d.dir)
       return
     }
-    const done = (flip?.progress ?? 0) > 0.25
-    setFlip({ dir: d.dir, progress: done ? 1 : 0, settle: done ? 'go' : 'back' })
+    const now = curl ?? { dir: d.dir, corner: d.corner, to: d.corner }
+    // Past the middle of its way over (a quarter of the spread): finish the turn.
+    const done = (d.dir * (d.dir * W - now.to.x)) / (2 * W) > 0.25
+    animate(now, done, 0)
   }
 
   const face = (f: Face) => {
@@ -216,8 +242,11 @@ export function BookView(props: {
     )
   }
 
-  const shown = flip ? turn(spread, flip.dir) : { left: leftOf(spread), right: rightOf(spread) }
-  const closed = spread === -1 && !flip
+  const shown = curl
+    ? turn(spread, curl.dir)
+    : { left: leftOf(spread), right: rightOf(spread), front: null, back: null }
+  const closed = spread === -1 && !curl
+  const shape = curl && curlShape(curl.dir, W, H, curl.corner, curl.to)
   const chapterStart = (i: number) => 1 + pages.findIndex((p) => p.chapter === i)
   const where =
     spread < 0
@@ -248,7 +277,7 @@ export function BookView(props: {
             value=""
             onChange={(e) => {
               const i = Number(e.target.value)
-              setFlip(null)
+              setCurl(null)
               setSpread(Math.floor(chapterStart(i) / 2))
             }}
           >
@@ -268,7 +297,7 @@ export function BookView(props: {
       {!counts && !error && <p className="muted page-message">Binding the book…</p>}
       {counts && (
         <div className="book-stage">
-          <div className={`book ${closed ? 'closed' : ''}`}>
+          <div ref={bookRef} className={`book ${closed ? 'closed' : ''}`}>
             <div
               className="book-side left"
               data-side="left"
@@ -288,17 +317,79 @@ export function BookView(props: {
             >
               {face(shown.right)}
             </div>
-            {flip && 'front' in shown && (
-              <div
-                className={`book-leaf ${flip.dir === 1 ? 'forward' : 'backward'}`}
-                style={{
-                  transform: `rotateY(${flip.dir === 1 ? -180 * flip.progress : 180 * flip.progress}deg)`,
-                  transition: flip.settle ? `transform ${TURN_MS}ms ease-in-out` : 'none',
-                }}
-                onTransitionEnd={finish}
-              >
-                <div className="leaf-face front">{face(shown.front)}</div>
-                <div className="leaf-face back">{face(shown.back)}</div>
+            {curl && (
+              <div className="book-curl">
+                {/* The page being turned: the part still flat… */}
+                <div
+                  className="curl-layer"
+                  style={{
+                    left: curl.dir === 1 ? 0 : -W,
+                    clipPath: shape ? polygon(shape.flat, curl.dir === 1 ? 0 : -W) : undefined,
+                  }}
+                >
+                  {face(shown.front)}
+                  {shape && (
+                    <div
+                      className="curl-shade"
+                      style={{
+                        background: foldShade(W, H, shape.fold, shape.normal, 0.18, 6, false, {
+                          x: curl.dir === 1 ? 0 : -W,
+                          y: 0,
+                        }),
+                      }}
+                    />
+                  )}
+                </div>
+                {shape && (
+                  <>
+                    {/* …the shadow it casts on the page underneath… */}
+                    <div
+                      className="curl-layer curl-under"
+                      style={{
+                        left: curl.dir === 1 ? 0 : -W,
+                        clipPath: polygon(shape.lifted, curl.dir === 1 ? 0 : -W),
+                        background: foldShade(
+                          W,
+                          H,
+                          shape.fold,
+                          { x: -shape.normal.x, y: -shape.normal.y },
+                          0.35,
+                          14,
+                          false,
+                          { x: curl.dir === 1 ? 0 : -W, y: 0 },
+                        ),
+                      }}
+                    />
+                    {/* …and the lifted part, seen from the back (the next page). */}
+                    <div className="curl-back-shadow">
+                      <div
+                        className="curl-layer curl-back"
+                        style={{
+                          left: 0,
+                          transform: `matrix(${shape.backMatrix.map((v) => v.toFixed(5)).join(',')})`,
+                          clipPath: polygon(shape.backClip),
+                        }}
+                      >
+                        {face(shown.back)}
+                        <div
+                          className="curl-shade"
+                          style={{
+                            background: foldShade(
+                              W,
+                              H,
+                              shape.fold,
+                              { x: -shape.normal.x, y: -shape.normal.y },
+                              0.22,
+                              18,
+                              true,
+                              { x: curl.dir === 1 ? W : 0, y: 0 },
+                            ),
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

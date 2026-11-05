@@ -4844,3 +4844,34 @@ kbd {
   text-shadow: 0 0 7px color-mix(in srgb, var(--accent) 55%, transparent);
   transition: text-shadow 0.2s;
 }
+
+/* Book mode's page curl: layers placed from the spine (see book/curl.ts). */
+.book-curl {
+  position: absolute;
+  left: var(--book-w);
+  top: 0;
+  width: 0;
+  height: var(--book-h);
+  pointer-events: none;
+}
+.curl-layer {
+  position: absolute;
+  top: 0;
+  width: var(--book-w);
+  height: var(--book-h);
+  transform-origin: 0 0;
+}
+.curl-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.curl-back-shadow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  filter: drop-shadow(0 0 12px rgba(0, 0, 0, 0.35));
+}
+.book-stage {
+  user-select: none;
+}
