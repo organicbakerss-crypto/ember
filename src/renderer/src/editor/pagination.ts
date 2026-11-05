@@ -5,7 +5,8 @@
  * decorations: never part of the document, never saved.
  */
 import { Extension } from '@tiptap/core'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state'
+import type { Node as PMNode } from '@tiptap/pm/model'
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
 import type { PageGeometry } from './pageBreaks'
 
@@ -63,7 +64,14 @@ export const Pagination = Extension.create<object, PaginationStorage>({
       new Plugin({
         key,
         state: {
-          init: () => ({ decorations: DecorationSet.empty, stale: true }),
+          // The text starts with only its first part laid out (see `frontierWidget`).
+          init: (_config, state) => ({
+            decorations: DecorationSet.create(
+              state.doc,
+              frontierAfter(state.doc, 0, FIRST_CHARS).map(frontierWidget),
+            ),
+            stale: true,
+          }),
           apply(tr, value) {
             const meta = tr.getMeta(key) as DecorationSet | 'stale' | undefined
             if (meta instanceof DecorationSet) return { decorations: meta, stale: false }
@@ -120,6 +128,29 @@ export const Pagination = Extension.create<object, PaginationStorage>({
             })
           }
           schedule(0)
+          // Scrolling (or jumping) towards the part not laid out yet: lay out more, 15 pages ahead.
+          let ticking = false
+          const onScroll = (e: Event) => {
+            if (ticking || !(e.target instanceof Node) || !e.target.contains(view.dom)) return
+            ticking = true
+            requestAnimationFrame(() => {
+              ticking = false
+              if (view.isDestroyed || !running.done) return
+              const at = frontierOf(view.state)
+              if (at === null) return
+              const dom = view.nodeDOM(at)
+              const scroller = view.dom.closest('.page-scroll')
+              if (!(dom instanceof HTMLElement) || !scroller) return
+              const { pitch } = storage.layout
+              const ahead = scroller.getBoundingClientRect().bottom + LOOKAHEAD_PAGES * pitch
+              if (dom.getBoundingClientRect().top < ahead) {
+                dirty = dirty === null ? at : Math.min(dirty, at)
+                structural = true
+                schedule(0)
+              }
+            })
+          }
+          document.addEventListener('scroll', onScroll, true)
           return {
             update(v, prev) {
               if (key.getState(v.state)?.stale) {
@@ -146,6 +177,7 @@ export const Pagination = Extension.create<object, PaginationStorage>({
               clearTimeout(timer)
               running.cancelled = true
               resize.disconnect()
+              document.removeEventListener('scroll', onScroll, true)
             },
           }
         },
@@ -192,10 +224,13 @@ function layOut(
   const { layout } = storage
   const state = key.getState(view.state)
   const existing = (state?.decorations.find() ?? [])
+    .filter((d) => !(d.spec as { frontier?: boolean }).frontier)
     .map((d) => ({ pos: d.from, space: (d.spec as { space?: number }).space ?? 0 }))
     .sort((a, b) => a.pos - b.pos)
+  let frontier = frontierOf(view.state)
   if (!layout.enabled || layout.contentHeight <= 0) {
-    if (existing.length) view.dispatch(view.state.tr.setMeta(key, DecorationSet.empty))
+    if (existing.length || frontier !== null)
+      view.dispatch(view.state.tr.setMeta(key, DecorationSet.empty))
     storage.onPages?.(1)
     job.done = true
     return
@@ -222,6 +257,8 @@ function layOut(
       return
     }
   }
+  // Nothing past the laid-out part was measured: start there at the latest.
+  if (frontier !== null && start > frontier) start = frontier
   const keep = existing.filter((b) => b.pos < start)
   const scroller = view.dom.closest('.page-scroll')
   /**
@@ -234,9 +271,9 @@ function layOut(
     ;(view as unknown as { domObserver?: { flush(): void } }).domObserver?.flush()
     if (view.state.doc !== doc) return false
     const top = scroller?.scrollTop ?? 0
-    view.dispatch(
-      view.state.tr.setMeta(key, DecorationSet.create(view.state.doc, breaks.map(widget))),
-    )
+    const decos = breaks.map(widget)
+    if (frontier !== null) decos.push(frontierWidget(frontier))
+    view.dispatch(view.state.tr.setMeta(key, DecorationSet.create(view.state.doc, decos)))
     if (scroller) scroller.scrollTop = top
     return true
   }
@@ -253,6 +290,8 @@ function layOut(
   const { contentHeight, pitch } = layout
   const origin = textAreaTop(view)
   const viewBottom = (scroller?.getBoundingClientRect().bottom ?? window.innerHeight) - origin
+  // Laid out this far ahead of the screen; the rest waits until scrolling gets near it.
+  const horizon = viewBottom + LOOKAHEAD_PAGES * pitch
   const blocks = collectBlocks(view, start)
   const found: Break[] = []
   let shift = 0 // space added in this pass (not in the page yet)
@@ -291,7 +330,21 @@ function layOut(
     }
     const until = performance.now() + SLICE_MS
     while (i < blocks.length && performance.now() < until) {
-      const blk = blocks[i++]!
+      const blk = blocks[i]!
+      if (frontier !== null && blk.pos >= frontier) {
+        if (!first && lastBottom + shift > horizon) break
+        // Reached the part not laid out yet, still short of 15 pages ahead: lay out more of it.
+        const next = frontierAfter(doc, frontier, MORE_CHARS)
+        frontier = next[0] ?? null
+        if (!apply([...keep, ...found])) {
+          restart()
+          return
+        }
+        keep.push(...found)
+        found.length = 0
+        shift = 0
+      }
+      i++
       const r = blk.dom.getBoundingClientRect()
       const top = blk.headTop !== undefined ? blk.headTop(r) - origin : r.top - origin
       const bottom = r.bottom - origin
@@ -338,19 +391,84 @@ function layOut(
         shift = 0
       }
     }
-    if (i < blocks.length) {
+    const stopped = i < blocks.length && frontier !== null && blocks[i]!.pos >= frontier
+    if (i < blocks.length && !stopped) {
       setTimeout(step, 0)
       return
     }
+    // The laid-out part ends here: everything after waits (and the browser skips it).
+    if (stopped) frontier = frontierAfter(doc, blocks[i]!.pos, 0)[0] ?? blocks[i]!.pos
     if (!apply([...keep, ...found])) {
       restart()
       return
     }
     job.done = true
     const end = lastBottom + shift
-    storage.onPages?.(Math.max(1, Math.floor(Math.max(0, end - 0.5) / pitch) + 1))
+    const laid = Math.max(1, Math.floor(Math.max(0, end - 0.5) / pitch) + 1)
+    let pages = laid
+    if (frontier !== null) {
+      // The rest, estimated from how much text the laid-out pages hold.
+      const before = doc.textBetween(0, frontier, ' ', ' ').length
+      const after = doc.textBetween(frontier, doc.content.size, ' ', ' ').length
+      pages = laid + Math.ceil((after * laid) / Math.max(1, before))
+    }
+    storage.onPages?.(pages)
   }
   step()
+}
+
+/** Pages laid out ahead of the bottom of the screen. */
+const LOOKAHEAD_PAGES = 15
+/** About how much text is laid out first, and then each time more is needed. */
+const FIRST_CHARS = 60_000
+const MORE_CHARS = 30_000
+
+/**
+ * Where the laid-out part ends: a zero-size marker before a block. Blocks
+ * after it are skipped by the browser (CSS `content-visibility`), so a long
+ * chapter opens at the cost of its first pages. Null: everything is laid out.
+ */
+function frontierOf(state: EditorState): number | null {
+  const found = key
+    .getState(state)
+    ?.decorations.find(undefined, undefined, (spec) => !!(spec as { frontier?: boolean }).frontier)
+  return found?.[0]?.from ?? null
+}
+
+/**
+ * The block boundary at least `chars` characters of text after `from` (at the
+ * level the marker can sit: the text's top level, or inside a manuscript
+ * chapter); empty when the text ends first.
+ */
+function frontierAfter(doc: PMNode, from: number, chars: number): number[] {
+  let seen = 0
+  let at: number | null = null
+  doc.nodesBetween(from, doc.content.size, (node, pos, parent) => {
+    if (at !== null) return false
+    if (node.type.name === 'chapterSection') return true
+    if (pos < from) return node.type.name === 'chapterSection'
+    if (parent && parent.type.name !== 'doc' && parent.type.name !== 'chapterSection') return false
+    if (seen >= chars) {
+      at = pos
+      return false
+    }
+    seen += node.textContent.length
+    return false
+  })
+  return at === null ? [] : [at]
+}
+
+function frontierWidget(pos: number): Decoration {
+  return Decoration.widget(
+    pos,
+    () => {
+      const el = document.createElement('span')
+      el.className = 'pm-frontier'
+      el.setAttribute('aria-hidden', 'true')
+      return el
+    },
+    { side: -1, key: 'frontier', ignoreSelection: true, frontier: true },
+  )
 }
 
 interface Block {

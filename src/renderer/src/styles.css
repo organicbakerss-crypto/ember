@@ -4875,3 +4875,36 @@ kbd {
 .book-stage {
   user-select: none;
 }
+
+/*
+ * Text past the laid-out part (see editor/pagination.ts) is skipped by the
+ * browser until it's laid out: a long chapter opens at the cost of its first
+ * pages. The marker itself takes no space.
+ */
+.pm-frontier {
+  display: block;
+  height: 0;
+}
+.ProseMirror .pm-frontier ~ * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 6em;
+}
+.ms-chapter:has(.pm-frontier) ~ .ms-chapter {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3000px;
+}
+.error-boundary-ok {
+  display: contents;
+}
+.crash-message {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  max-width: 40rem;
+  margin: 15vh auto 0;
+}
+.crash-message pre {
+  white-space: pre-wrap;
+  max-height: 30vh;
+  overflow: auto;
+}

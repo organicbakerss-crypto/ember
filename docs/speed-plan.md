@@ -163,3 +163,25 @@ After each round: the speed check, the full tests, and a real-app run. Nothing t
 | 100k chapter: frozen at each pause in typing | 2.9 s       | 0.05 s        |
 | Manuscript of a 100k-word book: frozen       | 6.6 s       | 0.05 s        |
 | Bookshelf list (2.84M words)                 | 1.1 s       | 0.05 s        |
+
+### Round 2 (Nov 2026): laid out 15 pages ahead, and crash safety nets
+
+**What changed:**
+
+- **Laid out 15 pages ahead** (the writer's idea). Opening a chapter lays out page breaks only for the pages on screen plus 15 more. The rest of the text sits after a marker, and the browser skips it entirely (`content-visibility`).
+  - Scrolling or jumping towards the marker lays out more, always 15 pages ahead.
+  - Typing past it first lays out up to there.
+  - The page count beyond the marker is estimated from the text that's left.
+  - The Manuscript works the same way, chapter by chapter.
+- **A crash can't leave a black window.** A screen that crashes shows "Something went wrong on this screen", with Try again, Reload and what happened; saved writing is untouched. If the window's page process dies outright, the main process reloads it.
+- **Test libraries are real copies.** The library path in each copy now points at the copy, so test runs no longer write into the original test library.
+
+**Results** (stress library, built app):
+
+|                                                   | Round 1         | Round 2       |
+| ------------------------------------------------- | --------------- | ------------- |
+| Typing median, 30k / 50k / 100k words             | 13 / 14 / 24 ms | 8 / 8 / 11 ms |
+| 30k / 100k chapter shown                          | 0.23 / 0.48 s   | 0.18 / 0.35 s |
+| 100k chapter: frozen after opening / while typing | 0.18 / 0.05 s   | 0.16 / 0.07 s |
+| Manuscript of a 100k-word book: frozen            | 0.05 s          | 0             |
+| Rebuilding the 2.84M-word test library            | 12 min          | 87 s          |

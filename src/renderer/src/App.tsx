@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import type { LibraryStatus } from '@shared/ipc'
 import { paneFromHash } from '@shared/panes'
 import { api, useIpcEvent } from './api'
@@ -37,7 +38,9 @@ export function App() {
           {status.state === 'none' ? (
             <Welcome defaultPath={status.defaultPath} onOpen={setStatus} />
           ) : (
-            <Home key={status.root} detached={detached} />
+            <ErrorBoundary>
+              <Home key={status.root} detached={detached} />
+            </ErrorBoundary>
           )}
         </CommandProvider>
       </OverlayProvider>

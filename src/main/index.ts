@@ -50,6 +50,12 @@ function createWindow(
   })
   window.once('ready-to-show', () => window.show())
   window.on('focus', () => sync?.focused())
+  // The window's page died (out of memory, a crash): load it again rather than leave it black.
+  window.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit' || window.isDestroyed()) return
+    console.error('Window page gone:', details.reason)
+    window.webContents.reload()
+  })
   window.on('enter-full-screen', () =>
     window.webContents.send(`${IPC_EVENT_PREFIX}window:fullScreen`, true),
   )
