@@ -87,6 +87,10 @@ export function attachTextMenu(
           label: 'Add a comment',
           click: () => window.webContents.send(`${IPC_EVENT_PREFIX}text:comment`, null),
         },
+        {
+          label: 'Move to a test scene',
+          click: () => window.webContents.send(`${IPC_EVENT_PREFIX}text:toTest`, null),
+        },
         { type: 'separator' },
       )
     }

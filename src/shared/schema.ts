@@ -134,6 +134,15 @@ export const outlineFileSchema = z.looseObject({
   formatVersion,
   volumeId: id('volume'),
   items: z.array(outlineItemSchema),
+  /**
+   * Test scenes: chapter files kept with a chapter (`chapterId`, null once
+   * it's gone) instead of in the reading order. Not in the manuscript, Book
+   * mode or exports; counted in words and read by the world and the AI.
+   */
+  tests: z
+    .array(z.looseObject({ id: id('chapter'), chapterId: id('chapter').nullable() }))
+    .catch([])
+    .default([]),
 })
 export type OutlineFile = z.infer<typeof outlineFileSchema>
 

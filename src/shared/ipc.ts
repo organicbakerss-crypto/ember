@@ -646,6 +646,17 @@ export const ipcInputs = {
     title: z.string().trim().max(200),
     type: chapterTypeSchema.optional(),
     arcId: id('arc').optional(),
+    /** Makes a test scene kept with this chapter, outside the reading order. */
+    testOf: id('chapter').optional(),
+  }),
+  /**
+   * Makes a chapter a test scene of another (`testOf`), or a test scene a
+   * chapter again (`testOf: null`, placed right after the one it was kept with).
+   */
+  'chapter:setTest': z.object({
+    ...volumeRef,
+    chapterId: id('chapter'),
+    testOf: id('chapter').nullable(),
   }),
   'chapter:read': z.object({ ...volumeRef, chapterId: id('chapter') }),
   /** Splits a chapter in two: `before` stays, `after` becomes a new chapter right after it. */
@@ -1112,6 +1123,7 @@ export interface IpcResults {
   'outline:save': OutlineView
   'arc:create': OutlineView
   'chapter:create': ChapterFile
+  'chapter:setTest': OutlineView
   'chapter:read': ChapterFile
   'chapter:split': ChapterFile
   'chapter:mergeNext': ChapterFile
@@ -1231,6 +1243,8 @@ export interface IpcEvents {
   'text:comment': null
   /** "Split the chapter here" was chosen (from the right-click menu). */
   'text:split': null
+  /** "Move to a test scene" was chosen on selected text (from the right-click menu). */
+  'text:toTest': null
   /** The window went full screen (true) or back (false). */
   'window:fullScreen': boolean
   /** Something was captured from the right-click menu (a short confirmation to show). */

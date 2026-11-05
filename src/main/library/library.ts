@@ -171,6 +171,8 @@ const trashItemSchema = z.looseObject({
       .nullable()
       .optional(),
     index: z.number().int().nonnegative().optional(),
+    /** A test scene: the chapter it was kept with (restored as a test scene again). */
+    testOf: z.string().regex(idPattern('chapter')).nullable().optional(),
     linkedSeries: z.array(z.string().regex(idPattern('series'))).optional(),
   }),
 })
@@ -460,6 +462,8 @@ export class Library {
       if (item.type === 'arc') items.push({ ...item, chapterIds: item.chapterIds.filter(keep) })
       else if (keep(item.id)) items.push(item)
     }
+    // Test scenes (a chapter in the reading order stays there, never also a test).
+    const tests = stored.tests.filter((t) => keep(t.id))
     for (const chapterId of Object.keys(chapters)) {
       if (!seen.has(chapterId)) {
         items.push({ type: 'chapter', id: chapterId })
@@ -469,7 +473,7 @@ export class Library {
         })
       }
     }
-    return { outline: { ...stored, items }, chapters, problems }
+    return { outline: { ...stored, items, tests }, chapters, problems }
   }
 
   /* ---------- series ---------- */
@@ -559,7 +563,12 @@ export class Library {
       createdAt: time,
       updatedAt: time,
     }
-    const outline: OutlineFile = { formatVersion: FORMAT_VERSION, volumeId: volume.id, items: [] }
+    const outline: OutlineFile = {
+      formatVersion: FORMAT_VERSION,
+      volumeId: volume.id,
+      items: [],
+      tests: [],
+    }
 
     // Volume files first, then the series' order: a crash in between leaves a
     // volume that snapshot() still lists, never an order entry with no files.
@@ -661,6 +670,7 @@ export class Library {
           listed.push(...item.chapterIds)
         } else listed.push(item.id)
       }
+      listed.push(...outline.tests.map((t) => t.id))
       const listedSet = new Set(listed)
       if (listedSet.size !== listed.length) {
         throw new AppError('invalid-input', 'A chapter is listed more than once in the outline.')
@@ -690,6 +700,7 @@ export class Library {
     title: string
     type?: ChapterType
     arcId?: string
+    testOf?: string
   }): Promise<ChapterFile> {
     const { seriesId, volumeId } = input
     const time = this.timestamp()
@@ -722,7 +733,8 @@ export class Library {
 
       // Chapter file first: if the outline write fails, getOutline() still shows it.
       await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapter.id), chapter)
-      if (arc?.type === 'arc') arc.chapterIds.push(chapter.id)
+      if (input.testOf) outline.tests.push({ id: chapter.id, chapterId: input.testOf })
+      else if (arc?.type === 'arc') arc.chapterIds.push(chapter.id)
       else outline.items.push({ type: 'chapter', id: chapter.id })
       await this.writeVolumeFile(seriesId, volumeId, unitPaths.outline, outline)
     })
@@ -743,6 +755,52 @@ export class Library {
       type: 'chapter',
       id: chapterId,
     })
+  }
+
+  /**
+   * Makes a chapter a test scene kept with `testOf`, or (null) a test scene a
+   * chapter again, right after the one it was kept with. Only the outline changes.
+   */
+  async setTest(
+    seriesId: string,
+    volumeId: string,
+    chapterId: string,
+    testOf: string | null,
+  ): Promise<OutlineView> {
+    if (testOf === chapterId)
+      throw new AppError('invalid-input', 'A chapter can’t be its own test scene.')
+    await this.lock.run(`volume:${volumeId}`, async () => {
+      await this.getVolume(seriesId, volumeId)
+      const onDisk = new Set(await this.chapterIdsOnDisk(seriesId, volumeId))
+      if (!onDisk.has(chapterId)) throw new AppError('not-found', 'That chapter no longer exists.')
+      if (testOf && !onDisk.has(testOf))
+        throw new AppError('not-found', 'That chapter no longer exists.')
+      const outline = await this.readStoredOutline(seriesId, volumeId)
+      const was = outline.tests.find((t) => t.id === chapterId)
+      outline.items = outline.items
+        .filter((i) => !(i.type === 'chapter' && i.id === chapterId))
+        .map((i) =>
+          i.type === 'arc' ? { ...i, chapterIds: i.chapterIds.filter((c) => c !== chapterId) } : i,
+        )
+      outline.tests = outline.tests.filter((t) => t.id !== chapterId)
+      if (testOf) {
+        // Its own test scenes go with it, so tests never nest.
+        const parent = outline.tests.find((t) => t.id === testOf)?.chapterId ?? testOf
+        outline.tests = outline.tests.map((t) =>
+          t.chapterId === chapterId ? { ...t, chapterId: parent } : t,
+        )
+        outline.tests.push({ id: chapterId, chapterId: parent })
+      } else {
+        const after = was?.chapterId
+        const inOrder = (id: string) =>
+          outline.items.some((i) => (i.type === 'arc' ? i.chapterIds.includes(id) : i.id === id))
+        if (after && inOrder(after)) this.placeAfter(outline, after, chapterId)
+        else outline.items.push({ type: 'chapter', id: chapterId })
+      }
+      await this.writeVolumeFile(seriesId, volumeId, unitPaths.outline, outline)
+    })
+    this.onChange({ kind: 'outline', seriesId, volumeId })
+    return this.getOutline(seriesId, volumeId)
   }
 
   /** A new chapter made from an existing one, placed right after `afterId`. Inside the volume lock. */
@@ -956,21 +1014,25 @@ export class Library {
     for (const s of series) {
       for (const volume of s.volumes) {
         const chapters: ChapterFile[] = []
-        for (const chapterId of await this.chaptersInOrder(s.id, volume.id)) {
+        const tests = await this.testIds(s.id, volume.id)
+        for (const chapterId of await this.chaptersInOrder(s.id, volume.id, { tests: true })) {
           try {
             chapters.push(await this.readChapter(s.id, volume.id, chapterId))
           } catch (err) {
             if (!(err instanceof AppError)) throw err
           }
         }
-        const labels = chapterLabels(chapters.map((c) => c.type))
-        chapters.forEach((chapter, i) =>
+        // Test scenes are read too, marked as tests and not numbered.
+        const story = chapters.filter((c) => !tests.has(c.id))
+        const numbered = chapterLabels(story.map((c) => c.type))
+        const labels = new Map(story.map((c, i) => [c.id, numbered[i]!]))
+        chapters.forEach((chapter) =>
           out.push({
             chapter: {
               id: chapter.id,
               seriesId: s.id,
               volumeId: volume.id,
-              label: labels[i]!,
+              label: labels.get(chapter.id) ?? 'Test scene',
               title: chapter.title,
               volumeName: volume.name,
             },
@@ -1400,15 +1462,19 @@ export class Library {
           index = i.chapterIds.indexOf(chapterId)
         }
       })
+      const test = outline.tests.find((t) => t.id === chapterId)
       const entry = this.newTrashItem('chapter', title, `${series.name} › ${volume.name}`, {
         seriesId,
         volumeId,
         chapterId,
         arc,
         index: Math.max(0, index),
+        ...(test ? { testOf: test.chapterId } : {}),
       })
       await this.putInTrash(entry, path)
 
+      // Its own test scenes stay, shown loose until it's restored.
+      outline.tests = outline.tests.filter((t) => t.id !== chapterId)
       outline.items = outline.items
         .filter((i) => !(i.type === 'chapter' && i.id === chapterId))
         .map((i) =>
@@ -1498,7 +1564,9 @@ export class Library {
           await putBack(dest)
           const outline = await this.readStoredOutline(seriesId, volumeId)
           const index = origin.index ?? Number.MAX_SAFE_INTEGER
-          if (origin.arc) {
+          if (origin.testOf !== undefined) {
+            outline.tests.push({ id: chapterId, chapterId: origin.testOf })
+          } else if (origin.arc) {
             const { id: arcId, name, index: arcIndex } = origin.arc
             let arc = outline.items.find((i) => i.type === 'arc' && i.id === arcId)
             if (arc?.type !== 'arc') {
@@ -1865,7 +1933,7 @@ export class Library {
     volumeId: string,
   ): Promise<{ id: string; title: string; paragraphs: string[] }[]> {
     const out: { id: string; title: string; paragraphs: string[] }[] = []
-    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId)) {
+    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId, { tests: true })) {
       try {
         const chapter = await this.readChapter(seriesId, volumeId, chapterId)
         out.push({
@@ -1979,10 +2047,31 @@ export class Library {
 
   /* ---------- find and replace ---------- */
 
-  /** Chapter ids in reading order (outline order, then any missing from it). */
-  private async chaptersInOrder(seriesId: string, volumeId: string): Promise<string[]> {
+  /**
+   * Chapter ids in reading order (outline order, then any missing from it).
+   * With `tests`, each chapter's test scenes follow it (loose ones at the end).
+   */
+  private async chaptersInOrder(
+    seriesId: string,
+    volumeId: string,
+    options: { tests?: boolean } = {},
+  ): Promise<string[]> {
     const { outline } = await this.getOutline(seriesId, volumeId)
-    return outline.items.flatMap((i) => (i.type === 'arc' ? i.chapterIds : [i.id]))
+    const order = outline.items.flatMap((i) => (i.type === 'arc' ? i.chapterIds : [i.id]))
+    if (!options.tests || !outline.tests.length) return order
+    const placed = new Set(order)
+    const withTests = order.flatMap((id) => [
+      id,
+      ...outline.tests.filter((t) => t.chapterId === id).map((t) => t.id),
+    ])
+    const loose = outline.tests.filter((t) => !t.chapterId || !placed.has(t.chapterId))
+    return [...withTests, ...loose.map((t) => t.id)]
+  }
+
+  /** Test scene ids of a volume. */
+  private async testIds(seriesId: string, volumeId: string): Promise<Set<string>> {
+    const stored = await this.readStoredOutline(seriesId, volumeId).catch(() => null)
+    return new Set(stored?.tests.map((t) => t.id) ?? [])
   }
 
   async searchVolume(
@@ -2026,7 +2115,7 @@ export class Library {
     pattern: RegExp,
   ): Promise<void> {
     const volumeName = (await this.getVolume(seriesId, volumeId)).name
-    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId)) {
+    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId, { tests: true })) {
       let chapter: ChapterFile
       try {
         chapter = await this.readChapter(seriesId, volumeId, chapterId)
@@ -2074,7 +2163,7 @@ export class Library {
     let chapters = 0
     let replacements = 0
     if (!pattern) return { chapters, replacements }
-    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId)) {
+    for (const chapterId of await this.chaptersInOrder(seriesId, volumeId, { tests: true })) {
       const changed = await this.lock.run(`volume:${volumeId}`, async () => {
         let existing: ChapterFile
         try {

@@ -4930,3 +4930,39 @@ kbd {
 .pov-chip button:hover {
   opacity: 1;
 }
+
+/* Test scenes, kept under their chapter in the binder. */
+.binder-tests {
+  list-style: none;
+  margin: 0 0 0.25rem 1.1rem;
+  padding: 0;
+}
+.binder-test {
+  font-size: 0.85em;
+  font-style: italic;
+  opacity: 0.8;
+  cursor: grab;
+  border-radius: 4px;
+}
+.binder-test-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+}
+.binder-test:hover,
+.binder-test.selected {
+  opacity: 1;
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+.binder-test-mark {
+  opacity: 0.6;
+}
+.binder-row.test-drop {
+  outline: 2px dashed var(--accent, #c76);
+  outline-offset: -2px;
+}
+.binder-loose-tests h3 {
+  margin: 0.75rem 0 0.25rem;
+  font-weight: 600;
+}

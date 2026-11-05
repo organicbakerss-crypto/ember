@@ -22,6 +22,7 @@ import {
 import { PAGE_GAP, usePages } from './usePages'
 import { useChapterSaver, type SaveState } from './useChapterSaver'
 import type { Pov } from '@shared/world/povs'
+import { TEST_SCENE_DRAG } from '../binder/Binder'
 
 export interface ChapterMeta {
   title: string
@@ -68,6 +69,18 @@ export interface EditorHandle {
   showComment: (id: string) => void
   /** The chapter cut in two at the cursor; null when the cursor is at the very start or end. */
   splitAtCursor: () => { before: JSONContent; after: JSONContent } | null
+  /**
+   * Takes the selected text out (one undoable step) and returns it as a doc,
+   * with a token for `undoInsert` to put it back; null: nothing selected.
+   */
+  cutSelection: () => { doc: JSONContent; token: object } | null
+  /**
+   * Puts a doc's blocks in at a block boundary (one undoable step). Returns a
+   * token for `undoInsert`, or null when it couldn't.
+   */
+  insertBlocks: (doc: object, pos: number) => object | null
+  /** Undoes an insert, if nothing has changed since. Returns whether it did. */
+  undoInsert: (token: object) => boolean
 }
 
 /** A search match to select once the chapter is open. */
@@ -108,6 +121,8 @@ interface Props {
   onToggleEcho: () => void
   /** The chapter's paragraphs, reported a moment after typing stops. */
   onParagraphs: (paragraphs: string[]) => void
+  /** A test scene dropped on the page, at a block boundary. */
+  onDropTest?: (testId: string, pos: number) => void
   /** The selected text as paragraphs, or null when nothing is selected. */
   onSelection: (paragraphs: string[] | null) => void
 }
@@ -241,6 +256,11 @@ function EditorPage(
   // Content the editor can't represent is never edited or saved.
   const [contentError, setContentError] = useState<string | null>(null)
   const unreadable = useRef(false)
+  // The latest drop handler, for the editor's drop handling (set up once).
+  const onDropTest = useRef(props.onDropTest)
+  useEffect(() => {
+    onDropTest.current = props.onDropTest
+  })
   const scroller = useRef<HTMLDivElement>(null)
 
   const paragraphTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -296,7 +316,27 @@ function EditorPage(
         props.onParagraphs(editorParagraphs(e.state.doc))
       }, RECALC_DELAY_MS)
     },
-    editorProps: { attributes: { class: 'chapter-content', spellcheck: 'true' } },
+    editorProps: {
+      attributes: { class: 'chapter-content', spellcheck: 'true' },
+      // A test scene dragged from the binder goes in between the blocks it's dropped on.
+      handleDrop(view, event) {
+        const data = event.dataTransfer
+        if (!data?.types.includes(TEST_SCENE_DRAG)) return false
+        event.preventDefault()
+        const testId = data.getData(TEST_SCENE_DRAG)
+        const hit = view.posAtCoords({ left: event.clientX, top: event.clientY })
+        if (!testId || !hit || readOnly) return true
+        const $pos = view.state.doc.resolve(hit.pos)
+        const at =
+          $pos.depth === 0
+            ? hit.pos
+            : $pos.parentOffset < $pos.parent.content.size / 2
+              ? $pos.before(1)
+              : $pos.after(1)
+        onDropTest.current?.(testId, at)
+        return true
+      },
+    },
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
   })
@@ -503,6 +543,31 @@ function EditorPage(
     getDoc() {
       if (readOnly || contentError) return null
       return editor.getJSON()
+    },
+    cutSelection() {
+      if (readOnly || contentError) return null
+      const { from, to, empty } = editor.state.selection
+      if (empty) return null
+      const doc = editor.state.doc.cut(from, to)
+      if (!doc.textContent.trim()) return null
+      editor.chain().focus().deleteSelection().run()
+      return { doc: doc.toJSON() as JSONContent, token: editor.state.doc }
+    },
+    insertBlocks(doc: object, pos: number) {
+      if (readOnly || contentError) return null
+      let node
+      try {
+        node = editor.schema.nodeFromJSON(doc)
+      } catch {
+        return null
+      }
+      const at = Math.max(0, Math.min(pos, editor.state.doc.content.size))
+      editor.view.dispatch(editor.state.tr.insert(at, node.content).scrollIntoView())
+      return editor.state.doc
+    },
+    undoInsert(token: object) {
+      if (editor.state.doc !== token) return false
+      return editor.commands.undo()
     },
     replaceDoc(doc: JSONContent) {
       if (readOnly || contentError) return false

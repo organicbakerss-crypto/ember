@@ -110,7 +110,14 @@ interface BinderProps {
   entryName: (entryId: string) => string | undefined
   /** The world's people, to find POVs named by scene headings. */
   povPeople: readonly PovPerson[]
+  /** A new test scene kept with this chapter. */
+  onCreateTest: (chapterId: string) => void
+  /** Keeps a chapter as a test scene of another, or (null) makes a test scene a chapter. */
+  onSetTest: (chapterId: string, testOf: string | null) => void
 }
+
+/** Drag data of a test scene (dropped on a chapter in the binder, or onto the page). */
+export const TEST_SCENE_DRAG = 'application/x-test-scene'
 
 /** Arcs and chapters, reordered by drag-and-drop. Only outline.json changes. */
 export function Binder(props: BinderProps) {
@@ -347,9 +354,86 @@ export function Binder(props: BinderProps) {
       ...(props.onExportChapter
         ? [{ label: 'Export…', onSelect: () => props.onExportChapter?.(id) }]
         : []),
+      { label: 'New test scene', onSelect: () => props.onCreateTest(id) },
+      {
+        label: 'Make it a test scene of…',
+        submenu: chapterOrder(containers)
+          .filter((other) => other !== id)
+          .slice(0, 60)
+          .map((other) => ({
+            label: meta(other).title || 'Untitled chapter',
+            onSelect: () => props.onSetTest(id, other),
+          })),
+      },
       { label: 'Delete', danger: true, onSelect: () => props.onTrashChapter(id) },
     ]
   }
+  const testMenu = (id: string): MenuItem[] => [
+    { label: 'Open', onSelect: () => props.onSelect(id) },
+    { label: 'Rename', hint: 'F2', onSelect: () => props.onRenamingChange(id) },
+    { label: 'Make it a chapter', onSelect: () => props.onSetTest(id, null) },
+    { label: 'Delete', danger: true, onSelect: () => props.onTrashChapter(id) },
+  ]
+  const tests = view.outline.tests
+  const inOrder = new Set(chapterOrder(containers))
+  const looseTests = tests.filter((t) => !t.chapterId || !inOrder.has(t.chapterId))
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  /** A chapter row that takes a test scene dropped on it. */
+  const testDrop = (id: string) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(TEST_SCENE_DRAG)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      if (dropTarget !== id) setDropTarget(id)
+    },
+    onDragLeave: () => setDropTarget((t) => (t === id ? null : t)),
+    onDrop: (e: React.DragEvent) => {
+      const testId = e.dataTransfer.getData(TEST_SCENE_DRAG)
+      setDropTarget(null)
+      if (!testId || testId === id) return
+      e.preventDefault()
+      props.onSetTest(testId, id)
+    },
+  })
+  const testList = (items: { id: string }[]) =>
+    items.length > 0 && (
+      <ul
+        className="binder-tests"
+        // Test scenes drag with the browser's own drag (onto the page or another chapter).
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {items.map((t) => (
+          <li
+            key={t.id}
+            className={`binder-test ${t.id === props.selectedId ? 'selected' : ''}`}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(TEST_SCENE_DRAG, t.id)
+              e.dataTransfer.setData('text/plain', meta(t.id).title || 'Test scene')
+              e.dataTransfer.effectAllowed = 'move'
+            }}
+            onContextMenu={menu(() => testMenu(t.id))}
+            title="Test scene: not in the manuscript, Book mode or exports. Drag it onto the page to use it."
+          >
+            <div className="binder-test-row" onClick={() => props.onSelect(t.id)}>
+              <span className="binder-test-mark" aria-hidden>
+                ✎
+              </span>
+              <EditableText
+                className="binder-title"
+                value={meta(t.id).title}
+                placeholder="Untitled test scene"
+                allowEmpty
+                editing={props.renamingId === t.id}
+                onEditingChange={(on) => props.onRenamingChange(on ? t.id : null)}
+                onRename={(title) => props.onRenameChapter(t.id, title)}
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
+    )
   const arcMenu = (arc: OutlineArc): MenuItem[] => [
     { label: 'Rename', hint: 'F2', onSelect: () => props.onRenamingChange(arc.id) },
     { label: 'Delete', danger: true, onSelect: () => props.onDeleteArc(arc) },
@@ -376,7 +460,10 @@ export function Binder(props: BinderProps) {
         onSelect={() => props.onSelect(id)}
         onJump={props.onJump}
         onContextMenu={menu(() => chapterMenu(id))}
+        dropping={dropTarget === id}
+        drop={testDrop(id)}
       />
+      {!filtering && testList(tests.filter((t) => t.chapterId === id))}
     </SortableChapter>
   )
 
@@ -488,6 +575,12 @@ export function Binder(props: BinderProps) {
         </DragOverlay>
       </DndContext>
 
+      {looseTests.length > 0 && (
+        <section className="binder-loose-tests">
+          <h3 className="small muted">Test scenes</h3>
+          {testList(looseTests)}
+        </section>
+      )}
       {chapterOrder(containers).length === 0 && arcs.size === 0 && (
         <p className="muted small">No chapters yet.</p>
       )}
@@ -641,14 +734,18 @@ function ChapterRow(props: {
   onSelect: () => void
   onJump: (pos: number) => void
   onContextMenu: (e: React.MouseEvent) => void
+  /** A test scene is being dragged over this row. */
+  dropping: boolean
+  drop: Pick<React.HTMLAttributes<HTMLDivElement>, 'onDragOver' | 'onDragLeave' | 'onDrop'>
 }) {
   const { meta } = props
   return (
     <>
       <div
-        className={`binder-row ${props.selected ? 'selected' : ''} ${meta.type}`}
+        className={`binder-row ${props.selected ? 'selected' : ''} ${meta.type} ${props.dropping ? 'test-drop' : ''}`}
         onClick={props.onSelect}
         onContextMenu={props.onContextMenu}
+        {...props.drop}
       >
         {props.label && (
           <span

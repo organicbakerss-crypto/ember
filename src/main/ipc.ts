@@ -573,6 +573,8 @@ export function registerIpc(
       host.current.saveOutline(input.seriesId, input.volumeId, input.outline),
     'arc:create': (input) => host.current.createArc(input),
     'chapter:create': (input) => host.current.createChapter(input),
+    'chapter:setTest': (input) =>
+      host.current.setTest(input.seriesId, input.volumeId, input.chapterId, input.testOf),
     'chapter:read': (input) =>
       host.current.readChapter(input.seriesId, input.volumeId, input.chapterId),
     'chapter:save': (input) =>

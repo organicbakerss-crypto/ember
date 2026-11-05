@@ -13,6 +13,7 @@ import {
 const outline: OutlineFile = {
   formatVersion: 1,
   volumeId: 'vol_x',
+  tests: [],
   items: [
     { type: 'chapter', id: 'chp_prologue' },
     { type: 'arc', id: 'arc_one', name: 'One', finished: true, chapterIds: ['chp_a', 'chp_b'] },

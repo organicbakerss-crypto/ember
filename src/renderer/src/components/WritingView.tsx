@@ -262,7 +262,7 @@ export function WritingView(props: {
   const [sized, setSized] = useState(false)
   if (view && !sized) {
     setSized(true)
-    if (Object.keys(view.chapters).length === 1 && panel === 'binder') setPanel(null)
+    if (chapterOrder(toContainers(view.outline)).length === 1 && panel === 'binder') setPanel(null)
   }
 
   const refresh = useCallback(() => {
@@ -610,6 +610,75 @@ export function WritingView(props: {
       setError(describeError(err).message)
     } finally {
       creating.current = false
+    }
+  }
+
+  /** A new test scene kept with a chapter (optionally holding some text), opened. */
+  const createTest = async (chapterId: string, content?: RichTextDoc, title = '') => {
+    try {
+      await flushAll()
+      const test = await api.invoke('chapter:create', { ...ref, title, testOf: chapterId })
+      if (content) {
+        await api.invoke('chapter:save', { ...ref, chapterId: test.id, patch: { content } })
+      }
+      setView(await api.invoke('outline:get', ref))
+      if (!content) select(test.id)
+      return test
+    } catch (err) {
+      actions.toast(describeError(err).message)
+      return null
+    }
+  }
+  /** The chapter a test scene belongs with: the open one, or the one an open test is kept with. */
+  const testHome = (chapterId: string) =>
+    view?.outline.tests.find((t) => t.id === chapterId)?.chapterId ?? chapterId
+  useIpcEvent('text:toTest', () => {
+    if (!pane.active || !selectedId) return
+    const home = testHome(selectedId)
+    const cut = editor.current?.cutSelection()
+    if (!cut) return
+    void createTest(home, cut.doc as RichTextDoc, 'Cut text').then((test) => {
+      if (test) actions.toast('Moved to a test scene, kept with this chapter in the binder.')
+      // Never lost: if the test scene couldn't be made, the text goes back.
+      else editor.current?.undoInsert(cut.token)
+    })
+  })
+  /** A test scene dropped on the page: its text goes in, and it goes to the trash (Undo). */
+  const dropTest = async (testId: string, pos: number) => {
+    if (testId === selectedId) return
+    try {
+      await flushAll()
+      const test = await api.invoke('chapter:read', { ...ref, chapterId: testId })
+      const token = editor.current?.insertBlocks(test.content, pos)
+      if (!token) return
+      // Saved first, so the words are in the chapter before the test scene moves.
+      await flushAll()
+      const entry = await api.invoke('trash:add', {
+        target: { kind: 'chapter', ...ref, chapterId: testId },
+      })
+      actions.toast(`“${test.title || 'Test scene'}” is now in the chapter.`, {
+        label: 'Undo',
+        run: () => {
+          const undone = editor.current?.undoInsert(token)
+          api
+            .invoke('trash:restore', { trashId: entry.id })
+            .then(() => {
+              if (!undone)
+                actions.toast('The test scene is back; its text also stays where it was dropped.')
+            })
+            .catch((err) => actions.toast(describeError(err).message))
+        },
+      })
+    } catch (err) {
+      actions.toast(describeError(err).message)
+    }
+  }
+  const setTest = async (chapterId: string, testOf: string | null) => {
+    try {
+      await flushAll()
+      setView(await api.invoke('chapter:setTest', { ...ref, chapterId, testOf }))
+    } catch (err) {
+      actions.toast(describeError(err).message)
     }
   }
 
@@ -1283,6 +1352,8 @@ export function WritingView(props: {
               onJump={(pos) => editor.current?.jumpTo(pos)}
               onSave={saveOutline}
               onCreateChapter={(arcId) => void createChapter(arcId)}
+              onCreateTest={(chapterId) => void createTest(chapterId)}
+              onSetTest={(chapterId, testOf) => void setTest(chapterId, testOf)}
               onCreateArc={(name) => api.invoke('arc:create', { ...ref, name })}
               renamingId={renamingId}
               onRenamingChange={setRenamingId}
@@ -1496,6 +1567,7 @@ export function WritingView(props: {
               onToggleRhythm={toggleRhythm}
               onToggleEcho={toggleEcho}
               onParagraphs={setChapterParagraphs}
+              onDropTest={(testId, pos) => void dropTest(testId, pos)}
               nameIndex={nameIndex}
               linkNames={settings.linkNames}
               hoverCards={settings.world.hoverCards}

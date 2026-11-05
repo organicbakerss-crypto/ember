@@ -107,7 +107,16 @@ function dedupeOutline(outline: Obj): Obj {
       items.push({ ...item, chapterIds })
     } else items.push(item)
   }
-  return { ...outline, items }
+  if (!Array.isArray(outline['tests'])) return { ...outline, items }
+  // A test scene made a chapter on one computer stays a chapter; each test once.
+  const tests = outline['tests'].filter((t) => {
+    if (!isObj(t)) return false
+    const id = String(t['id'])
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+  return { ...outline, items, tests }
 }
 
 /* ---------- three-way JSON merge ---------- */
