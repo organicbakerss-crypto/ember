@@ -67,6 +67,7 @@ export function advancePhase(session: RoundtableSession): RoundtableSession {
 }
 
 export function validBallot(session: RoundtableSession, voterId: string, ranked: string[]): boolean {
+  if (!session.participants.some((p) => p.id === voterId)) return false
   const others = session.participants.filter((p) => p.id !== voterId).map((p) => p.id)
   return ranked.length === others.length && new Set(ranked).size === others.length &&
     others.every((id) => ranked.includes(id))
