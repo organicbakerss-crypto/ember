@@ -123,6 +123,8 @@ export function Home(props: { detached?: PaneRoute | null }) {
   const [route, setRoute] = useState<Route>(() => startRoute(detached))
   // Which side of the split is being worked in (it answers keyboard shortcuts).
   const [activeSide, setActiveSide] = useState<'write' | 'world'>('write')
+  // Roundtable is a full-width mode of the existing AI tab, not another sidebar pane.
+  const [roundtableExpanded, setRoundtableExpanded] = useState(false)
   // Where each pane is now, as it reports it (for popping out, and for a torn-off window).
   const at = useRef<{ write?: PaneRoute; world?: PaneRoute; ai?: PaneRoute }>({})
   const word = useWords()
@@ -497,6 +499,8 @@ export function Home(props: { detached?: PaneRoute | null }) {
           volumeId={side.volumeId}
           onRoute={reportAi}
           onOpenInbox={openInbox}
+          roundtableActive={roundtableExpanded}
+          onRoundtableChange={setRoundtableExpanded}
         />
       </PaneFrame>
     )
@@ -673,6 +677,19 @@ export function Home(props: { detached?: PaneRoute | null }) {
     return <SplitView left={left} right={right} />
   }
   if (route.view === 'splitAi') {
+    if (roundtableExpanded) {
+      // Temporarily give the AI tab the entire workspace; returning to Chat restores the split.
+      return <AlonePane id="ai" onRoute={reportAi}>
+        <AiView
+          seriesId={route.write.seriesId}
+          volumeId={route.write.volumeId}
+          onRoute={reportAi}
+          onOpenInbox={openInbox}
+          roundtableActive={true}
+          onRoundtableChange={setRoundtableExpanded}
+        />
+      </AlonePane>
+    }
     const left = writingPane(route.write, 'split')
     const right = aiPane(route.write, 'split')
     if (!left || !right) return left ?? shelf
