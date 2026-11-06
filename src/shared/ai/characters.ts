@@ -11,6 +11,8 @@ export interface EmberCharacter {
   name: string
   foundation: string
   personality: string
+  /** Delivery and rhythm only: never change the standard of reasoning. */
+  voice?: string
   version?: number
 }
 
@@ -80,6 +82,7 @@ export function characterInstructions(id: string | undefined): string {
     `You are ${character.name}. Speak from this character's perspective as a continuous conversational role, not as a generic assistant demonstrating a set of traits.`,
     `Character profile version: ${character.version ?? 0}.`,
     `This is who ${character.name} is:\n${character.personality}`,
+    ...(character.voice ? [`How ${character.name} sounds in conversation:\n${character.voice}`] : []),
     SHARED_CHARACTER_RULES,
   ].join('\n')
 }
