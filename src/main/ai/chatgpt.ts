@@ -103,7 +103,7 @@ async function validateIdentity(
     valid = verify(
       'RSA-SHA256',
       Buffer.from(`${segments[0]}.${segments[1]}`),
-      createPublicKey({ key: key as Parameters<typeof createPublicKey>[0] extends never ? never : any, format: 'jwk' }),
+      createPublicKey({ key: key as JsonWebKey, format: 'jwk' }),
       Buffer.from(segments[2]!, 'base64url'),
     )
   } catch {
@@ -233,7 +233,7 @@ export class ChatGpt {
         if (settled) return
         settled = true
         if (timer) clearTimeout(timer)
-        server.close()
+        if (server.listening) server.close()
         if (this.waiting === server) this.waiting = null
         this.cancelPending = null
         if (err) reject(err)
@@ -310,6 +310,7 @@ export class ChatGpt {
     if (previous?.subject && previous.subject !== identity.sub)
       throw fail('This sign-in belongs to a different ChatGPT account. The existing registration was not replaced.')
     const scopes = tokens.scope?.split(/\s+/).filter(Boolean) ?? []
+    if (!scopes.includes(PERMISSION)) throw fail('ChatGPT plan use was not authorized. Please reconnect and approve the plan-use permission.')
     await this.save({
       clientId: result.clientId,
       subject: identity.sub,
@@ -351,6 +352,10 @@ export class ChatGpt {
       }
       const tokens = await res.json() as TokenResponse
       if (!tokens.access_token || !tokens.refresh_token) throw fail('ChatGPT returned an incomplete token refresh.')
+      if (tokens.id_token) {
+        const identity = await validateIdentity(tokens.id_token, current.clientId, null, this.fetch, this.authBase)
+        if (identity.sub !== current.subject) throw fail('ChatGPT returned a refreshed token for a different account.')
+      }
       const next = { ...current,
         access: tokens.access_token,
         refresh: tokens.refresh_token,
