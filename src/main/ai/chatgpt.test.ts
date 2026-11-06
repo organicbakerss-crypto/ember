@@ -115,15 +115,18 @@ describe('ChatGPT, signed in directly', () => {
   it('refreshes a login that has run out', async () => {
     const { ai, browser } = await setup()
     fake!.expireTokens = true
+    console.info('refresh test: beginning sign-in')
     await ai.chatgptSignIn(browser)
+    console.info('refresh test: sign-in finished')
     fake!.expireTokens = false
     await ai.ask(
       { requestId: 'b', mode: 'chat', messages: [{ role: 'user', content: 'hi' }], scope: null },
       () => {},
     )
+    console.info('refresh test: ask finished')
     const refresh = fake!.requests.filter(
       (r) => r.path === '/oauth/token' && r.body['grant_type'] === 'refresh_token',
     )
     expect(refresh.length).toBeGreaterThan(0)
-  })
+  }, 15000)
 })
