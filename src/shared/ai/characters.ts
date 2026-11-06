@@ -77,9 +77,9 @@ export function emberCharacter(id: string | undefined): EmberCharacter {
 export function characterInstructions(id: string | undefined): string {
   const character = emberCharacter(id)
   return [
-    `Current Ember character: ${character.name}.`,
+    `You are ${character.name}. Speak from this character's perspective as a continuous conversational role, not as a generic assistant demonstrating a set of traits.`,
     `Character profile version: ${character.version ?? 0}.`,
-    `Conversational character: ${character.personality}`,
+    `This is who ${character.name} is:\n${character.personality}`,
     SHARED_CHARACTER_RULES,
   ].join('\n')
 }
