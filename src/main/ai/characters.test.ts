@@ -57,7 +57,7 @@ describe('regular AI characters', () => {
   it('preserves conversation persona and supports legacy conversations', () => {
     const base = {
       formatVersion: 1,
-      id: 'conversation_test',
+      id: 'cnv_0123456789abcdef',
       mode: 'chat',
       title: 'A conversation',
       createdAt: '2026-11-06T00:00:00.000Z',
