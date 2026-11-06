@@ -8,6 +8,7 @@ import {
   type PaperSize,
 } from '@shared/settings'
 import { DEFAULT_FILLER_WORDS } from '@shared/analysis/fillers'
+import { EMBER_CHARACTERS, emberCharacter } from '@shared/ai/characters'
 import type { IpcResult } from '@shared/ipc'
 import { api, describeError } from '../api'
 import { STATUS_LABELS } from '../analysisFormat'
@@ -905,6 +906,26 @@ function AiSettingsSection() {
               </label>
             </>
           )}
+          <h3>AI character</h3>
+          <p className="muted small">
+            Choose who answers in Chat, Brainstorm and Ask the story. Every character uses the same
+            writing-feedback standards and model. These are provisional foundations; the full
+            character rubric will come later.
+          </p>
+          <label>
+            Current character
+            <select
+              value={ai.characterId ?? 'john-ai'}
+              onChange={(e) => set({ characterId: e.target.value })}
+            >
+              {EMBER_CHARACTERS.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="muted small">{emberCharacter(ai.characterId).foundation}</p>
           <h3>Updating the world</h3>
           <p className="muted small">When the AI reads a chapter for the world, it should:</p>
           <label className="radio">
