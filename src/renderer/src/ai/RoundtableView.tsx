@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { ROUNDTABLE_CAST } from '@shared/ai/roundtableCast'
 import { newId } from '@shared/ids'
 import type { ConversationFile } from '@shared/schema'
-import type { ConversationSummary } from '@shared/ipc'
+import type { ConversationSummary, RoundtableRunStatus } from '@shared/ipc'
 import {
   advancePhase, nextParticipant, phaseIsReady, PHASE_NAMES, roundtableResults,
   type RoundtableSession, type RoundtablePost,
 } from '@shared/ai/roundtable'
-import { api, describeError } from '../api'
+import { api, describeError, useIpcEvent } from '../api'
 import './roundtable.css'
 
-type Tab = 'floor' | 'board' | 'network' | 'results'
+type Tab = 'floor' | 'board' | 'network' | 'results' | `person:${string}`
 const TABS: { id: Tab; title: string }[] = [
   { id: 'floor', title: 'Open Floor' },
   { id: 'board', title: 'Message Board' },
@@ -26,6 +26,8 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   const [file, setFile] = useState<ConversationFile | null>(null)
   const [saved, setSaved] = useState<ConversationSummary[]>([])
   const [tab, setTab] = useState<Tab>('floor')
+  const [runStatus, setRunStatus] = useState<RoundtableRunStatus | null>(null)
+  const currentSessionId = useRef<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const activeRequest = useRef<string | null>(null)
   const [error, setError] = useState('')
@@ -34,6 +36,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   const [recipient, setRecipient] = useState('')
   const [active, setActive] = useState<string | null>(null)
   const session = file?.roundtable
+  const automatic = runStatus?.state === 'running' && runStatus.conversationId === file?.id
   const members = session?.participants ?? []
   const name = (speakerId: string) => members.find((p) => p.id === speakerId)?.name ?? 'You'
 
@@ -43,9 +46,42 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
 
   useEffect(() => { refresh() }, [seriesId])
 
+  const reloadCurrent = () => {
+    const conversationId = currentSessionId.current
+    if (!conversationId) return
+    void api.invoke('ai:conversation', { seriesId, conversationId })
+      .then((conversation) => { if (currentSessionId.current === conversationId) setFile(conversation) })
+      .catch((err) => setError(describeError(err).message))
+  }
+  useIpcEvent('library:changed', (change) => {
+    if (change.kind === 'library' || (change.kind === 'series' && change.seriesId === seriesId)) reloadCurrent()
+  })
+  useIpcEvent('ai:roundtableStatus', (status) => {
+    if (status.seriesId !== seriesId || status.conversationId !== currentSessionId.current) return
+    setRunStatus(status)
+    setActive(status.speakerId)
+    reloadCurrent()
+  })
+  const updateStatus = (conversationId: string) => {
+    void api.invoke('ai:roundtableStatus', { seriesId, conversationId })
+      .then((status) => { if (currentSessionId.current === conversationId) setRunStatus(status) })
+      .catch(() => {})
+  }
+  const run = async (conversationId: string) => {
+    setError('')
+    try { setRunStatus(await api.invoke('ai:roundtableRun', { seriesId, conversationId })) }
+    catch (err) { setError(describeError(err).message) }
+  }
+  const pause = async () => {
+    if (!file) return
+    try { setRunStatus(await api.invoke('ai:roundtablePause', { seriesId, conversationId: file.id })) }
+    catch (err) { setError(describeError(err).message) }
+  }
+
   const persist = async (base: ConversationFile, state: RoundtableSession) => {
     const next: ConversationFile = { ...base, updatedAt: new Date().toISOString(), roundtable: state }
     await api.invoke('ai:saveConversation', { seriesId, conversation: next })
+    currentSessionId.current = next.id
     setFile(next)
     refresh()
   }
@@ -61,7 +97,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
       createdAt: now, updatedAt: now, messages: [], roundtable: state,
     }
     setError('')
-    try { await persist(base, state); setTab('floor') }
+    try { await persist(base, state); setTab('floor'); await run(base.id) }
     catch (err) { setError(describeError(err).message) }
   }
 
@@ -70,7 +106,9 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     try {
       const conversation = await api.invoke('ai:conversation', { seriesId, conversationId })
       if (!conversation.roundtable) throw new Error('Not a Roundtable session.')
+      currentSessionId.current = conversation.id
       setFile(conversation)
+      updateStatus(conversation.id)
       setTab('floor')
     } catch (err) { setError(describeError(err).message) }
   }
@@ -82,7 +120,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   })
 
   const contribute = async (direct = false) => {
-    if (!file || !session || busy) return
+    if (!file || !session || busy || automatic) return
     const person = direct ? members.find((p) => p.id === sender) : nextParticipant(session)
     const target = direct ? recipient : null
     if (!person || (direct && (!target || target === person.id))) return
@@ -107,7 +145,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   }
 
   const advance = async () => {
-    if (!file || !session || !phaseIsReady(session) || busy) return
+    if (!file || !session || !phaseIsReady(session) || busy || automatic) return
     setError('')
     try {
       const next = advancePhase(session)
@@ -117,7 +155,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   }
 
   const addUserPost = async () => {
-    if (!file || !session || !userText.trim() || busy || session.phase === 'complete') return
+    if (!file || !session || !userText.trim() || busy || automatic || session.phase === 'complete') return
     try {
       await persist(file, { ...session, posts: [...session.posts,
         makePost(session, 'writer', userText.trim(), 'user', null)] })
@@ -126,18 +164,22 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   }
 
   const remove = async (conversationId: string) => {
-    if (busy || !window.confirm('Delete this Roundtable session?')) return
+    if (busy || automatic || !window.confirm('Delete this Roundtable session?')) return
     try {
       await api.invoke('ai:deleteConversation', { seriesId, conversationId })
-      if (file?.id === conversationId) setFile(null)
+      if (file?.id === conversationId) { currentSessionId.current = null; setFile(null); setRunStatus(null) }
       refresh()
     } catch (err) { setError(describeError(err).message) }
   }
 
+  const currentPerson = tab.startsWith('person:') ? tab.slice(7) : null
   const visiblePosts = (session?.posts ?? []).filter((post) =>
+    currentPerson ? (post.speakerId === currentPerson || post.targetId === currentPerson) &&
+        post.channel !== 'ballot' && (post.channel !== 'private' || post.speakerId === currentPerson) :
     tab === 'board' ? post.channel === 'direct' :
-      tab === 'floor' ? post.channel === 'open' || post.channel === 'user' :
+      tab === 'floor' ? post.channel === 'open' || (post.channel === 'user' && !post.targetId) :
         tab === 'results' ? post.channel === 'ballot' : post.channel !== 'private')
+  const connections = (session?.posts ?? []).filter((post) => post.channel === 'direct' && post.targetId)
   const ballotCount = session?.posts.filter((p) => p.phase === 'vote' && p.channel === 'ballot').length ?? 0
 
   return <div className="rt-root">
@@ -145,12 +187,12 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
       <button className="link" onClick={onBack}>← AI chat</button>
       <strong>Roundtable</strong>
       <span className="status-spacer" />
-      {session && <button className="link" disabled={!!busy} onClick={() => setFile(null)}>New Roundtable</button>}
+      {session && <button className="link" disabled={!!busy} onClick={() => { currentSessionId.current = null; setFile(null); setRunStatus(null) }}>New Roundtable</button>}
     </header>
     {error && <div className="error rt-error" role="alert">{error}</div>}
     {!session ? <div className="rt-setup">
       <h3>Start a Roundtable</h3>
-      <p className="muted">Each participant proposes an approach, discusses it twice, privately revises their view, and ranks the other proposals. You control each model call.</p>
+      <p className="muted">Each participant proposes an approach, debates, revises privately, and ranks the others. Once started, the discussion proceeds automatically. You can pause it whenever needed.</p>
       <label>Question or problem<textarea rows={4} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What should this group discuss?" maxLength={4000} /></label>
       <div className="rt-picker"><strong>Participants ({selected.length}/8)</strong>
         <div className="rt-choice-grid">
@@ -173,6 +215,9 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
       <div className="rt-topic"><strong>{session.topic}</strong><span className="muted small">{PHASE_NAMES[session.phase]} · {members.length} participants</span></div>
       <nav className="rt-tabs" aria-label="Roundtable views">
         {TABS.map((t) => <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>{t.title}</button>)}
+        <span className="rt-tab-divider" />
+        {members.map((member) => <button key={member.id} className={tab === `person:${member.id}` ? 'active' : ''}
+          onClick={() => setTab(`person:${member.id}`)}>{member.name}</button>)}
       </nav>
       {tab === 'network' ? <div className="rt-network">
         <svg viewBox="0 0 560 460" role="img" aria-label="Open Floor in the center, all participants linked around it">
@@ -182,13 +227,18 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
             const y = 230 + Math.sin(angle) * 175
             return <g key={p.id}>
               <line x1={280} y1={230} x2={x} y2={y} className={active === p.id ? 'rt-line active' : 'rt-line'} />
-              {members.map((other, j) => {
-                if (j <= i) return null
-                const a = -Math.PI / 2 + j * Math.PI * 2 / members.length
-                return <line key={other.id} className="rt-line between" x1={x} y1={y}
-                  x2={280 + Math.cos(a) * 195} y2={230 + Math.sin(a) * 175} />
-              })}
+
             </g>
+          })}
+          {connections.map((post) => {
+            const from = members.findIndex((p) => p.id === post.speakerId)
+            const to = members.findIndex((p) => p.id === post.targetId)
+            if (from < 0 || to < 0) return null
+            const a = -Math.PI / 2 + from * Math.PI * 2 / members.length
+            const b = -Math.PI / 2 + to * Math.PI * 2 / members.length
+            return <line key={post.id} className="rt-line direct" x1={280 + Math.cos(a) * 195}
+              y1={230 + Math.sin(a) * 175} x2={280 + Math.cos(b) * 195}
+              y2={230 + Math.sin(b) * 175} />
           })}
           <circle cx={280} cy={230} r={72} className="rt-center" />
           <text x={280} y={225} textAnchor="middle" className="rt-center-text">Open</text>
@@ -202,7 +252,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
             </g>
           })}
         </svg>
-        <p className="muted small">Connections highlight the latest speaker. The discussion is in Open Floor and Message Board.</p>
+        <p className="muted small">Spokes show Open Floor participation; cross-links show actual direct exchanges. The active speaker is highlighted.</p>
       </div> : tab === 'results' ? <div className="rt-feed">
         <h3>Peer rankings {session.phase === 'complete' ? '' : '(in progress)'}</h3>
         {roundtableResults(session).map((result, i) =>
@@ -214,7 +264,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
           <ol>{post.ranking?.map((id) => <li key={id}>{name(id)}</li>)}</ol>
         </article>)}
       </div> : <div className="rt-feed">
-        {!visiblePosts.length && <p className="muted">No {tab === 'floor' ? 'open-floor posts' : 'direct exchanges'} yet.</p>}
+        {!visiblePosts.length && <p className="muted">No {tab === 'floor' ? 'open-floor posts' : currentPerson ? 'messages for this participant' : 'direct exchanges'} yet.</p>}
         {visiblePosts.map((post) => <article key={post.id} className="rt-post">
           <div className="rt-post-head"><strong>{name(post.speakerId)}</strong>
             {post.targetId && <span className="muted small">to {name(post.targetId)}</span>}
@@ -223,8 +273,8 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
         </article>)}
         {tab === 'floor' && session.phase !== 'complete' && <div className="rt-writer">
           <textarea rows={2} value={userText} onChange={(e) => setUserText(e.target.value)}
-            placeholder="Add a note or question to the Open Floor…" maxLength={16000} disabled={!!busy} />
-          <button disabled={!userText.trim() || !!busy} onClick={() => void addUserPost()}>Post as writer</button>
+            placeholder="Add a note or question to the Open Floor…" maxLength={16000} disabled={!!busy || automatic} />
+          <button disabled={!userText.trim() || !!busy || automatic} onClick={() => void addUserPost()}>Post as writer</button>
         </div>}
         {tab === 'board' && ['discussion1', 'discussion2'].includes(session.phase) && <div className="rt-direct">
           <select aria-label="Speaker" value={sender} onChange={(e) => setSender(e.target.value)}>
@@ -235,7 +285,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
             <option value="">To participant…</option>
             {members.filter((p) => p.id !== sender).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button disabled={!sender || !recipient || sender === recipient || !!busy} onClick={() => void contribute(true)}>Request direct reply</button>
+          <button disabled={!sender || !recipient || sender === recipient || !!busy || automatic} onClick={() => void contribute(true)}>Request direct reply</button>
         </div>}
       </div>}
       <footer className="rt-footer">
@@ -248,7 +298,14 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
         </details>}
         <div className="rt-controls">
           {session.phase === 'complete' ? <strong>Roundtable finished. All peer ballots are available in Rankings.</strong> :
-            nextParticipant(session) ? <>
+            automatic ? <>
+              <span className="muted small">{runStatus?.speakerId ? `${name(runStatus.speakerId)} is contributing` : 'Advancing the discussion…'}</span>
+              <button onClick={() => void pause()}>Pause Roundtable</button>
+            </> : <>
+              <span className="muted small">{runStatus?.state === 'failed' ? `Stopped: ${runStatus.error ?? 'AI request failed'}` : 'Paused · progress saved'}</span>
+              <button className="primary" onClick={() => void run(file!.id)}>Resume automatically</button>
+            </>}
+          {false && nextParticipant(session) ? <>
               <span className="muted small">Next: {nextParticipant(session)!.name}</span>
               <button className="primary" disabled={!!busy} onClick={() => void contribute()}>
                 {busy ? `${name(busy)} responding…` : `Get ${nextParticipant(session)!.name}'s contribution`}
