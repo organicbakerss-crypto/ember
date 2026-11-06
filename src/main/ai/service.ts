@@ -432,7 +432,7 @@ export class AiService {
     const positionMemory = [
       ownProposal ? `Your original proposal (your own, not a group consensus): ${ownProposal.text.slice(0, 3500)}` : '',
       ownRevision ? `Your private reconsideration: ${ownRevision.text.slice(0, 2500)}` : '',
-    ].filter(Boolean).join('\\n\\n')
+    ].filter(Boolean).join('\n\n')
     const role = direct
       ? `Address ${session.participants.find((p) => p.id === targetId)!.name} directly, building on a concrete disagreement or question. Respond to the merits of their criticism instead of automatically accepting it. If your approach remains stronger, explain why, including a specific tradeoff. This is a message-board reply, not a new opening proposal.`
       : session.phase === 'proposals'
