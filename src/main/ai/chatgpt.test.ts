@@ -48,7 +48,7 @@ describe('ChatGPT, signed in directly', () => {
       messages: [{ role: 'user' as const, content: 'hi' }],
       scope: null,
     }
-    await expect(ai.ask(ask, () => {})).rejects.toThrow(/Connect your ChatGPT account/)
+    await expect(ai.ask(ask, () => {})).rejects.toThrow(/Sign in with ChatGPT first/)
 
     let opened = ''
     await ai.chatgptSignIn(async (url) => {
