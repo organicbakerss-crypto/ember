@@ -5,6 +5,7 @@
  * listen for change broadcasts so every open window stays live.
  */
 import { z } from 'zod'
+import { roundtableSessionSchema } from './ai/roundtable'
 import { MAX_COVER_BYTES, MAX_MAP_BYTES, type CoverInfo, type CoverTarget } from './media'
 import { docKeySchema, paneRouteSchema, type PaneRoute } from './panes'
 import {
@@ -847,6 +848,14 @@ export const ipcInputs = {
     /** Files attached to the conversation (read on this computer). */
     attachmentIds: z.array(z.string().max(40)).max(20).optional(),
   }),
+  /** One controlled Roundtable contribution. Saves happen separately so each turn is reviewable. */
+  'ai:roundtableTurn': z.object({
+    requestId: z.string().min(1).max(80),
+    session: roundtableSessionSchema,
+    speakerId: z.string().min(1).max(80),
+    targetId: z.string().min(1).max(80).nullable(),
+    direct: z.boolean().default(false),
+  }),
   /** Attaches a file to an AI conversation: kept as text on this computer only. */
   'ai:attach': z.object({
     conversationId: id('conversation'),
@@ -1172,6 +1181,7 @@ export interface IpcResults {
   'sync:openCloudflare': null
   'ai:status': AiStatus
   'ai:ask': { text: string; lookedAt: string[] }
+  'ai:roundtableTurn': { text: string; ranking: string[] | null }
   'ai:attach': { id: string; name: string; words: number }
   'ai:attachmentsHere': string[]
   'ai:editChapter': { text: string }
@@ -1295,6 +1305,7 @@ export interface IpcEvents {
 /** A saved AI conversation in lists. */
 export interface ConversationSummary {
   id: string
+  roundtable?: boolean
   mode: ConversationFile['mode']
   title: string
   createdAt: string
