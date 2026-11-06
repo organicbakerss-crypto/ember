@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ROUNDTABLE_CAST, roundtableRole, SPECIALIST_PROFILES } from './roundtableCast'
 import { conversationFileSchema } from '../schema'
 import {
-  advancePhase, nextParticipant, phaseIsReady, roundtableResults, validBallot,
+  advancePhase, finalPosition, finalPositionsReady, nextParticipant, phaseIsReady, roundtableResults, roundtableSessionSchema, validBallot,
   type RoundtableSession, type RoundtablePost,
 } from './roundtable'
 
@@ -98,14 +98,36 @@ describe('Roundtable phase engine', () => {
 
   it('runs exactly two discussions with private reconsideration before voting', () => {
     let state = initial()
-    for (const phase of ['proposals', 'discussion1', 'revision', 'discussion2', 'vote'] as const) {
+    for (const phase of ['proposals', 'discussion1', 'revision', 'discussion2', 'final', 'vote'] as const) {
       expect(state.phase).toBe(phase)
-      const channel = phase === 'revision' ? 'private' : phase === 'vote' ? 'ballot' : 'open'
+      const channel = phase === 'revision' || phase === 'final' ? 'private' : phase === 'vote' ? 'ballot' : 'open'
       for (const p of people) state.posts.push(post(p.id, phase, channel))
       state = advancePhase(state)
     }
     expect(state.phase).toBe('complete')
     expect(nextParticipant(state)).toBeNull()
+  })
+
+  it('accepts up to twelve participants, but not thirteen', () => {
+    const participants = Array.from({ length: 12 }, (_, i) =>
+      ({ id: `participant-${i}`, name: `Participant ${i}`, kind: 'specialist' as const }))
+    expect(roundtableSessionSchema.safeParse({ ...initial(), participants }).success).toBe(true)
+    expect(roundtableSessionSchema.safeParse({ ...initial(), participants: [...participants, {
+      id: 'participant-12', name: 'Participant 12', kind: 'specialist',
+    }] }).success).toBe(false)
+  })
+
+  it('keeps final positions sealed until all summaries and proposals are locked in', () => {
+    const session = { ...initial(), phase: 'final' as const }
+    expect(finalPositionsReady(session)).toBe(false)
+    for (const participant of people) {
+      session.posts.push({
+        ...post(participant.id, 'final', 'private'), summary: `Final ${participant.name}`,
+      })
+    }
+    expect(finalPositionsReady(session)).toBe(true)
+    expect(finalPosition(session, 'roman')?.summary).toBe('Final Roman')
+    expect(advancePhase(session).phase).toBe('vote')
   })
 
   it('rejects self votes, duplicates, omissions and foreign candidates', () => {
