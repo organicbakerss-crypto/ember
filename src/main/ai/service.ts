@@ -503,6 +503,7 @@ export class AiService {
   }): Promise<{ text: string }> {
     const member = input.session.participants.find((p) => p.id === input.speakerId)
     if (!member) throw new AppError('invalid-input', 'Choose a Roundtable participant.')
+    if (member.kind === 'guest') throw new AppError('invalid-input', 'Guest stars participate in the Roundtable discussion, not private writer chats.')
     let instructions: string
     try { instructions = roundtableRole(member.id, member.kind).instructions }
     catch { throw new AppError('invalid-input', 'This participant is not installed.') }
