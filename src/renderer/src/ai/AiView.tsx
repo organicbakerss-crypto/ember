@@ -3,6 +3,7 @@ import type { AiJobInfo, ConversationSummary } from '@shared/ipc'
 import type { PaneRoute } from '@shared/panes'
 import type { ConversationFile, ConversationMessage } from '@shared/schema'
 import { newId } from '@shared/ids'
+import { EMBER_CHARACTERS } from '@shared/ai/characters'
 import { api, describeError, useIpcEvent } from '../api'
 import { formatWhen } from '../components/TrashPage'
 import { useSettings } from '../useTheme'
@@ -181,7 +182,7 @@ export function AiView(props: {
   onOpenInbox?: (worldId: string) => void
 }) {
   const { seriesId } = props
-  const { settings } = useSettings()
+  const { settings, update } = useSettings()
   const provider = settings.ai.provider
   const [mode, setMode] = useState<Mode>('chat')
   const [threads, setThreads] = useState<Record<Mode, Thread>>({
@@ -932,6 +933,22 @@ export function AiView(props: {
             ))}
           </div>
           <span className="status-spacer" />
+          <select
+            aria-label="Current AI character"
+            title="AI character"
+            value={settings.ai.characterId ?? 'john-ai'}
+            disabled={!!busy}
+            onChange={(e) => {
+              const characterId = e.target.value
+              update(({ ai }) => ({ ai: { ...ai, characterId } }))
+            }}
+          >
+            {EMBER_CHARACTERS.map((character) => (
+              <option key={character.id} value={character.id}>
+                {character.name}
+              </option>
+            ))}
+          </select>
           {worldId && (
             <button
               className="link small"
