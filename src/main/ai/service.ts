@@ -25,7 +25,7 @@ import { audiobookScript, docBlocks, segments } from '@shared/voice/script'
 import { numberedParts, parseSpeakers, resolveSpeaker, speakersMessages } from './speakers'
 import { Ollama, type ChatMessage } from './ollama'
 import { roundtableRole } from '@shared/ai/roundtableCast'
-import { nextParticipant, validBallot, type RoundtableSession } from '@shared/ai/roundtable'
+import { finalPositionsReady, finalPosition, nextParticipant, validBallot, type RoundtableSession } from '@shared/ai/roundtable'
 import {
   chapterParts,
   checkFindings,
@@ -291,6 +291,89 @@ export class AiService {
         onToken,
       })
       return { text, lookedAt }
+    })
+  }
+
+  /** Figurehead: retrieve evidence from the actual project, then write a grounded common brief. */
+  async prepareRoundtable(seriesId: string, session: RoundtableSession, requestId: string): Promise<NonNullable<RoundtableSession['briefing']>> {
+    const library = this.options.host.current
+    const series = await library.getSeries(seriesId)
+    const chapters = await library.storySummaries(seriesId)
+    const terms = session.topic.toLowerCase().match(/[a-z]{3,}/g)?.filter((term) =>
+      !new Set(['the','and','that','this','with','from','what','where','should','would','could','here','there','about','into','your','story']).has(term)) ?? []
+    const relevance = (text: string) => terms.reduce((n, word) => n + (text.toLowerCase().includes(word) ? 1 : 0), 0)
+    const sorted = chapters.map((chapter, index) => ({ chapter, index, score: relevance(chapter.paragraphs.join(' ') + ' ' + (chapter.summary ?? '')) }))
+      .sort((a, b) => b.score - a.score || b.index - a.index)
+    // Keep matched scenes and recent story events, with source labels. Never silently treat stale summaries as canon.
+    const picked = sorted.filter((x) => x.score > 0).slice(0, 9)
+    for (const recent of sorted.slice().sort((a, b) => b.index - a.index).slice(0, 3)) {
+      if (!picked.some((x) => x.index === recent.index)) picked.push(recent)
+    }
+    const sources: string[] = []
+    const evidence: string[] = []
+    for (const { chapter } of picked.slice(0, 12)) {
+      const label = `${chapter.chapter.volumeName} / ${chapter.chapter.title || chapter.chapter.label}`
+      sources.push(label)
+      const matching = chapter.paragraphs.map((text, index) => ({ text, index, score: relevance(text) }))
+        .filter((x) => x.score > 0).sort((a,b) => b.score - a.score).slice(0, 7)
+      const excerpts = matching.length ? matching.sort((a,b) => a.index - b.index) : chapter.paragraphs.slice(-5).map((text,index) => ({ text, index, score:0 }))
+      const excerpt = excerpts.map((p) => p.text).join('\\n').slice(0, 4200)
+      evidence.push(`SOURCE: ${label}\\n${chapter.current && chapter.summary ? `Current chapter summary: ${chapter.summary.slice(0, 650)}\\n` : ''}Manuscript excerpt: ${excerpt}`)
+    }
+    if (series.worldId) {
+      const world = await library.world.view(series.worldId)
+      const entries = world.entries.map((entry) => ({ entry, score: relevance(entry.name + ' ' + entry.aliases.join(' ') + ' ' + entry.snippet) }))
+        .sort((a,b) => b.score - a.score).filter((x) => x.score > 0).slice(0, 8)
+      for (const { entry } of entries) {
+        const label = `World entry: ${entry.name}`
+        sources.push(label)
+        const notes = await library.world.entryText(series.worldId, entry.id).catch(() => entry.snippet)
+        evidence.push(`SOURCE: ${label}\\n${notes.slice(0, 1700)}`)
+      }
+      if (!entries.length) {
+        const digest = await library.world.digest(series.worldId).catch(() => '')
+        if (digest) { sources.push('World overview'); evidence.push(`SOURCE: World overview\\n${digest.slice(0, 2600)}`) }
+      }
+    }
+    const corpus = evidence.join('\\n\\n').slice(0, 30000)
+    const provider = await this.client()
+    return this.track(requestId, async (signal) => {
+      const prepared = await provider.chat({
+        messages: [
+          { role:'system', content: [
+            'You are the Figurehead, a neutral context librarian and moderator for a creative-writing Roundtable.',
+            'Produce a concise, factual shared briefing grounded ONLY in the labeled manuscript and worldbuilding material supplied.',
+            'Explain the writer\'s actual question, relevant established events and character constraints, and uncertainties. Separate canon from possible directions.',
+            'Do not invent plot, claim missing information is established, rewrite the author\'s question, recommend a winner, or evaluate artistic merit.',
+            'If the manuscript contains little or no relevant information, explicitly say this; do not manufacture context.',
+            'Include the supplied source names alongside factual points when practical. The participants may propose changes to canon.',
+          ].join('\\n') },
+          { role:'user', content:`Writer question: ${session.topic}\\n\\nEvidence from project “${series.name}”:\\n${corpus || '(No manuscript or worldbuilding text was available.)'}\\n\\nProduce the shared briefing.` },
+        ],signal,temperature:0.2,
+      })
+      return {
+        text: prepared.trim().slice(0, 24000),
+        sources: sources.slice(0,80).map((x) => x.slice(0,300)),
+        preparedAt: new Date().toISOString(),
+      }
+    })
+  }
+
+  /** Figurehead checks the debate at major boundaries, not after every model turn. */
+  async reviewRoundtable(session: RoundtableSession, requestId: string): Promise<string | null> {
+    if (!session.briefing?.text.trim()) return null
+    const debate = session.posts.filter((p) => p.channel === 'open' || p.channel === 'direct')
+      .slice(-18).map((p) => `${p.speakerId}: ${p.text.slice(0,1300)}`).join('\\n\\n').slice(-15000)
+    if (!debate.trim()) return null
+    const provider = await this.client()
+    return this.track(requestId, async (signal) => {
+      const result = (await provider.chat({
+        messages:[
+          {role:'system',content:'You are the Figurehead, a neutral manuscript-grounding moderator. Compare the recent debate to the shared evidence. Intervene ONLY if there is an important factual contradiction with the supplied evidence or the debate has abandoned the writer\'s question. A proposal to CHANGE canon is not an error. If no substantive issue is demonstrable, respond with exactly NONE. Otherwise provide one short correction or a request to clarify, grounded in the briefing, with no creative judgment. Never invent manuscript facts.'},
+          {role:'user',content:`Original question: ${session.topic}\\n\\nEvidence briefing: ${session.briefing!.text.slice(0,12000)}\\n\\nRecent discussion:\\n${debate}`},
+        ],signal,temperature:0.1,
+      })).trim()
+      return !result || /^NONE[.!]?$/i.test(result) ? null : result.slice(0,2500)
     })
   }
 
