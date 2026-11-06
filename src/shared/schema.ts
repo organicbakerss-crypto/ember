@@ -7,6 +7,7 @@
  * written back unchanged, so an older build never strips newer data.
  */
 import { z } from 'zod'
+import { roundtableSessionSchema } from './ai/roundtable'
 import { idPattern, type IdKind } from './ids'
 import { LENSES } from './world/lenses'
 
@@ -630,6 +631,8 @@ export const conversationFileSchema = z.looseObject({
   mode: z.enum(['chat', 'brainstorm', 'ask']),
   /** Conversations keep the character they began with; legacy files default to John. */
   characterId: z.string().min(1).max(80).catch('john-ai').optional(),
+  /** Structured Roundtable session, saved and synced alongside other AI conversations. */
+  roundtable: roundtableSessionSchema.optional(),
   title: z.string().max(200),
   createdAt: timestamp,
   updatedAt: timestamp,
