@@ -43,15 +43,29 @@ describe('regular AI characters', () => {
   it('loads only the selected versioned personality and shared behavior', () => {
     for (const id of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
       const profile = emberCharacter(id)
-      expect(profile.version).toBe(2)
+      expect(profile.version).toBe(3)
       expect(profile.personality.split(/\s+/).length).toBeGreaterThan(120)
       const message = chatMessages(context(id), [{ role: 'user', content: 'Hi' }])[0]!.content
       expect(message).toContain(profile.personality)
+      expect(profile.voice?.length).toBeGreaterThan(100)
+      expect(message).toContain(profile.voice!)
       expect(message).toContain('Do not invent memories of a childhood')
       for (const other of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
         if (id !== other) expect(message).not.toContain(emberCharacter(other).personality)
       }
     }
+  })
+
+  it('keeps equal task standards while changing conversational delivery', () => {
+    const ids = ['john-ai', 'roman', 'bo', 'caesar', 'jake']
+    const voices = ids.map((id) => emberCharacter(id).voice)
+    expect(new Set(voices).size).toBe(5)
+    const prompts = ids.map((id) => chatMessages(context(id), [{ role: 'user', content: 'What do you think?' }])[0]!.content)
+    for (const prompt of prompts) {
+      expect(prompt).toContain('All characters have equal factual standards')
+      expect(prompt).toContain('Every problem you point out comes with a specific fix')
+    }
+    expect(prompts[0]).not.toBe(prompts[1])
   })
 
   it('preserves conversation persona and supports legacy conversations', () => {
