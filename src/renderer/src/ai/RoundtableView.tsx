@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ROUNDTABLE_CAST } from '@shared/ai/roundtableCast'
+import { ROUNDTABLE_CAST, currentRoundtableCharacter } from '@shared/ai/roundtableCast'
+import { useSettings } from '../useTheme'
 import { newId } from '@shared/ids'
 import type { ConversationFile } from '@shared/schema'
 import type { ConversationSummary, RoundtableRunStatus } from '@shared/ipc'
@@ -19,12 +20,14 @@ const TABS: { id: Tab; title: string }[] = [
   { id: 'network', title: 'Network' },
   { id: 'results', title: 'Rankings' },
 ]
-const available = ROUNDTABLE_CAST.map(({ id, name, kind }) => ({ id, name, kind }))
 const id = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack: () => void }) {
+  const { settings } = useSettings()
+  const currentCharacter = currentRoundtableCharacter(settings.ai.characterId || 'john-ai')
+  const available = [currentCharacter, ...ROUNDTABLE_CAST].map(({ id, name, kind }) => ({ id, name, kind }))
   const [topic, setTopic] = useState('')
-  const [selected, setSelected] = useState<string[]>(['john-ai', 'roman', 'bo'])
+  const [selected, setSelected] = useState<string[]>([currentCharacter.id, 'specialist-fantasy'])
   const [file, setFile] = useState<ConversationFile | null>(null)
   const [saved, setSaved] = useState<ConversationSummary[]>([])
   const [tab, setTab] = useState<Tab>('floor')
@@ -38,6 +41,17 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   const [sender, setSender] = useState('')
   const [recipient, setRecipient] = useState('')
   const [active, setActive] = useState<string | null>(null)
+  // Follow the chat-character setting, rather than exposing all ten characters.
+  // Already saved Roundtables retain their original cast.
+  useEffect(() => {
+    setSelected((list) => {
+      const regularIds = list.filter((value) => !ROUNDTABLE_CAST.some((role) => role.id === value))
+      const next = list.filter((value) => ROUNDTABLE_CAST.some((role) => role.id === value))
+      if (regularIds.length) next.unshift(currentCharacter.id)
+      return next.length === list.length && next.every((value, i) => value === list[i]) ? list : next
+    })
+  }, [currentCharacter.id])
+
   const session = file?.roundtable
   const automatic = (runStatus?.state === 'running' || runStatus?.state === 'pausing') && runStatus.conversationId === file?.id
   const members = session?.participants ?? []
@@ -96,7 +110,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     const state: RoundtableSession = { topic: topic.trim(), participants, phase: 'proposals', posts: [] }
     const base: ConversationFile = {
       formatVersion: 1, id: newId('conversation'), mode: 'chat',
-      characterId: 'john-ai', title: `Roundtable: ${topic.trim().slice(0, 110)}`,
+      characterId: currentCharacter.id, title: `Roundtable: ${topic.trim().slice(0, 110)}`,
       createdAt: now, updatedAt: now, messages: [], roundtable: state,
     }
     setError('')
@@ -234,7 +248,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
             {p.name}
           </label>)}
         </div>
-        <p className="muted small">Specialists and guest stars will appear after their profiles are approved. Current characters are available for infrastructure testing.</p>
+        <p className="muted small">Only your currently selected AI chat character appears here, alongside installed specialists and guest stars. Older sessions retain their original cast.</p>
       </div>
       <button className="primary" disabled={!topic.trim() || selected.length < 2 || selected.length > 12} onClick={() => void start()}>Create Roundtable</button>
       {!!saved.length && <section className="rt-saved"><h3>Previous Roundtables</h3>
@@ -332,7 +346,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
             <span className="muted small">{PHASE_NAMES[post.phase]}</span></div>
           <div className="rt-body"><Blocks blocks={parse(post.text)} /></div>
         </article>)}
-        {currentPerson && <div className="rt-writer rt-private-chat">
+        {currentPerson && members.find((p) => p.id === currentPerson)?.kind !== 'guest' && <div className="rt-writer rt-private-chat">
           <textarea rows={3} value={privateText} onChange={(e) => setPrivateText(e.target.value)}
             placeholder={`Message ${name(currentPerson)} directly…`} maxLength={6000}
             disabled={!!busy || automatic} />
