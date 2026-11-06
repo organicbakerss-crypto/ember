@@ -33,12 +33,14 @@ describe('autonomous Roundtable runner', () => {
   it('runs every stage, checkpointing posts and peer-only ballots without further user input', async () => {
     const fixtureData = fixture()
     const ai = {
+      prepareRoundtable: vi.fn(async () => ({ text: 'Grounded story context', sources: ['Chapter 1'], preparedAt: '2026-11-06T12:00:00.000Z' })),
+      reviewRoundtable: vi.fn(async () => null),
       roundtableTurn: vi.fn(async ({ session, speakerId }: {
         session: RoundtableSession; speakerId: string
       }) => {
         const ranking = session.phase === 'vote' ?
           session.participants.filter((p) => p.id !== speakerId).map((p) => p.id) : null
-        return { text: 'A reasoned contribution', ranking }
+        return { text: 'A reasoned contribution', ranking, ...(session.phase === 'final' ? { summary: 'A short, clear final proposal' } : {}) }
       }),
       cancel: vi.fn(),
     } as unknown as AiService
@@ -54,10 +56,13 @@ describe('autonomous Roundtable runner', () => {
     expect(output.phase).toBe('complete')
     expect(output.posts.filter((p) => p.channel === 'open')).toHaveLength(9)
     expect(output.posts.filter((p) => p.channel === 'direct')).toHaveLength(6)
-    expect(output.posts.filter((p) => p.channel === 'private')).toHaveLength(3)
+    expect(output.posts.filter((p) => p.channel === 'private')).toHaveLength(6)
+    expect(output.posts.filter((p) => p.phase === 'final' && !!p.summary)).toHaveLength(3)
+    expect(output.briefing?.sources).toEqual(['Chapter 1'])
+    expect(output.figureheadReviews).toEqual(['discussion1', 'discussion2'])
     expect(output.posts.filter((p) => p.channel === 'ballot')).toHaveLength(3)
-    expect(fixtureData.saveConversation).toHaveBeenCalledTimes(26)
-    expect((ai.roundtableTurn as ReturnType<typeof vi.fn>).mock.calls.length).toBe(21)
+    expect(fixtureData.saveConversation).toHaveBeenCalledTimes(32)
+    expect((ai.roundtableTurn as ReturnType<typeof vi.fn>).mock.calls.length).toBe(24)
   })
 
   it('does not save an in-flight response after a pause', async () => {
@@ -65,6 +70,8 @@ describe('autonomous Roundtable runner', () => {
     let release!: (value: { text: string; ranking: null }) => void
     const deferred = new Promise<{ text: string; ranking: null }>((resolve) => { release = resolve })
     const ai = {
+      prepareRoundtable: vi.fn(async () => ({ text: 'Grounded story context', sources: [], preparedAt: '2026-11-06T12:00:00.000Z' })),
+      reviewRoundtable: vi.fn(async () => null),
       roundtableTurn: vi.fn(() => deferred),
       cancel: vi.fn(),
     } as unknown as AiService
