@@ -183,12 +183,17 @@ export function AiView(props: {
   onRoute?: (route: PaneRoute) => void
   /** Opens the story's world at its inbox (after it was updated). */
   onOpenInbox?: (worldId: string) => void
+  /** Controlled by Home when the Roundtable takes over the full AI workspace. */
+  roundtableActive?: boolean
+  onRoundtableChange?: (active: boolean) => void
 }) {
   const { seriesId } = props
   const { settings, update } = useSettings()
   const provider = settings.ai.provider
   const [mode, setMode] = useState<Mode>('chat')
-  const [roundtableOpen, setRoundtableOpen] = useState(false)
+  const [localRoundtableOpen, setLocalRoundtableOpen] = useState(false)
+  const roundtableOpen = props.onRoundtableChange ? !!props.roundtableActive : localRoundtableOpen
+  const setRoundtableOpen = props.onRoundtableChange ?? setLocalRoundtableOpen
   const [threads, setThreads] = useState<Record<Mode, Thread>>({
     chat: empty(),
     brainstorm: empty(),
