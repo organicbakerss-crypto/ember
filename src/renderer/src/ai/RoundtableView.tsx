@@ -8,6 +8,8 @@ import {
   type RoundtableSession, type RoundtablePost,
 } from '@shared/ai/roundtable'
 import { api, describeError, useIpcEvent } from '../api'
+import { parse } from './markdown'
+import { Blocks } from './FormattedAnswer'
 import './roundtable.css'
 
 type Tab = 'floor' | 'board' | 'network' | 'results' | `person:${string}`
@@ -296,7 +298,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
           <div className="rt-post-head"><strong>{name(post.speakerId)}</strong>
             {post.targetId && <span className="muted small">to {name(post.targetId)}</span>}
             <span className="muted small">{PHASE_NAMES[post.phase]}</span></div>
-          <div className="rt-body">{post.text}</div>
+          <div className="rt-body"><Blocks blocks={parse(post.text)} /></div>
         </article>)}
         {currentPerson && <div className="rt-writer rt-private-chat">
           <textarea rows={3} value={privateText} onChange={(e) => setPrivateText(e.target.value)}
