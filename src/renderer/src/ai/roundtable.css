@@ -1,3 +1,6 @@
+/* The AI's ordinary two-column chat layout must not constrain Roundtable. */
+.ai-view.ai-roundtable-view { display:flex; grid-template-columns:none; width:100%; min-width:0; }
+.ai-roundtable-view .rt-root { flex:1; width:100%; min-width:0; }
 /* Roundtable inherits Ember's theme palette. */
 .rt-root { display:flex; flex-direction:column; height:100%; min-height:0; color:var(--text); background:var(--bg); }
 .rt-header { display:flex; align-items:center; gap:1rem; border-bottom:1px solid var(--border); padding:.65rem 1rem; }
@@ -54,3 +57,14 @@
   .rt-topic { padding:.6rem; }
   .rt-direct select { flex-basis:100%; }
 }
+
+.rt-topic { padding:1rem 1.4rem; }
+.rt-tabs { flex-wrap:nowrap; overflow-x:auto; white-space:nowrap; scrollbar-width:thin; }
+.rt-tab-divider { border-left:1px solid var(--border); margin:0 .45rem; align-self:stretch; }
+.rt-feed { width:100%; max-width:1100px; margin:0 auto; padding:1.25rem clamp(.75rem,2vw,2rem); }
+.rt-post { padding:1rem 1.25rem; }
+.rt-body { font-size:1rem; line-height:1.65; }
+.rt-running { display:flex; gap:.75rem; align-items:center; justify-content:space-between; }
+.rt-line.direct { stroke:var(--accent); stroke-width:2.5; opacity:.8; }
+.rt-network { width:100%; }
+.rt-private-chat { margin-top:auto; }
