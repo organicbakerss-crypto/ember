@@ -124,7 +124,7 @@ describe('ChatGPT, signed in directly', () => {
       () => {},
     )
     const refresh = fake!.requests.filter(
-      (r) => r.path === '/oauth/token' && r.body['grant_type'] === 'refresh_token',
+      (r) => r.path === '/api/accounts/oauth/token' && r.body['grant_type'] === 'refresh_token',
     )
     expect(refresh.length).toBeGreaterThan(0)
   }, 10000)
