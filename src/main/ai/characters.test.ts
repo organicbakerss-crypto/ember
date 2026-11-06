@@ -57,7 +57,7 @@ describe('regular AI characters', () => {
   })
 
   it('keeps equal task standards while changing conversational delivery', () => {
-    const ids = ['john-ai', 'roman', 'bo', 'caesar', 'jake']
+    const ids = EMBER_CHARACTERS.map((character) => character.id)
     const voices = ids.map((id) => emberCharacter(id).voice)
     expect(new Set(voices).size).toBe(10)
     const prompts = ids.map((id) => chatMessages(context(id), [{ role: 'user', content: 'What do you think?' }])[0]!.content)
