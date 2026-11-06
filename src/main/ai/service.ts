@@ -24,7 +24,7 @@ import type { StorySummary } from '../library/library'
 import { audiobookScript, docBlocks, segments } from '@shared/voice/script'
 import { numberedParts, parseSpeakers, resolveSpeaker, speakersMessages } from './speakers'
 import { Ollama, type ChatMessage } from './ollama'
-import { characterInstructions, emberCharacter } from '@shared/ai/characters'
+import { roundtableRole } from '@shared/ai/roundtableCast'
 import { nextParticipant, validBallot, type RoundtableSession } from '@shared/ai/roundtable'
 import {
   chapterParts,
@@ -304,10 +304,14 @@ export class AiService {
   }): Promise<{ text: string; ranking: string[] | null }> {
     const { session, speakerId, targetId, direct } = input
     const speaker = session.participants.find((p) => p.id === speakerId)
-    if (!speaker || speaker.kind !== 'regular') {
-      throw new AppError('invalid-input', 'This participant does not have an installed Roundtable profile yet.')
+    if (!speaker) throw new AppError('invalid-input', 'Unknown Roundtable participant.')
+    let roleInstructions: string
+    try {
+      roleInstructions = roundtableRole(speaker.id, speaker.kind).instructions
+      for (const member of session.participants) roundtableRole(member.id, member.kind)
+    } catch {
+      throw new AppError('invalid-input', 'A selected Roundtable participant is not installed yet.')
     }
-    emberCharacter(speakerId)
     if (session.phase === 'complete') throw new AppError('invalid-input', 'This session is complete.')
     if (direct) {
       if (!['discussion1', 'discussion2'].includes(session.phase)) {
@@ -344,7 +348,7 @@ export class AiService {
       const response = await provider.chat({
         messages: [
           { role: 'system', content: [
-            characterInstructions(speakerId),
+            roleInstructions,
             'You are participating as one distinct voice in Ember Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
             `Roundtable participants: ${participants}.`,
             `Topic from the writer: ${session.topic}`,
