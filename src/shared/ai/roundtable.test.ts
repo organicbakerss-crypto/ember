@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ROUNDTABLE_CAST, roundtableRole, SPECIALIST_PROFILES } from './roundtableCast'
+import { ROUNDTABLE_CAST, currentRoundtableCharacter, roundtableRole, SPECIALIST_PROFILES, GUEST_PROFILES } from './roundtableCast'
 import { conversationFileSchema } from '../schema'
 import {
   advancePhase, finalPosition, finalPositionsReady, nextParticipant, phaseIsReady, roundtableResults, roundtableSessionSchema, validBallot,
@@ -23,13 +23,33 @@ const initial = (): RoundtableSession => ({
 })
 
 describe('Roundtable phase engine', () => {
-  it('only exposes installed roles and retains room for specialists and guests', () => {
-    expect(ROUNDTABLE_CAST).toHaveLength(15)
-    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(10)
+  it('exposes only specialists and installed guests in the candidate cast', () => {
+    expect(ROUNDTABLE_CAST).toHaveLength(7)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(0)
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(5)
-    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(0)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(2)
+    expect(currentRoundtableCharacter('roman').name).toBe('Roman')
+    expect(ROUNDTABLE_CAST.some((role) => role.id === 'roman')).toBe(false)
     expect(roundtableRole('roman', 'regular').instructions).toContain('You are Roman.')
     expect(() => roundtableRole('roman', 'guest')).toThrow()
+  })
+
+  it('registers two source-based guest portrayals without mixing their creative viewpoints', () => {
+    expect(GUEST_PROFILES.map((profile) => profile.name)).toEqual(['Dan Harmon', 'Quentin Tarantino'])
+    expect(GUEST_PROFILES.every((profile) => profile.sources.length >= 2)).toBe(true)
+    for (const profile of GUEST_PROFILES) {
+      const role = roundtableRole(profile.id, 'guest')
+      expect(role.instructions).toContain(`fictional Roundtable portrayal of ${profile.name}`)
+      expect(role.instructions).toContain(profile.documentedPractice)
+      expect(role.instructions).toContain(profile.critique)
+      expect(role.instructions).toContain(profile.voice)
+      expect(role.instructions).toContain('AI portrayal')
+      expect(role.instructions).toContain('Do not invent private experiences')
+      for (const other of GUEST_PROFILES) {
+        if (other.id !== profile.id) expect(role.instructions).not.toContain(other.critique)
+      }
+    }
+    expect(() => roundtableRole('guest-stephen-king', 'guest')).toThrow()
   })
 
   it('registers five distinct specialist methods, identities and conversational voices', () => {
