@@ -16,7 +16,7 @@ describe('regular AI characters', () => {
     expect(EMBER_CHARACTERS).toHaveLength(10)
     expect(new Set(EMBER_CHARACTERS.map((character) => character.id)).size).toBe(10)
     expect(emberCharacter(DEFAULT_AI_SETTINGS.characterId).name).toBe('John AI')
-    expect(emberCharacter('unknown').name).toBe('John AI')
+    expect(() => emberCharacter('unknown')).toThrow(/Unknown Ember AI character/)
   })
 
   it('persists valid character choices and falls back safely for older settings', () => {
