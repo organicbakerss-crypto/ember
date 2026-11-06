@@ -61,7 +61,7 @@ describe('Roundtable phase engine', () => {
       people[1]!,
     ]
     const session = { ...initial(), phase: 'vote' as const, participants }
-    expect(validBallot(session, 'specialist-fantasy', ['john-ai', 'bo'])).toBe(true)
+    expect(validBallot(session, 'specialist-fantasy', ['john-ai', 'roman'])).toBe(true)
     expect(validBallot(session, 'specialist-fantasy', ['specialist-fantasy', 'john-ai'])).toBe(false)
     expect(roundtableRole('specialist-fantasy', 'specialist').name).toBe('Fantasy')
   })
