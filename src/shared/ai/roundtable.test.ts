@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ROUNDTABLE_CAST, roundtableRole } from './roundtableCast'
+import { ROUNDTABLE_CAST, roundtableRole, SPECIALIST_PROFILES } from './roundtableCast'
 import { conversationFileSchema } from '../schema'
 import {
   advancePhase, nextParticipant, phaseIsReady, roundtableResults, validBallot,
@@ -24,10 +24,46 @@ const initial = (): RoundtableSession => ({
 
 describe('Roundtable phase engine', () => {
   it('only exposes installed roles and retains room for specialists and guests', () => {
-    expect(ROUNDTABLE_CAST).toHaveLength(10)
-    expect(ROUNDTABLE_CAST.every((role) => role.kind === 'regular')).toBe(true)
+    expect(ROUNDTABLE_CAST).toHaveLength(15)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(10)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(5)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(0)
     expect(roundtableRole('roman', 'regular').instructions).toContain('You are Roman.')
     expect(() => roundtableRole('roman', 'guest')).toThrow()
+  })
+
+  it('registers five distinct specialist methods, identities and conversational voices', () => {
+    expect(SPECIALIST_PROFILES.map((p) => p.name)).toEqual([
+      'Fantasy', 'Science Fiction', 'Horror', 'Mystery', 'Comedy',
+    ])
+    expect(new Set(SPECIALIST_PROFILES.map((p) => p.method)).size).toBe(5)
+    expect(new Set(SPECIALIST_PROFILES.map((p) => p.voice)).size).toBe(5)
+    for (const profile of SPECIALIST_PROFILES) {
+      const role = roundtableRole(profile.id, 'specialist')
+      expect(role.instructions).toContain(`You are the ${profile.name} specialist`)
+      expect(role.instructions).toContain(profile.personality)
+      expect(role.instructions).toContain(profile.method)
+      expect(role.instructions).toContain(profile.voice)
+      expect(role.instructions).toContain(profile.bias)
+      expect(role.instructions).toContain('All characters have equal factual standards')
+      expect(role.instructions).toContain('answer yes')
+      for (const other of SPECIALIST_PROFILES) {
+        if (other.id !== profile.id) expect(role.instructions).not.toContain(other.method)
+      }
+    }
+    expect(() => roundtableRole('specialist-romance', 'specialist')).toThrow()
+  })
+
+  it('mixes a specialist with regular characters in valid peer ballots', () => {
+    const participants = [
+      people[0]!,
+      { id: 'specialist-fantasy', name: 'Fantasy', kind: 'specialist' as const },
+      people[1]!,
+    ]
+    const session = { ...initial(), phase: 'vote' as const, participants }
+    expect(validBallot(session, 'specialist-fantasy', ['john-ai', 'bo'])).toBe(true)
+    expect(validBallot(session, 'specialist-fantasy', ['specialist-fantasy', 'john-ai'])).toBe(false)
+    expect(roundtableRole('specialist-fantasy', 'specialist').name).toBe('Fantasy')
   })
 
   it('persists the full session in the existing conversation schema', () => {
