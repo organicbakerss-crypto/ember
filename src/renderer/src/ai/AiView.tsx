@@ -4,6 +4,7 @@ import type { PaneRoute } from '@shared/panes'
 import type { ConversationFile, ConversationMessage } from '@shared/schema'
 import { newId } from '@shared/ids'
 import { EMBER_CHARACTERS } from '@shared/ai/characters'
+import { RoundtableView } from './RoundtableView'
 import { api, describeError, useIpcEvent } from '../api'
 import { formatWhen } from '../components/TrashPage'
 import { useSettings } from '../useTheme'
@@ -187,6 +188,7 @@ export function AiView(props: {
   const { settings, update } = useSettings()
   const provider = settings.ai.provider
   const [mode, setMode] = useState<Mode>('chat')
+  const [roundtableOpen, setRoundtableOpen] = useState(false)
   const [threads, setThreads] = useState<Record<Mode, Thread>>({
     chat: empty(),
     brainstorm: empty(),
@@ -282,7 +284,7 @@ export function AiView(props: {
   })
 
   const refreshPast = () => {
-    api.invoke('ai:conversations', { seriesId }).then(setPast, () => {})
+    api.invoke('ai:conversations', { seriesId }).then((all) => setPast(all.filter((c) => !c.roundtable)), () => {})
   }
   useEffect(refreshPast, [seriesId])
 
@@ -927,6 +929,10 @@ export function AiView(props: {
     </aside>
   )
 
+  if (roundtableOpen) {
+    return <div className="ai-view"><RoundtableView seriesId={seriesId} onBack={() => setRoundtableOpen(false)} /></div>
+  }
+
   return (
     <div className="ai-view" ref={root}>
       {history}
@@ -955,6 +961,7 @@ export function AiView(props: {
               </button>
             ))}
           </div>
+          <button className="link small" onClick={() => setRoundtableOpen(true)} disabled={!!busy || !!worldJob} title="Open the multi-character Roundtable">Roundtable</button>
           <span className="status-spacer" />
           <select
             aria-label="Current AI character"
