@@ -44,7 +44,7 @@ describe('regular AI characters', () => {
     for (const id of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
       const profile = emberCharacter(id)
       expect(profile.version).toBe(1)
-      expect(profile.personality.split(/\\s+/).length).toBeGreaterThan(200)
+      expect(profile.personality.split(/\s+/).length).toBeGreaterThan(200)
       const message = chatMessages(context(id), [{ role: 'user', content: 'Hi' }])[0]!.content
       expect(message).toContain(profile.personality)
       expect(message).toContain('No invented childhood')
