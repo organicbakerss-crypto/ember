@@ -61,7 +61,7 @@ describe('autonomous Roundtable runner', () => {
     expect(output.briefing?.sources).toEqual(['Chapter 1'])
     expect(output.figureheadReviews).toEqual(['discussion1', 'discussion2'])
     expect(output.posts.filter((p) => p.channel === 'ballot')).toHaveLength(3)
-    expect(fixtureData.saveConversation).toHaveBeenCalledTimes(32)
+    expect(fixtureData.saveConversation).toHaveBeenCalledTimes(33)
     expect((ai.roundtableTurn as ReturnType<typeof vi.fn>).mock.calls.length).toBe(24)
   })
 
