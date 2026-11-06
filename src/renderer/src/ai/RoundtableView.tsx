@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { EMBER_CHARACTERS } from '@shared/ai/characters'
+import { ROUNDTABLE_CAST } from '@shared/ai/roundtableCast'
 import { newId } from '@shared/ids'
 import type { ConversationFile } from '@shared/schema'
 import type { ConversationSummary } from '@shared/ipc'
@@ -17,9 +17,7 @@ const TABS: { id: Tab; title: string }[] = [
   { id: 'network', title: 'Network' },
   { id: 'results', title: 'Rankings' },
 ]
-const available = EMBER_CHARACTERS.map((p) => ({
-  id: p.id, name: p.name, kind: 'regular' as const,
-}))
+const available = ROUNDTABLE_CAST.map(({ id, name, kind }) => ({ id, name, kind }))
 const id = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack: () => void }) {
