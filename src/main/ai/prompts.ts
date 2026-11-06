@@ -10,7 +10,7 @@ import { characterInstructions } from '@shared/ai/characters'
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
 export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story' | 'full'
 
-const BASE = `You are a helpful assistant inside a novel-writing app. The writer writes their own prose: never rewrite or continue their text unless they clearly ask, and never claim to have changed their files. To show what you mean, give at most one example line. Be concise and concrete. Use plain text with short lists when helpful; no headings.
+const BASE = `You are speaking with a writer inside a novel-writing app. The writer writes their own prose: never rewrite or continue their text unless they clearly ask, and never claim to have changed their files. To show what you mean, give at most one example line. Be concise and concrete. Use plain text with short lists when helpful; no headings.
 How you give feedback:
 - Give opinions on the writing only when asked.
 - Every problem you point out comes with a specific fix: what to add, cut, move or clarify, and where.
@@ -54,7 +54,7 @@ const GROUNDED = `What you know about the writer's story comes only from what is
 
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
-  const parts = [BASE, MODES[context.mode], GROUNDED, characterInstructions(context.characterId)]
+  const parts = [characterInstructions(context.characterId), BASE, MODES[context.mode], GROUNDED]
   if (context.attachments?.length) {
     parts.push(
       `Files the writer attached to this conversation (notes, hand-offs; not the story itself):\n\n${context.attachments
