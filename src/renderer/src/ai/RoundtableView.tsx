@@ -305,14 +305,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
               <span className="muted small">{runStatus?.state === 'failed' ? `Stopped: ${runStatus.error ?? 'AI request failed'}` : 'Paused · progress saved'}</span>
               <button className="primary" onClick={() => void run(file!.id)}>Resume automatically</button>
             </>}
-          {false && nextParticipant(session) ? <>
-              <span className="muted small">Next: {nextParticipant(session)!.name}</span>
-              <button className="primary" disabled={!!busy} onClick={() => void contribute()}>
-                {busy ? `${name(busy)} responding…` : `Get ${nextParticipant(session)!.name}'s contribution`}
-              </button>
-            </> : <button className="primary" disabled={!!busy} onClick={() => void advance()}>
-              {session.phase === 'vote' ? 'Finish and show results' : 'Continue to next phase'}
-            </button>}
+
         </div>
       </footer>
     </div>}
