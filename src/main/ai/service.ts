@@ -335,8 +335,9 @@ export class AiService {
         if (digest) { sources.push('World overview'); evidence.push(`SOURCE: World overview\n${digest.slice(0, 2600)}`) }
       }
     }
-    const corpus = evidence.join('\n\n').slice(0, 30000)
     const provider = await this.client()
+    // Local models need a substantially smaller retrieval payload than ChatGPT.
+    const corpus = evidence.join('\n\n').slice(0, provider.kind === 'ollama' ? 8500 : 26000)
     return this.track(requestId, async (signal) => {
       const prepared = await provider.chat({
         messages: [
@@ -352,7 +353,7 @@ export class AiService {
         ],signal,temperature:0.2,
       })
       return {
-        text: prepared.trim().slice(0, 24000),
+        text: prepared.trim().slice(0, provider.kind === 'ollama' ? 5500 : 12000),
         sources: sources.slice(0,80).map((x) => x.slice(0,300)),
         preparedAt: new Date().toISOString(),
       }
