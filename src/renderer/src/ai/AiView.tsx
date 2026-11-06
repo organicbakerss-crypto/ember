@@ -27,6 +27,8 @@ interface Thread {
   /** Set once the conversation has been saved (or a file attached). */
   id: string | null
   createdAt: string | null
+  /** Conversations never share character identities. */
+  characterId: string
   messages: Message[]
   /** Files attached (their text stays on the computer they were attached on). */
   attachments?: Attached[]
@@ -94,7 +96,7 @@ const QUICK: { label: string; mode: Mode; text: string }[] = [
 ]
 /** An id for one request to the AI. */
 const newRequestId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
-const empty = (): Thread => ({ id: null, createdAt: null, messages: [] })
+const empty = (characterId = 'john-ai'): Thread => ({ id: null, createdAt: null, characterId, messages: [] })
 
 /* ---------- formatted answers ---------- */
 
@@ -330,15 +332,20 @@ export function AiView(props: {
     try {
       const c = await api.invoke('ai:conversation', { seriesId, conversationId: id })
       setMode(c.mode)
-      setThreads((t) => ({
-        ...t,
+      // Opening a saved chat restores its original character, not the current global choice.
+      update(({ ai }) => ({ ai: { ...ai, characterId: c.characterId } }))
+      setThreads({
+        chat: empty(c.characterId),
+        brainstorm: empty(c.characterId),
+        ask: empty(c.characterId),
         [c.mode]: {
           id: c.id,
           createdAt: c.createdAt,
+          characterId: c.characterId,
           messages: c.messages,
           attachments: attachedOf(c),
         },
-      }))
+      })
       // Attachments are kept on the computer they were attached on.
       const ids = attachedOf(c).map((a) => a.id)
       if (ids.length) {
@@ -361,7 +368,7 @@ export function AiView(props: {
     setPast((p) => p.filter((c) => c.id !== id))
     setThreads((t) => {
       const next = { ...t }
-      for (const m of Object.keys(next) as Mode[]) if (next[m].id === id) next[m] = empty()
+      for (const m of Object.keys(next) as Mode[]) if (next[m].id === id) next[m] = empty(settings.ai.characterId)
       return next
     })
   }
@@ -374,6 +381,7 @@ export function AiView(props: {
       formatVersion: 1,
       id: current.id ?? newId('conversation'),
       mode: into,
+      characterId: current.id ? current.characterId : settings.ai.characterId,
       title:
         first.replace(/^>.*$/gm, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Conversation',
       createdAt: current.createdAt ?? now,
@@ -385,6 +393,7 @@ export function AiView(props: {
   const threadOf = (c: ConversationFile): Thread => ({
     id: c.id,
     createdAt: c.createdAt,
+    characterId: c.characterId,
     messages: c.messages,
     attachments: attachedOf(c),
   })
@@ -411,6 +420,7 @@ export function AiView(props: {
         ...t[mode],
         id: conversationId,
         createdAt,
+        characterId: current.id ? current.characterId : settings.ai.characterId,
         attachments: [...(t[mode].attachments ?? []), ...added],
       },
     }))
@@ -873,7 +883,7 @@ export function AiView(props: {
         <button
           className="link small"
           onClick={() => {
-            setThreads((t) => ({ ...t, [mode]: empty() }))
+            setThreads((t) => ({ ...t, [mode]: empty(settings.ai.characterId) }))
             setListOpen(false)
           }}
         >
@@ -940,6 +950,16 @@ export function AiView(props: {
             disabled={!!busy}
             onChange={(e) => {
               const characterId = e.target.value
+              if (characterId === settings.ai.characterId) return
+              // Never feed an old persona's conversation into a new character's prompt.
+              setThreads({
+                chat: empty(characterId),
+                brainstorm: empty(characterId),
+                ask: empty(characterId),
+              })
+              setMissing(new Set())
+              setQuote(null)
+              setListOpen(false)
               update(({ ai }) => ({ ai: { ...ai, characterId } }))
             }}
           >
@@ -963,7 +983,7 @@ export function AiView(props: {
             <button
               className="link small"
               title="Start a new conversation (this one stays in the list)"
-              onClick={() => setThreads((t) => ({ ...t, [mode]: empty() }))}
+              onClick={() => setThreads((t) => ({ ...t, [mode]: empty(settings.ai.characterId) }))}
             >
               New conversation
             </button>
