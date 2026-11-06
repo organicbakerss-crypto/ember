@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { ROUNDTABLE_CAST, roundtableRole } from './roundtableCast'
+import { conversationFileSchema } from '../schema'
 import {
   advancePhase, nextParticipant, phaseIsReady, roundtableResults, validBallot,
   type RoundtableSession, type RoundtablePost,
@@ -21,6 +23,24 @@ const initial = (): RoundtableSession => ({
 })
 
 describe('Roundtable phase engine', () => {
+  it('only exposes installed roles and retains room for specialists and guests', () => {
+    expect(ROUNDTABLE_CAST).toHaveLength(10)
+    expect(ROUNDTABLE_CAST.every((role) => role.kind === 'regular')).toBe(true)
+    expect(roundtableRole('roman', 'regular').instructions).toContain('You are Roman.')
+    expect(() => roundtableRole('roman', 'guest')).toThrow()
+  })
+
+  it('persists the full session in the existing conversation schema', () => {
+    const now = '2026-11-06T12:00:00.000Z'
+    const file = conversationFileSchema.parse({
+      formatVersion: 1, id: 'cnv_0123456789abcdef', mode: 'chat', characterId: 'john-ai',
+      title: 'Roundtable', createdAt: now, updatedAt: now, messages: [],
+      roundtable: initial(),
+    })
+    expect(file.roundtable?.participants).toHaveLength(3)
+    expect(file.roundtable?.phase).toBe('proposals')
+  })
+
   it('requires every participant to propose before discussion starts', () => {
     const state = initial()
     expect(nextParticipant(state)?.id).toBe('john-ai')
@@ -59,6 +79,7 @@ describe('Roundtable phase engine', () => {
     expect(validBallot(state, 'roman', ['bo', 'bo'])).toBe(false)
     expect(validBallot(state, 'roman', ['bo'])).toBe(false)
     expect(validBallot(state, 'roman', ['bo', 'unknown'])).toBe(false)
+    expect(validBallot(state, 'stranger', ['bo', 'john-ai', 'roman'])).toBe(false)
   })
 
   it('counts one valid ballot per voter and exposes all score totals', () => {
