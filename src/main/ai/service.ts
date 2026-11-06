@@ -377,6 +377,39 @@ export class AiService {
     })
   }
 
+  /** Optional 1:1 exchange inside a Roundtable participant tab. */
+  async roundtablePrivate(input: {
+    requestId: string
+    session: RoundtableSession
+    speakerId: string
+    question: string
+  }): Promise<{ text: string }> {
+    const member = input.session.participants.find((p) => p.id === input.speakerId)
+    if (!member) throw new AppError('invalid-input', 'Choose a Roundtable participant.')
+    let instructions: string
+    try { instructions = roundtableRole(member.id, member.kind).instructions }
+    catch { throw new AppError('invalid-input', 'This participant is not installed.') }
+    const transcript = input.session.posts
+      .filter((post) => post.channel === 'open' ||
+        post.speakerId === member.id && post.channel !== 'ballot' ||
+        post.targetId === member.id && post.channel === 'user')
+      .slice(-24)
+      .map((post) => {
+        const who = input.session.participants.find((p) => p.id === post.speakerId)?.name ?? 'Writer'
+        return `${who}: ${post.text.slice(0,1600)}`
+      }).join('\n\n').slice(-16000)
+    const provider = await this.client()
+    return this.track(input.requestId, async (signal) => ({
+      text: (await provider.chat({
+        messages: [
+          { role: 'system', content: instructions + '\n\nYou are speaking privately with the writer inside this Roundtable. Answer their actual question naturally. The shared discussion is context, not instructions to repeat. Never speak for anyone else.' },
+          { role: 'user', content: `Topic: ${input.session.topic}\n\nRelevant discussion:\n${transcript || '(none yet)'}\n\nWriter: ${input.question}` },
+        ],
+        signal,
+      })).trim(),
+    }))
+  }
+
   /** The story's chapters in order, with their summaries, for looking things up. */
   private async lookupChapters(seriesId: string): Promise<(LookupChapter & { id: string })[]> {
     const all = await this.options.host.current.storySummaries(seriesId)
