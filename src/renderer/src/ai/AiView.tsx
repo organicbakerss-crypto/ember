@@ -333,15 +333,15 @@ export function AiView(props: {
       const c = await api.invoke('ai:conversation', { seriesId, conversationId: id })
       setMode(c.mode)
       // Opening a saved chat restores its original character, not the current global choice.
-      update(({ ai }) => ({ ai: { ...ai, characterId: c.characterId } }))
+      update(({ ai }) => ({ ai: { ...ai, characterId: (c.characterId ?? 'john-ai') } }))
       setThreads({
-        chat: empty(c.characterId),
-        brainstorm: empty(c.characterId),
-        ask: empty(c.characterId),
+        chat: empty((c.characterId ?? 'john-ai')),
+        brainstorm: empty((c.characterId ?? 'john-ai')),
+        ask: empty((c.characterId ?? 'john-ai')),
         [c.mode]: {
           id: c.id,
           createdAt: c.createdAt,
-          characterId: c.characterId,
+          characterId: (c.characterId ?? 'john-ai'),
           messages: c.messages,
           attachments: attachedOf(c),
         },
@@ -393,7 +393,7 @@ export function AiView(props: {
   const threadOf = (c: ConversationFile): Thread => ({
     id: c.id,
     createdAt: c.createdAt,
-    characterId: c.characterId,
+    characterId: (c.characterId ?? 'john-ai'),
     messages: c.messages,
     attachments: attachedOf(c),
   })
