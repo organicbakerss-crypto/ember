@@ -935,7 +935,7 @@ export function AiView(props: {
   )
 
   if (roundtableOpen) {
-    return <div className="ai-view"><RoundtableView seriesId={seriesId} onBack={() => setRoundtableOpen(false)} /></div>
+    return <div className="ai-view ai-roundtable-view"><RoundtableView seriesId={seriesId} onBack={() => setRoundtableOpen(false)} /></div>
   }
 
   return (
