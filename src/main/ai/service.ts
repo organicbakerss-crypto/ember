@@ -279,6 +279,7 @@ export class AiService {
     return this.track(input.requestId, async (signal) => {
       const lookedAt: string[] = []
       const context = await this.context(input, provider, signal, onProgress, lookedAt)
+      context.characterId = (await this.options.settings()).characterId
       onProgress('')
       const text = await provider.chat({
         messages: chatMessages(context, input.messages),
