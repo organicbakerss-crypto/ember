@@ -2321,6 +2321,7 @@ export class Library {
         )
         out.push({
           id: c.id,
+          roundtable: !!c.roundtable,
           mode: c.mode,
           title: c.title,
           createdAt: c.createdAt,
