@@ -21,7 +21,6 @@ export const ANSWERS_BASE = 'https://api.openai.com/v1'
 const RESOURCE = 'https://api.openai.com/v1'
 const SCOPES = 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct'
 const PERMISSION = 'chatgpt.tokens.use.direct'
-const PORT = 1455
 const CALLBACK_PATH = '/auth/callback'
 
 export interface SecretBox {
@@ -224,7 +223,7 @@ export class ChatGpt {
     const nonce = randomBytes(24).toString('base64url')
     const registering = !previous?.clientId
     const selectedClient = previous?.clientId ?? 'dynamic_agent_client'
-    const redirect = `http://127.0.0.1:${PORT}${CALLBACK_PATH}`
+    let redirect = ''
 
     const result = await new Promise<{ code: string; clientId: string }>((resolve, reject) => {
       let settled = false
@@ -240,7 +239,7 @@ export class ChatGpt {
         else resolve(value!)
       }
       const server = createServer((req, res) => {
-        const url = new URL(req.url ?? '/', redirect)
+        const url = new URL(req.url ?? '/', 'http://127.0.0.1')
         if (url.pathname !== CALLBACK_PATH || req.method !== 'GET') {
           res.writeHead(404).end()
           return
@@ -263,11 +262,15 @@ export class ChatGpt {
       this.waiting = server
       this.cancelPending = () => done(fail('ChatGPT sign-in cancelled.'))
       server.once('error', (e: NodeJS.ErrnoException) =>
-        done(fail(e.code === 'EADDRINUSE'
-          ? `Port ${PORT} is in use. Close the other sign-in and try again.`
-          : `Couldn’t start sign-in: ${e.message}`)))
+        done(fail(`Couldn’t start ChatGPT sign-in: ${e.message}`)))
       timer = setTimeout(() => done(fail('ChatGPT sign-in timed out.')), timeoutMs)
-      server.listen(PORT, '127.0.0.1', () => {
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address()
+        if (!address || typeof address === 'string') {
+          done(fail('Couldn’t open a local ChatGPT sign-in callback.'))
+          return
+        }
+        redirect = `http://127.0.0.1:${address.port}${CALLBACK_PATH}`
         const params = form({
           response_type: 'code',
           client_id: selectedClient,
