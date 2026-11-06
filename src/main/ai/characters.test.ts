@@ -41,7 +41,7 @@ describe('regular AI characters', () => {
   })
 
   it('loads only the selected versioned personality and shared behavior', () => {
-    for (const id of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
+    for (const id of ['john-ai', 'roman', 'bo', 'caesar', 'jake', 'ethan', 'enzo', 'jay', 'josh', 'danny']) {
       const profile = emberCharacter(id)
       expect(profile.version).toBe(3)
       expect(profile.personality.split(/\s+/).length).toBeGreaterThan(120)
@@ -59,13 +59,29 @@ describe('regular AI characters', () => {
   it('keeps equal task standards while changing conversational delivery', () => {
     const ids = ['john-ai', 'roman', 'bo', 'caesar', 'jake']
     const voices = ids.map((id) => emberCharacter(id).voice)
-    expect(new Set(voices).size).toBe(5)
+    expect(new Set(voices).size).toBe(10)
     const prompts = ids.map((id) => chatMessages(context(id), [{ role: 'user', content: 'What do you think?' }])[0]!.content)
     for (const prompt of prompts) {
       expect(prompt).toContain('All characters have equal factual standards')
       expect(prompt).toContain('Every problem you point out comes with a specific fix')
     }
     expect(prompts[0]).not.toBe(prompts[1])
+  })
+
+  it('has ten independent versioned role and voice definitions', () => {
+    expect(EMBER_CHARACTERS.every((profile) => profile.version === 3)).toBe(true)
+    expect(new Set(EMBER_CHARACTERS.map((profile) => profile.personality)).size).toBe(10)
+    expect(new Set(EMBER_CHARACTERS.map((profile) => profile.voice)).size).toBe(10)
+    for (const profile of EMBER_CHARACTERS) {
+      const prompt = chatMessages(context(profile.id), [{ role: 'user', content: 'Who are you?' }])[0]!.content
+      expect(prompt.startsWith(`You are ${profile.name}.`)).toBe(true)
+      expect(prompt).toContain(profile.personality)
+      expect(prompt).toContain(profile.voice!)
+      expect(prompt).toContain('When asked whether you are an AI, say yes')
+      for (const other of EMBER_CHARACTERS) {
+        if (profile.id !== other.id) expect(prompt).not.toContain(other.personality)
+      }
+    }
   })
 
   it('preserves conversation persona and supports legacy conversations', () => {
