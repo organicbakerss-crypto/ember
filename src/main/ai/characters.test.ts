@@ -32,8 +32,8 @@ describe('regular AI characters', () => {
     const history = [{ role: 'user' as const, content: 'What do you think of this chapter?' }]
     const roman = chatMessages(context('roman'), history)
     const bo = chatMessages(context('bo'), history)
-    expect(roman[0]?.content).toContain('Current Ember character: Roman.')
-    expect(bo[0]?.content).toContain('Current Ember character: Bo.')
+    expect(roman[0]?.content).toContain('You are Roman.')
+    expect(bo[0]?.content).toContain('You are Bo.')
     expect(roman[0]?.content).not.toBe(bo[0]?.content)
     expect(roman[0]?.content).toContain('Every problem you point out comes with a specific fix')
     expect(bo[0]?.content).toContain('Every problem you point out comes with a specific fix')
@@ -43,11 +43,11 @@ describe('regular AI characters', () => {
   it('loads only the selected versioned personality and shared behavior', () => {
     for (const id of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
       const profile = emberCharacter(id)
-      expect(profile.version).toBe(1)
-      expect(profile.personality.split(/\s+/).length).toBeGreaterThan(200)
+      expect(profile.version).toBe(2)
+      expect(profile.personality.split(/\s+/).length).toBeGreaterThan(120)
       const message = chatMessages(context(id), [{ role: 'user', content: 'Hi' }])[0]!.content
       expect(message).toContain(profile.personality)
-      expect(message).toContain('No invented childhood')
+      expect(message).toContain('Do not invent memories of a childhood')
       for (const other of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
         if (id !== other) expect(message).not.toContain(emberCharacter(other).personality)
       }
@@ -69,6 +69,18 @@ describe('regular AI characters', () => {
     expect(conversationFileSchema.parse(base).characterId ?? 'john-ai').toBe('john-ai')
   })
 
+  it('starts with the selected role and is truthful about its AI identity', () => {
+    for (const id of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
+      const name = emberCharacter(id).name
+      const prompt = chatMessages(context(id), [{ role: 'user', content: 'Who are you? Are you AI?' }])[0]!.content
+      expect(prompt.startsWith(`You are ${name}.`)).toBe(true)
+      expect(prompt).toContain('When asked whether you are an AI, say yes')
+      expect(prompt).toContain('When asked “Who are you?” or your name')
+      expect(prompt).toContain('Keep ordinary conversation ordinary')
+      expect(prompt).not.toContain('You are a helpful assistant inside a novel-writing app')
+    }
+  })
+
   it('does not add a character persona to exact chapter edits', () => {
     const prompt = editMessages({
       instruction: 'Fix spelling only',
@@ -78,6 +90,6 @@ describe('regular AI characters', () => {
       names: [],
     })
     expect(prompt[0]?.content).toContain('doing exactly what they ask and nothing else')
-    expect(prompt[0]?.content).not.toContain('Current Ember character:')
+    expect(prompt[0]?.content).not.toContain('You are Roman.')
   })
 })
