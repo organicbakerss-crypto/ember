@@ -248,6 +248,19 @@ export function AiView(props: {
   const thread = threads[mode]
   const messages = thread.messages
 
+  // Settings can change from another window. Never reuse messages across personalities.
+  // Hold any active request until it finishes; its identity was captured on submission.
+  useEffect(() => {
+    if (busy) return
+    const selected = settings.ai.characterId ?? 'john-ai'
+    setThreads((current) => {
+      if (Object.values(current).every((t) => t.characterId === selected || (!t.id && !t.messages.length && !t.attachments?.length))) {
+        return current
+      }
+      return { chat: empty(selected), brainstorm: empty(selected), ask: empty(selected) }
+    })
+  }, [settings.ai.characterId, busy])
+
   const { onRoute, volumeId } = props
   useEffect(() => {
     onRoute?.({ kind: 'ai', seriesId, volumeId })
