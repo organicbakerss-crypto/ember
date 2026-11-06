@@ -24,6 +24,8 @@ import type { StorySummary } from '../library/library'
 import { audiobookScript, docBlocks, segments } from '@shared/voice/script'
 import { numberedParts, parseSpeakers, resolveSpeaker, speakersMessages } from './speakers'
 import { Ollama, type ChatMessage } from './ollama'
+import { characterInstructions, emberCharacter } from '@shared/ai/characters'
+import { nextParticipant, validBallot, type RoundtableSession } from '@shared/ai/roundtable'
 import {
   chapterParts,
   checkFindings,
@@ -289,6 +291,85 @@ export class AiService {
         onToken,
       })
       return { text, lookedAt }
+    })
+  }
+
+  /** A single Roundtable contribution. The renderer controls phase transitions and saves history. */
+  async roundtableTurn(input: {
+    requestId: string
+    session: RoundtableSession
+    speakerId: string
+    targetId: string | null
+    direct: boolean
+  }): Promise<{ text: string; ranking: string[] | null }> {
+    const { session, speakerId, targetId, direct } = input
+    const speaker = session.participants.find((p) => p.id === speakerId)
+    if (!speaker || speaker.kind !== 'regular') {
+      throw new AppError('invalid-input', 'This participant does not have an installed Roundtable profile yet.')
+    }
+    emberCharacter(speakerId)
+    if (session.phase === 'complete') throw new AppError('invalid-input', 'This session is complete.')
+    if (direct) {
+      if (!['discussion1', 'discussion2'].includes(session.phase)) {
+        throw new AppError('invalid-input', 'Direct exchanges are available during discussions.')
+      }
+      if (!targetId || targetId === speakerId || !session.participants.some((p) => p.id === targetId)) {
+        throw new AppError('invalid-input', 'Select another participant to address.')
+      }
+    } else if (nextParticipant(session)?.id !== speakerId) {
+      throw new AppError('invalid-input', 'It is another participant’s turn.')
+    }
+
+    const participants = session.participants.map((p) => `${p.name} [${p.id}]`).join(', ')
+    const transcript = session.posts
+      .filter((p) => p.channel !== 'private' && p.channel !== 'ballot' || p.speakerId === speakerId)
+      .slice(-65).map((p) => {
+        const author = session.participants.find((person) => person.id === p.speakerId)?.name ?? 'Writer'
+        const to = p.targetId ? ` to ${session.participants.find((person) => person.id === p.targetId)?.name ?? 'participant'}` : ''
+        return `[${p.phase} / ${p.channel}] ${author}${to}: ${p.text.slice(0,2200)}`
+      }).join('\n\n').slice(-22000)
+    const role = direct
+      ? `Address ${session.participants.find((p) => p.id === targetId)!.name} directly, building on a concrete disagreement or question. This is a message-board reply, not a new opening proposal.`
+      : session.phase === 'proposals'
+        ? 'Put forward your own specific proposal and state the criteria you would use to judge competing proposals. Make it substantive but concise.'
+        : session.phase === 'discussion1'
+          ? 'Respond to the other proposals and criteria. Engage seriously with an actual claim, suggest improvements, and defend or reconsider your own reasoning.'
+          : session.phase === 'revision'
+            ? 'Privately reconsider your initial position after the first discussion. State what you are changing, keeping, or questioning and why. This is private working thought, not a message to the other participants.'
+            : session.phase === 'discussion2'
+              ? 'Continue the open discussion with your revised perspective. Engage with a specific point that was raised; do not just repeat your proposal.'
+              : `Rank every other participant's proposal, best first, based on the agreed criteria. Never rank yourself. Return ONLY JSON of this form: {"ranking":["id1","id2"]}, including every other participant ID exactly once. Eligible IDs: ${session.participants.filter((p) => p.id !== speakerId).map((p) => p.id).join(', ')}.`
+    const provider = await this.client()
+    return this.track(input.requestId, async (signal) => {
+      const response = await provider.chat({
+        messages: [
+          { role: 'system', content: [
+            characterInstructions(speakerId),
+            'You are participating as one distinct voice in Ember Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
+            `Roundtable participants: ${participants}.`,
+            `Topic from the writer: ${session.topic}`,
+            `Current phase: ${session.phase}.`,
+            role,
+          ].join('\n\n') },
+          { role: 'user', content: `Roundtable discussion so far:\n${transcript || '(none yet)'}\n\nYour contribution now:` },
+        ],
+        signal,
+        temperature: session.phase === 'vote' ? 0.1 : 0.65,
+        json: session.phase === 'vote',
+      })
+      if (session.phase !== 'vote' || direct) return { text: response.trim(), ranking: null }
+      let ranking: unknown
+      try {
+        const json = JSON.parse(response.slice(response.indexOf('{'), response.lastIndexOf('}') + 1)) as { ranking?: unknown }
+        ranking = json.ranking
+      } catch {
+        throw new AppError('invalid-input', 'Could not read this participant’s ranking. Retry their ballot.')
+      }
+      if (!Array.isArray(ranking) || !ranking.every((id) => typeof id === 'string') ||
+          !validBallot(session, speakerId, ranking)) {
+        throw new AppError('invalid-input', 'This ballot must rank every other participant once, without self-voting. Retry.')
+      }
+      return { text: response.trim(), ranking }
     })
   }
 
