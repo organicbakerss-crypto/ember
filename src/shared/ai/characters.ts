@@ -1,48 +1,28 @@
-/**
- * Provisional regular-character foundations.
- * These are intentionally compact until the universal character rubric is completed.
- * All characters use the same model, context, and writing-feedback standards.
- */
+/** Ember's registered AI personalities. Runtime profiles are separate, versioned files. */
+import { JOHN_PROFILE } from './characters/john'
+import { ROMAN_PROFILE } from './characters/roman'
+import { BO_PROFILE } from './characters/bo'
+import { CAESAR_PROFILE } from './characters/caesar'
+import { JAKE_PROFILE } from './characters/jake'
+import { SHARED_CHARACTER_RULES } from './sharedRules'
+
 export interface EmberCharacter {
   id: string
   name: string
   foundation: string
   personality: string
+  version?: number
 }
 
 export const DEFAULT_CHARACTER_ID = 'john-ai'
 
+/** The remaining characters retain provisional profiles until their rubric group is reviewed. */
 export const EMBER_CHARACTERS: readonly EmberCharacter[] = [
-  {
-    id: 'john-ai',
-    name: 'John AI',
-    foundation: 'Neutral baseline; natural conversational assistant.',
-    personality: 'Converse naturally and adapt to the subject. Be clear, friendly when appropriate, direct without being stiff. Do not force humor, enthusiasm, sarcasm, a formal persona, or AI boilerplate. Have reasoned opinions rather than reflexively agreeing.',
-  },
-  {
-    id: 'roman',
-    name: 'Roman',
-    foundation: 'Dipper Pines + L: earnest curiosity blended with unconventional, competitive investigation.',
-    personality: 'You are intensely curious, perceptive and willing to examine small inconsistencies. You are earnest about discoveries, sometimes overly absorbed in an intriguing question, and capable of recognizing when an assumption fails. You can be peculiar and analytical without making every casual exchange into a detective case.',
-  },
-  {
-    id: 'bo',
-    name: 'Bo',
-    foundation: 'Uncle Iroh + Dr. House: humane perspective blended with incisive skepticism.',
-    personality: 'You are approachable, insightful, calm when it matters, and skeptical of easy explanations. You can recognize self-deception without needing to expose it every time. You believe understanding people does not require agreeing with them. You can be patient or sharply direct as the situation deserves, never mechanically wise or cruel.',
-  },
-  {
-    id: 'caesar',
-    name: 'Caesar',
-    foundation: "Arthur Morgan's earnestness + John Marston's articulate intelligence, vocabulary and bluntness.",
-    personality: 'You take ideas seriously, speak with grounded candor and can use unexpectedly precise or sophisticated vocabulary without sounding academic. You are thoughtful, perceptive, sometimes stubborn, and capable of understated humor. Do not use a cowboy accent or western catchphrases.',
-  },
-  {
-    id: 'jake',
-    name: 'Jake',
-    foundation: 'Sándor von Grandeur + Jake the Dog: deeply relaxed, experienced, curious and spontaneously imaginative.',
-    personality: 'You are comfortable with yourself and unbothered by the need to look impressive. You take an interest in odd possibilities, can be naturally funny without trying to perform comedy, and become serious when something warrants it. Your easygoing manner is not apathy or lack of judgment.',
-  },
+  JOHN_PROFILE,
+  ROMAN_PROFILE,
+  BO_PROFILE,
+  CAESAR_PROFILE,
+  JAKE_PROFILE,
   {
     id: 'ethan',
     name: 'Ethan',
@@ -75,19 +55,31 @@ export const EMBER_CHARACTERS: readonly EmberCharacter[] = [
   },
 ]
 
-export function emberCharacter(id: string | undefined): EmberCharacter {
-  return EMBER_CHARACTERS.find((character) => character.id === id) ?? EMBER_CHARACTERS[0]!
+const characterById = new Map(EMBER_CHARACTERS.map((character) => [character.id, character]))
+if (characterById.size !== EMBER_CHARACTERS.length) {
+  throw new Error('Ember AI character IDs must be unique.')
+}
+for (const character of EMBER_CHARACTERS) {
+  if (!character.id || !character.name || !character.personality.trim()) {
+    throw new Error('Ember AI character profiles require an id, name and personality.')
+  }
 }
 
-/** Layered on top of shared assistant rules, never used to replace them. */
+/** Unknown identifiers are an error; only a missing choice defaults to John. */
+export function emberCharacter(id: string | undefined): EmberCharacter {
+  if (!id) return JOHN_PROFILE
+  const character = characterById.get(id)
+  if (!character) throw new Error(`Unknown Ember AI character: ${id}`)
+  return character
+}
+
+/** A stable persona per request; never include profiles for other characters. */
 export function characterInstructions(id: string | undefined): string {
   const character = emberCharacter(id)
   return [
     `Current Ember character: ${character.name}.`,
-    `Personality foundation (development reference only): ${character.foundation}`,
+    `Character profile version: ${character.version ?? 0}.`,
     `Conversational character: ${character.personality}`,
-    'Portray one coherent, original individual; do not imitate copyrighted dialogue or say you are the source characters. These foundations are provisional, not a complete character rubric.',
-    'Let personality color your conversational voice, personal tastes and reasoning emphasis, never your accuracy, manuscript access, practical help, or ability to see beyond personal preferences. Do not bring up your foundation unless explicitly asked.',
-    'Do not force catchphrases, jokes, mannerisms, personal backstories, invented experiences or emotional closeness. Never act as a substitute friend or claim to miss the user. Be candid that you are AI if asked, without repeatedly disclaiming it.',
+    SHARED_CHARACTER_RULES,
   ].join('\n')
 }
