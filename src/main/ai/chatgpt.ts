@@ -251,12 +251,12 @@ export class ChatGpt {
         if (url.searchParams.get('state') !== state || error || !code ||
             (registering && (!issued || issued === 'dynamic_agent_client')) ||
             (!registering && issued && issued !== selectedClient)) {
-          res.writeHead(400, { 'content-type': 'text/html' })
+          res.writeHead(400, { 'content-type': 'text/html', connection: 'close' })
           res.end(page('Sign-in not completed', 'Return to Ember and try again.'))
           done(fail(error ? `ChatGPT sign-in was declined: ${error}` : 'ChatGPT sign-in validation failed.'))
           return
         }
-        res.writeHead(200, { 'content-type': 'text/html' })
+        res.writeHead(200, { 'content-type': 'text/html', connection: 'close' })
         res.end(page('Authorization received', `Return to ${appConfig.name} to finish connecting.`))
         done(undefined, { code, clientId: registering ? issued! : selectedClient })
       })
