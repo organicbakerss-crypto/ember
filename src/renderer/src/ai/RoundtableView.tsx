@@ -90,7 +90,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   }
 
   const start = async () => {
-    if (!topic.trim() || selected.length < 2) return
+    if (!topic.trim() || selected.length < 2 || selected.length > 12) return
     const now = new Date().toISOString()
     const participants = selected.map((key) => available.find((p) => p.id === key)!).filter(Boolean)
     const state: RoundtableSession = { topic: topic.trim(), participants, phase: 'proposals', posts: [] }
@@ -202,9 +202,11 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   }
 
   const currentPerson = tab.startsWith('person:') ? tab.slice(7) : null
+  const sealed = session?.posts.filter((p) => p.phase === 'final' && p.channel === 'private' && !!p.summary) ?? []
+  const resultsReady = session?.phase === 'vote' || session?.phase === 'complete'
   const visiblePosts = (session?.posts ?? []).filter((post) =>
     currentPerson ? (post.speakerId === currentPerson || post.targetId === currentPerson) &&
-        post.channel !== 'ballot' && (post.channel !== 'private' || post.speakerId === currentPerson) :
+        post.channel !== 'ballot' && (post.channel !== 'private' || (post.speakerId === currentPerson && post.phase !== 'final') || resultsReady) :
     tab === 'board' ? post.channel === 'direct' :
       tab === 'floor' ? post.channel === 'open' || (post.channel === 'user' && !post.targetId) :
         tab === 'results' ? post.channel === 'ballot' : post.channel !== 'private')
@@ -221,19 +223,19 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     {error && <div className="error rt-error" role="alert">{error}</div>}
     {!session ? <div className="rt-setup">
       <h3>Start a Roundtable</h3>
-      <p className="muted">Each participant proposes an approach, debates, revises privately, and ranks the others. Once started, the discussion proceeds automatically. You can pause it whenever needed.</p>
+      <p className="muted">Each participant proposes an approach, debates, revises, privately locks a final proposal, then ranks the other locked proposals. Once started, the discussion proceeds automatically. You can pause it whenever needed.</p>
       <label>Question or problem<textarea rows={4} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What should this group discuss?" maxLength={4000} /></label>
-      <div className="rt-picker"><strong>Participants ({selected.length}/8)</strong>
+      <div className="rt-picker"><strong>Participants ({selected.length}/12)</strong>
         <div className="rt-choice-grid">
           {available.map((p) => <label key={p.id} className="rt-choice">
             <input type="checkbox" checked={selected.includes(p.id)} onChange={(e) => setSelected((list) =>
-              e.target.checked ? list.length < 8 ? [...list, p.id] : list : list.filter((id) => id !== p.id))} />
+              e.target.checked ? list.length < 12 ? [...list, p.id] : list : list.filter((id) => id !== p.id))} />
             {p.name}
           </label>)}
         </div>
         <p className="muted small">Specialists and guest stars will appear after their profiles are approved. Current characters are available for infrastructure testing.</p>
       </div>
-      <button className="primary" disabled={!topic.trim() || selected.length < 2} onClick={() => void start()}>Create Roundtable</button>
+      <button className="primary" disabled={!topic.trim() || selected.length < 2 || selected.length > 12} onClick={() => void start()}>Create Roundtable</button>
       {!!saved.length && <section className="rt-saved"><h3>Previous Roundtables</h3>
         {saved.map((c) => <div className="rt-saved-row" key={c.id}>
           <button className="link" onClick={() => void load(c.id)}>{c.title}</button>
@@ -270,8 +272,9 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
               y2={230 + Math.sin(b) * 175} />
           })}
           <circle cx={280} cy={230} r={72} className="rt-center" />
-          <text x={280} y={225} textAnchor="middle" className="rt-center-text">Open</text>
-          <text x={280} y={244} textAnchor="middle" className="rt-center-text">Floor</text>
+          <text x={280} y={193} textAnchor="middle" className="rt-center-text">Open Floor</text>
+          <circle cx={280} cy={232} r={33} className={active === 'figurehead' ? 'rt-figurehead active' : 'rt-figurehead'} />
+          <text x={280} y={236} textAnchor="middle" className="rt-figurehead-text">Figurehead</text>
           {members.map((p, i) => {
             const angle = -Math.PI / 2 + i * Math.PI * 2 / members.length
             const x = 280 + Math.cos(angle) * 195, y = 230 + Math.sin(angle) * 175
@@ -281,14 +284,34 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
             </g>
           })}
         </svg>
-        <p className="muted small">Spokes show Open Floor participation; cross-links show actual direct exchanges. The active speaker is highlighted.</p>
+        <p className="muted small">The Figurehead sits in the inner circle. Spokes show Open Floor participation; cross-links show actual direct exchanges. The active speaker is highlighted.</p>
+        <details className="rt-context"><summary>Figurehead context and source log</summary>
+          {session.briefing ? <>
+            <p className="rt-body">{session.briefing.text}</p>
+            <strong>Sources consulted</strong>
+            <ul>{session.briefing.sources.map((source, i) => <li key={i}>{source}</li>)}</ul>
+          </> : <p className="muted">The Figurehead is preparing a briefing from this story's manuscript and worldbuilding.</p>}
+          {(session.interventions?.length ?? 0) > 0 && <><strong>Context interventions</strong>
+            {session.interventions?.map((note, i) => <p key={i}><strong>{PHASE_NAMES[note.phase]}:</strong> {note.text}</p>)}</>}
+        </details>
       </div> : tab === 'results' ? <div className="rt-feed">
-        <h3>Peer rankings {session.phase === 'complete' ? '' : '(in progress)'}</h3>
-        {roundtableResults(session).map((result, i) =>
-          <div key={result.id} className="rt-result"><strong>{i + 1}. {result.name}</strong><span>{result.score} points · {result.votes} votes</span></div>)}
-        <p className="muted small">Points are weighted by ballot position. Self-votes are rejected; tied scores remain tied.</p>
+        <h3>Final proposals and peer rankings {session.phase === 'complete' ? '' : '(in progress)'}</h3>
+        {!resultsReady && <p className="muted">Final proposals remain sealed until everyone has locked in their position.</p>}
+        {resultsReady && roundtableResults(session).map((result, i) => {
+          const proposal = sealed.find((p) => p.speakerId === result.id)
+          return <article key={result.id} className="rt-result-proposal rt-post">
+            <div className="rt-result-line"><strong>{i + 1}. {result.name}{i === 0 && session.phase === 'complete' ? ' · Winner' : ''}</strong>
+              <span className="muted small">{result.score} points · {result.votes} ballots</span></div>
+            <p className="rt-result-summary">{proposal?.summary || 'No final summary was recorded for this participant.'}</p>
+            <details><summary>Read full final proposal</summary>
+              <div className="rt-body"><Blocks blocks={parse(proposal?.text || 'No final proposal was recorded.')} /></div>
+            </details>
+          </article>
+        })}
+        <p className="muted small">Only locked final proposals are ranked. Participants cannot vote for themselves.</p>
         <h3>Individual ballots ({ballotCount}/{members.length})</h3>
-        {visiblePosts.map((post) => <article className="rt-post" key={post.id}>
+        {session.phase !== 'complete' && <p className="muted">Ballots remain sealed until everyone has finished voting.</p>}
+        {session.phase === 'complete' && visiblePosts.map((post) => <article className="rt-post" key={post.id}>
           <strong>{name(post.speakerId)}</strong>
           <ol>{post.ranking?.map((id) => <li key={id}>{name(id)}</li>)}</ol>
         </article>)}
