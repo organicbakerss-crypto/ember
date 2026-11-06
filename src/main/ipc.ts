@@ -147,6 +147,7 @@ export function registerIpc(
       copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
     'ai:status': (input) => ai.status(input),
+    'ai:roundtableTurn': (input) => ai.roundtableTurn(input),
     'ai:attach': (input) => attachments.add(input.conversationId, input.name, input.data),
     'ai:attachmentsHere': (input) => attachments.here(input.conversationId, input.ids),
     'ai:ask': async (input, event) => {
