@@ -61,6 +61,8 @@ const CHAPTER_WORDS = 2500
 
 export interface AskInput {
   requestId: string
+  /** Captured at conversation creation; independent of later settings changes. */
+  characterId?: string
   /** The story asked about (also when nothing in it is being read). */
   seriesId?: string
   /** Files the writer attached to the conversation, as text. */
@@ -279,7 +281,7 @@ export class AiService {
     return this.track(input.requestId, async (signal) => {
       const lookedAt: string[] = []
       const context = await this.context(input, provider, signal, onProgress, lookedAt)
-      context.characterId = (await this.options.settings()).characterId
+      context.characterId = input.characterId ?? (await this.options.settings()).characterId
       onProgress('')
       const text = await provider.chat({
         messages: chatMessages(context, input.messages),
