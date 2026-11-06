@@ -32,6 +32,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   const activeRequest = useRef<string | null>(null)
   const [error, setError] = useState('')
   const [userText, setUserText] = useState('')
+  const [privateText, setPrivateText] = useState('')
   const [sender, setSender] = useState('')
   const [recipient, setRecipient] = useState('')
   const [active, setActive] = useState<string | null>(null)
@@ -163,6 +164,32 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     } catch (err) { setError(describeError(err).message) }
   }
 
+  const askParticipant = async () => {
+    const personId = tab.startsWith('person:') ? tab.slice(7) : null
+    if (!file || !session || !personId || !privateText.trim() || automatic || busy) return
+    const question = privateText.trim()
+    setPrivateText('')
+    setError('')
+    setBusy(personId)
+    const requestId = id()
+    activeRequest.current = requestId
+    try {
+      const withQuestion: RoundtableSession = {
+        ...session, posts: [...session.posts, makePost(session, 'writer', question, 'user', personId)],
+      }
+      const savedBase: ConversationFile = { ...file, roundtable: withQuestion }
+      await persist(file, withQuestion)
+      const response = await api.invoke('ai:roundtablePrivate', {
+        requestId, session: withQuestion, speakerId: personId, question,
+      })
+      await persist(savedBase, {
+        ...withQuestion, posts: [...withQuestion.posts,
+          makePost(session, personId, response.text, 'direct', 'writer')],
+      })
+    } catch (err) { setError(describeError(err).message) }
+    finally { activeRequest.current = null; setBusy(null) }
+  }
+
   const remove = async (conversationId: string) => {
     if (busy || automatic || !window.confirm('Delete this Roundtable session?')) return
     try {
@@ -271,6 +298,16 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
             <span className="muted small">{PHASE_NAMES[post.phase]}</span></div>
           <div className="rt-body">{post.text}</div>
         </article>)}
+        {currentPerson && <div className="rt-writer rt-private-chat">
+          <textarea rows={3} value={privateText} onChange={(e) => setPrivateText(e.target.value)}
+            placeholder={`Message ${name(currentPerson)} directly…`} maxLength={6000}
+            disabled={!!busy || automatic} />
+          <button disabled={!privateText.trim() || !!busy || automatic}
+            onClick={() => void askParticipant()}>
+            {busy === currentPerson ? 'Responding…' : `Send to ${name(currentPerson)}`}
+          </button>
+          {automatic && <p className="muted small">Pause the discussion to start a private exchange.</p>}
+        </div>}
         {tab === 'floor' && session.phase !== 'complete' && <div className="rt-writer">
           <textarea rows={2} value={userText} onChange={(e) => setUserText(e.target.value)}
             placeholder="Add a note or question to the Open Floor…" maxLength={16000} disabled={!!busy || automatic} />
