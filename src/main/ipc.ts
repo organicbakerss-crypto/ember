@@ -157,6 +157,7 @@ export function registerIpc(
     },
     'ai:roundtablePause': (input) => roundtable.pause(input.seriesId, input.conversationId),
     'ai:roundtableStatus': (input) => roundtable.status(input.seriesId, input.conversationId),
+    'ai:roundtablePrivate': (input) => ai.roundtablePrivate(input),
     'ai:roundtableTurn': (input) => ai.roundtableTurn(input),
     'ai:attach': (input) => attachments.add(input.conversationId, input.name, input.data),
     'ai:attachmentsHere': (input) => attachments.here(input.conversationId, input.ids),
