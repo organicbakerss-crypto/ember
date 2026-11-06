@@ -68,3 +68,18 @@
 .rt-line.direct { stroke:var(--accent); stroke-width:2.5; opacity:.8; }
 .rt-network { width:100%; }
 .rt-private-chat { margin-top:auto; }
+
+/* Figurehead is a distinct non-voting inner-circle role. */
+.rt-figurehead { fill:var(--surface); stroke:var(--accent); stroke-width:2.5px; }
+.rt-figurehead.active { stroke-width:5px; }
+.rt-figurehead-text { fill:var(--text); font-size:9px; font-weight:600; pointer-events:none; }
+.rt-context { max-width:780px; width:100%; border:1px solid var(--border); border-radius:10px; padding:1rem; margin:0 auto; }
+.rt-context summary, .rt-result-proposal summary { cursor:pointer; font-weight:600; }
+.rt-context .rt-body { white-space:pre-wrap; margin:.75rem 0; }
+.rt-result-proposal { display:grid; gap:.65rem; }
+.rt-result-line { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+.rt-result-summary { margin:0; line-height:1.55; }
+.rt-result-proposal details { border-top:1px solid var(--border); padding-top:.65rem; }
+.rt-result-proposal details .rt-body { padding-top:.65rem; }
+.rt-body > *:first-child { margin-top:0; }
+.rt-body > *:last-child { margin-bottom:0; }
