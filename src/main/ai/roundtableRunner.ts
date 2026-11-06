@@ -62,7 +62,7 @@ export class RoundtableRunner {
 
   private async run(seriesId: string, conversationId: string, control: Control): Promise<void> {
     try {
-      // A complete session with eight members needs at most 56 model turns.
+      // A complete session with twelve members uses up to 96 participant turns, plus bounded Figurehead checks.
       // Each completed turn is saved immediately, so an interrupted run can resume.
       while (!control.paused) {
         const file = await this.host.current.readConversation(seriesId, conversationId)
@@ -71,6 +71,17 @@ export class RoundtableRunner {
         if (session.phase === 'complete') {
           this.publish({ seriesId, conversationId, state: 'complete', speakerId: null, targetId: null, error: null })
           return
+        }
+        // Prepare the shared evidence once. This checkpoint survives leaving the AI tab.
+        if (!session.briefing) {
+          const requestId = `figurehead-${conversationId}-${Date.now()}`
+          control.requestId = requestId
+          this.publish({ seriesId, conversationId, state: 'running', speakerId: 'figurehead', targetId: null, error: null })
+          const briefing = await this.ai.prepareRoundtable(seriesId, session, requestId)
+          control.requestId = null
+          if (control.paused) break
+          await this.save(seriesId, file, { ...session, briefing })
+          continue
         }
 
         const speaker = nextParticipant(session)
@@ -83,6 +94,24 @@ export class RoundtableRunner {
           : null
         if (!speaker && !directSpeaker) {
           if (!phaseIsReady(session)) throw new Error('The current phase cannot advance.')
+          // Review the two open debates. The Figurehead intervenes only if canon is
+          // demonstrably contradicted or discussion has lost the writer's question.
+          if (discussion && !session.figureheadReviews?.includes(session.phase)) {
+            const requestId = `figurehead-review-${conversationId}-${Date.now()}`
+            control.requestId = requestId
+            this.publish({ seriesId, conversationId, state: 'running', speakerId: 'figurehead', targetId: null, error: null })
+            const note = await this.ai.reviewRoundtable(session, requestId)
+            control.requestId = null
+            if (control.paused) break
+            await this.save(seriesId, file, {
+              ...session,
+              figureheadReviews: [...(session.figureheadReviews ?? []), session.phase],
+              interventions: note ? [...(session.interventions ?? []), {
+                at: new Date().toISOString(), phase: session.phase, text: note,
+              }] : session.interventions,
+            })
+            continue
+          }
           const advanced = advancePhase(session)
           if (control.paused) break
           await this.save(seriesId, file, advanced)
@@ -102,12 +131,13 @@ export class RoundtableRunner {
         // A paused request never adds a response after pause was requested.
         if (control.paused) break
         const channel: RoundtablePost['channel'] = direct ? 'direct' :
-          session.phase === 'revision' ? 'private' : session.phase === 'vote' ? 'ballot' : 'open'
+          session.phase === 'revision' || session.phase === 'final' ? 'private' : session.phase === 'vote' ? 'ballot' : 'open'
         const post: RoundtablePost = {
           id: `rtpost-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           at: new Date().toISOString(), phase: session.phase, speakerId: person.id,
           targetId, channel, text: outcome.text,
           ...(outcome.ranking ? { ranking: outcome.ranking } : {}),
+          ...(outcome.summary ? { summary: outcome.summary } : {}),
         }
         await this.save(seriesId, file, { ...session, posts: [...session.posts, post] })
       }
