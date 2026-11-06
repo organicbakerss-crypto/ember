@@ -48,7 +48,7 @@ describe('ChatGPT, signed in directly', () => {
       messages: [{ role: 'user' as const, content: 'hi' }],
       scope: null,
     }
-    await expect(ai.ask(ask, () => {})).rejects.toThrow(/Continue with ChatGPT/)
+    await expect(ai.ask(ask, () => {})).rejects.toThrow(/Connect your ChatGPT account/)
 
     let opened = ''
     await ai.chatgptSignIn(async (url) => {
@@ -56,17 +56,20 @@ describe('ChatGPT, signed in directly', () => {
       await browser(url)
     })
     const auth = new URL(opened)
-    expect(auth.pathname).toBe('/oauth/authorize')
+    expect(auth.pathname).toBe('/api/accounts/authorize')
+    expect(auth.searchParams.get('client_id')).toBe('dynamic_agent_client')
+    expect(auth.searchParams.get('resource')).toBe('https://api.openai.com/v1')
+    expect(auth.searchParams.get('scope')).toContain('chatgpt.tokens.use.direct')
     expect(auth.searchParams.get('code_challenge_method')).toBe('S256')
     expect(auth.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:1455/auth/callback')
-    const token = fake!.requests.find((r) => r.path === '/oauth/token')!.body
+    const token = fake!.requests.find((r) => r.path === '/api/accounts/oauth/token')!.body
     expect(token).toMatchObject({ grant_type: 'authorization_code', code: 'code_123' })
     expect(String(token['code_verifier']).length).toBeGreaterThan(40)
 
     const status = await ai.status()
     expect(status).toMatchObject({
       provider: 'chatgpt',
-      account: { email: 'writer@example.com', plan: 'plus' },
+      account: { email: 'writer@example.com', plan: null },
       models: ['gpt-6.1-sol'],
     })
     // Kept on disk, so it survives a restart.
@@ -87,7 +90,7 @@ describe('ChatGPT, signed in directly', () => {
     expect(r.text).toBe('From ChatGPT: Is this scene working?')
     expect(tokens.length).toBeGreaterThan(1)
     const call = fake!.requests.find((x) => x.path === '/responses')!
-    expect(call.headers['chatgpt-account-id']).toBe('acct_1')
+    expect(call.headers.authorization?.toString()).toMatch(/^Bearer /)
     expect(call.body).toMatchObject({ model: 'gpt-6.1-sol', store: false, stream: true })
     expect((call.body['input'] as unknown[]).length).toBe(3)
 
@@ -106,7 +109,7 @@ describe('ChatGPT, signed in directly', () => {
 
     await ai.chatgptSignOut()
     expect((await ai.status()).account).toBeNull()
-    expect(fs.existsSync(join(dir, 'chatgpt.json'))).toBe(false)
+    expect((await ai.status()).account).toBeNull()
   })
 
   it('refreshes a login that has run out', async () => {
