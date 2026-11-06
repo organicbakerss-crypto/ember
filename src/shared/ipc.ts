@@ -853,6 +853,13 @@ export const ipcInputs = {
   'ai:roundtableRun': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
   'ai:roundtablePause': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
   'ai:roundtableStatus': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
+  /** A 1:1 conversation in a participant's Roundtable tab. */
+  'ai:roundtablePrivate': z.object({
+    requestId: z.string().min(1).max(80),
+    session: roundtableSessionSchema,
+    speakerId: z.string().min(1).max(80),
+    question: z.string().trim().min(1).max(6000),
+  }),
   /** One controlled Roundtable contribution. Saves happen separately so each turn is reviewable. */
   'ai:roundtableTurn': z.object({
     requestId: z.string().min(1).max(80),
@@ -1187,6 +1194,7 @@ export interface IpcResults {
   'ai:status': AiStatus
   'ai:ask': { text: string; lookedAt: string[] }
   'ai:roundtableTurn': { text: string; ranking: string[] | null }
+  'ai:roundtablePrivate': { text: string }
   'ai:roundtableRun': RoundtableRunStatus
   'ai:roundtablePause': RoundtableRunStatus
   'ai:roundtableStatus': RoundtableRunStatus
