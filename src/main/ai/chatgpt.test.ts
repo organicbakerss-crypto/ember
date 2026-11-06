@@ -111,7 +111,6 @@ describe('ChatGPT, signed in directly', () => {
 
     await ai.chatgptSignOut()
     expect((await ai.status()).account).toBeNull()
-    expect((await ai.status()).account).toBeNull()
   })
 
   it('refreshes a login that has run out', async () => {
