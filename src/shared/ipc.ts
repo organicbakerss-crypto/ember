@@ -1279,7 +1279,7 @@ export type ErrorCode =
 export interface RoundtableRunStatus {
   seriesId: string
   conversationId: string
-  state: 'running' | 'paused' | 'failed' | 'complete'
+  state: 'running' | 'pausing' | 'paused' | 'failed' | 'complete'
   speakerId: string | null
   targetId: string | null
   error: string | null
