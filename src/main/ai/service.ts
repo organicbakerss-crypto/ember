@@ -423,18 +423,28 @@ export class AiService {
         const to = p.targetId ? ` to ${session.participants.find((person) => person.id === p.targetId)?.name ?? 'participant'}` : ''
         return `[${p.phase} / ${p.channel}] ${author}${to}: ${p.text.slice(0,2200)}`
       }).join('\n\n').slice(-22000)
+    // Preserve the participant's own position even when a long discussion has
+    // pushed its opening contribution out of the limited transcript window.
+    const ownProposal = session.posts.find((p) =>
+      p.speakerId === speakerId && p.phase === 'proposals' && p.channel === 'open')
+    const ownRevision = session.posts.find((p) =>
+      p.speakerId === speakerId && p.phase === 'revision' && p.channel === 'private')
+    const positionMemory = [
+      ownProposal ? `Your original proposal (your own, not a group consensus): ${ownProposal.text.slice(0, 3500)}` : '',
+      ownRevision ? `Your private reconsideration: ${ownRevision.text.slice(0, 2500)}` : '',
+    ].filter(Boolean).join('\\n\\n')
     const role = direct
-      ? `Address ${session.participants.find((p) => p.id === targetId)!.name} directly, building on a concrete disagreement or question. This is a message-board reply, not a new opening proposal.`
+      ? `Address ${session.participants.find((p) => p.id === targetId)!.name} directly, building on a concrete disagreement or question. Respond to the merits of their criticism instead of automatically accepting it. If your approach remains stronger, explain why, including a specific tradeoff. This is a message-board reply, not a new opening proposal.`
       : session.phase === 'proposals'
         ? 'Put forward your own specific proposal and state the criteria you would use to judge competing proposals. Make it substantive but concise.'
         : session.phase === 'discussion1'
-          ? 'Respond to the other proposals and criteria. Engage seriously with an actual claim, suggest improvements, and defend or reconsider your own reasoning.'
+          ? 'Respond to a specific argument or objection. Defend the strongest rationale for your own proposal when it still holds, and explain why a rival approach may be weaker for this particular story. Acknowledging a valid criticism does not require abandoning the rest of your idea. Revise only when the evidence or reasoning actually warrants it; avoid agreement for the sake of harmony.'
           : session.phase === 'revision'
-            ? 'Privately reconsider your initial position after the first discussion. State what you are changing, keeping, or questioning and why. This is private working thought, not a message to the other participants.'
+            ? 'Privately evaluate the strongest objections to your original proposal. State explicitly which core parts remain worth defending, what (if anything) should change, and why. Preserve an idea's strongest distinctive benefits rather than drifting toward consensus. If the objections genuinely defeat it, change your mind without hesitation. This is private working thought, not a message to the others.'
             : session.phase === 'discussion2'
-              ? 'Continue the open discussion with your revised perspective. Engage with a specific point that was raised; do not just repeat your proposal.'
+              ? 'Continue the open discussion from your own revised position. Address a specific serious objection and defend what remains compelling about your approach, including a tradeoff or weakness you accept. Challenge another proposal where warranted. Do not mechanically repeat your pitch, abandon it merely because someone disagrees, or manufacture conflict where none exists.'
               : session.phase === 'final'
-                ? 'Enter your private booth. Based on both debates and your own earlier views, lock in the proposal you would actually recommend. Return ONLY a JSON object with two strings: {"summary":"One or two straightforward sentences describing the proposed direction","proposal":"Complete final proposal, including reasoning, consequences and any important caveats"}. Your summary and proposal must be consistent. No other participant sees this until all have submitted.'
+                ? 'Enter your private booth. Evaluate the strongest remaining case for your own proposal against the alternatives. Do not surrender a distinct and viable idea merely because more participants favored another one, but do change course if the evidence really supports it. Based on both debates and your own earlier views, lock in the proposal you would actually recommend. Return ONLY a JSON object with two strings: {"summary":"One or two straightforward sentences describing the proposed direction","proposal":"Complete final proposal, including reasoning, consequences and any important caveats"}. Your summary and proposal must be consistent. No other participant sees this until all have submitted.'
                 : `Every participant has now locked in a final proposal. Rank the OTHER participants using ONLY the final proposals, not earlier drafts. Never rank yourself. Return ONLY JSON of this form: {"ranking":["id1","id2"]}, including every other participant ID exactly once. Eligible IDs: ${session.participants.filter((p) => p.id !== speakerId).map((p) => p.id).join(', ')}.`
     const provider = await this.client()
     return this.track(input.requestId, async (signal) => {
@@ -443,6 +453,8 @@ export class AiService {
           { role: 'system', content: [
             roleInstructions,
             'You are participating as one distinct voice in Ember Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
+            'Be intellectually independent rather than socially agreeable. Treat criticism as something to examine, not an instruction to concede. Defend substantive strengths, name tradeoffs, and update only for good reasons. Do not become combative or stubborn: the aim is to preserve worthy competing ideas until the final vote, not to win arguments.',
+            ...(positionMemory ? [positionMemory] : []),
             `Roundtable participants: ${participants}.`,
             `Topic from the writer: ${session.topic}`,
             `Figurehead's manuscript briefing (grounded context; proposals can intentionally change canon): ${session.briefing?.text || 'No project briefing is available; do not assume manuscript facts.'}`,
