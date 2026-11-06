@@ -3,7 +3,7 @@ import { advancePhase, nextParticipant, phaseIsReady, type RoundtableSession, ty
 import type { LibraryHost } from '../libraryHost'
 import type { AiService } from './service'
 
-export type RoundtableRunState = 'running' | 'paused' | 'failed' | 'complete'
+export type RoundtableRunState = 'running' | 'pausing' | 'paused' | 'failed' | 'complete'
 export interface RoundtableRunStatus {
   seriesId: string
   conversationId: string
@@ -55,7 +55,7 @@ export class RoundtableRunner {
       if (control.requestId) this.ai.cancel(control.requestId)
     }
     const last = this.status(seriesId, conversationId)
-    const status: RoundtableRunStatus = { ...last, state: 'paused', speakerId: null, targetId: null }
+    const status: RoundtableRunStatus = { ...last, state: control ? 'pausing' : 'paused', speakerId: null, targetId: null }
     this.publish(status)
     return status
   }
