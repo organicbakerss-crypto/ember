@@ -317,8 +317,8 @@ export class AiService {
       const matching = chapter.paragraphs.map((text, index) => ({ text, index, score: relevance(text) }))
         .filter((x) => x.score > 0).sort((a,b) => b.score - a.score).slice(0, 7)
       const excerpts = matching.length ? matching.sort((a,b) => a.index - b.index) : chapter.paragraphs.slice(-5).map((text,index) => ({ text, index, score:0 }))
-      const excerpt = excerpts.map((p) => p.text).join('\\n').slice(0, 4200)
-      evidence.push(`SOURCE: ${label}\\n${chapter.current && chapter.summary ? `Current chapter summary: ${chapter.summary.slice(0, 650)}\\n` : ''}Manuscript excerpt: ${excerpt}`)
+      const excerpt = excerpts.map((p) => p.text).join('\n').slice(0, 4200)
+      evidence.push(`SOURCE: ${label}\n${chapter.current && chapter.summary ? `Current chapter summary: ${chapter.summary.slice(0, 650)}\n` : ''}Manuscript excerpt: ${excerpt}`)
     }
     if (series.worldId) {
       const world = await library.world.view(series.worldId)
@@ -328,14 +328,14 @@ export class AiService {
         const label = `World entry: ${entry.name}`
         sources.push(label)
         const notes = await library.world.entryText(series.worldId, entry.id).catch(() => entry.snippet)
-        evidence.push(`SOURCE: ${label}\\n${notes.slice(0, 1700)}`)
+        evidence.push(`SOURCE: ${label}\n${notes.slice(0, 1700)}`)
       }
       if (!entries.length) {
         const digest = await library.world.digest(series.worldId).catch(() => '')
-        if (digest) { sources.push('World overview'); evidence.push(`SOURCE: World overview\\n${digest.slice(0, 2600)}`) }
+        if (digest) { sources.push('World overview'); evidence.push(`SOURCE: World overview\n${digest.slice(0, 2600)}`) }
       }
     }
-    const corpus = evidence.join('\\n\\n').slice(0, 30000)
+    const corpus = evidence.join('\n\n').slice(0, 30000)
     const provider = await this.client()
     return this.track(requestId, async (signal) => {
       const prepared = await provider.chat({
@@ -347,8 +347,8 @@ export class AiService {
             'Do not invent plot, claim missing information is established, rewrite the author\'s question, recommend a winner, or evaluate artistic merit.',
             'If the manuscript contains little or no relevant information, explicitly say this; do not manufacture context.',
             'Include the supplied source names alongside factual points when practical. The participants may propose changes to canon.',
-          ].join('\\n') },
-          { role:'user', content:`Writer question: ${session.topic}\\n\\nEvidence from project “${series.name}”:\\n${corpus || '(No manuscript or worldbuilding text was available.)'}\\n\\nProduce the shared briefing.` },
+          ].join('\n') },
+          { role:'user', content:`Writer question: ${session.topic}\n\nEvidence from project “${series.name}”:\n${corpus || '(No manuscript or worldbuilding text was available.)'}\n\nProduce the shared briefing.` },
         ],signal,temperature:0.2,
       })
       return {
@@ -363,14 +363,14 @@ export class AiService {
   async reviewRoundtable(session: RoundtableSession, requestId: string): Promise<string | null> {
     if (!session.briefing?.text.trim()) return null
     const debate = session.posts.filter((p) => p.channel === 'open' || p.channel === 'direct')
-      .slice(-18).map((p) => `${p.speakerId}: ${p.text.slice(0,1300)}`).join('\\n\\n').slice(-15000)
+      .slice(-18).map((p) => `${p.speakerId}: ${p.text.slice(0,1300)}`).join('\n\n').slice(-15000)
     if (!debate.trim()) return null
     const provider = await this.client()
     return this.track(requestId, async (signal) => {
       const result = (await provider.chat({
         messages:[
           {role:'system',content:'You are the Figurehead, a neutral manuscript-grounding moderator. Compare the recent debate to the shared evidence. Intervene ONLY if there is an important factual contradiction with the supplied evidence or the debate has abandoned the writer\'s question. A proposal to CHANGE canon is not an error. If no substantive issue is demonstrable, respond with exactly NONE. Otherwise provide one short correction or a request to clarify, grounded in the briefing, with no creative judgment. Never invent manuscript facts.'},
-          {role:'user',content:`Original question: ${session.topic}\\n\\nEvidence briefing: ${session.briefing!.text.slice(0,12000)}\\n\\nRecent discussion:\\n${debate}`},
+          {role:'user',content:`Original question: ${session.topic}\n\nEvidence briefing: ${session.briefing!.text.slice(0,12000)}\n\nRecent discussion:\n${debate}`},
         ],signal,temperature:0.1,
       })).trim()
       return !result || /^NONE[.!]?$/i.test(result) ? null : result.slice(0,2500)
@@ -384,7 +384,7 @@ export class AiService {
     speakerId: string
     targetId: string | null
     direct: boolean
-  }): Promise<{ text: string; ranking: string[] | null }> {
+  }): Promise<{ text: string; ranking: string[] | null; summary?: string }> {
     const { session, speakerId, targetId, direct } = input
     const speaker = session.participants.find((p) => p.id === speakerId)
     if (!speaker) throw new AppError('invalid-input', 'Unknown Roundtable participant.')
@@ -408,8 +408,15 @@ export class AiService {
     }
 
     const participants = session.participants.map((p) => `${p.name} [${p.id}]`).join(', ')
+    // Final proposals stay hidden from competitors until all are locked.
+    // Ballot text stays hidden from everyone until the entire vote is finished.
+    if (session.phase === 'vote' && !finalPositionsReady(session)) {
+      throw new AppError('invalid-input', 'Every participant must lock a final position before voting.')
+    }
     const transcript = session.posts
-      .filter((p) => p.channel !== 'private' && p.channel !== 'ballot' || p.speakerId === speakerId)
+      .filter((p) => p.channel === 'user' || p.channel === 'open' || p.channel === 'direct' ||
+        (p.channel === 'private' && p.speakerId === speakerId && p.phase !== 'final') ||
+        (p.phase === 'final' && session.phase === 'vote' && !!p.summary))
       .slice(-65).map((p) => {
         const author = session.participants.find((person) => person.id === p.speakerId)?.name ?? 'Writer'
         const to = p.targetId ? ` to ${session.participants.find((person) => person.id === p.targetId)?.name ?? 'participant'}` : ''
@@ -425,7 +432,9 @@ export class AiService {
             ? 'Privately reconsider your initial position after the first discussion. State what you are changing, keeping, or questioning and why. This is private working thought, not a message to the other participants.'
             : session.phase === 'discussion2'
               ? 'Continue the open discussion with your revised perspective. Engage with a specific point that was raised; do not just repeat your proposal.'
-              : `Rank every other participant's proposal, best first, based on the agreed criteria. Never rank yourself. Return ONLY JSON of this form: {"ranking":["id1","id2"]}, including every other participant ID exactly once. Eligible IDs: ${session.participants.filter((p) => p.id !== speakerId).map((p) => p.id).join(', ')}.`
+              : session.phase === 'final'
+                ? 'Enter your private booth. Based on both debates and your own earlier views, lock in the proposal you would actually recommend. Return ONLY a JSON object with two strings: {"summary":"One or two straightforward sentences describing the proposed direction","proposal":"Complete final proposal, including reasoning, consequences and any important caveats"}. Your summary and proposal must be consistent. No other participant sees this until all have submitted.'
+                : `Every participant has now locked in a final proposal. Rank the OTHER participants using ONLY the final proposals, not earlier drafts. Never rank yourself. Return ONLY JSON of this form: {"ranking":["id1","id2"]}, including every other participant ID exactly once. Eligible IDs: ${session.participants.filter((p) => p.id !== speakerId).map((p) => p.id).join(', ')}.`
     const provider = await this.client()
     return this.track(input.requestId, async (signal) => {
       const response = await provider.chat({
@@ -435,6 +444,8 @@ export class AiService {
             'You are participating as one distinct voice in Ember Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
             `Roundtable participants: ${participants}.`,
             `Topic from the writer: ${session.topic}`,
+            `Figurehead's manuscript briefing (grounded context; proposals can intentionally change canon): ${session.briefing?.text || 'No project briefing is available; do not assume manuscript facts.'}`,
+            ...(session.interventions?.length ? [`Figurehead context corrections: ${session.interventions.map((x) => x.text).join('\n')}`] : []),
             `Current phase: ${session.phase}.`,
             role,
           ].join('\n\n') },
@@ -442,8 +453,18 @@ export class AiService {
         ],
         signal,
         temperature: session.phase === 'vote' ? 0.1 : 0.65,
-        json: session.phase === 'vote',
+        json: session.phase === 'vote' || session.phase === 'final',
       })
+      if (session.phase === 'final' && !direct) {
+        let result: { summary?: unknown; proposal?: unknown }
+        try { result = JSON.parse(response.slice(response.indexOf('{'), response.lastIndexOf('}') + 1)) }
+        catch { throw new AppError('invalid-input', 'Could not read the sealed final proposal. Retry this participant.') }
+        if (typeof result.summary !== 'string' || !result.summary.trim() ||
+            typeof result.proposal !== 'string' || !result.proposal.trim()) {
+          throw new AppError('invalid-input', 'A final proposal needs both a summary and its complete position.')
+        }
+        return { text: result.proposal.trim().slice(0,16000), summary: result.summary.trim().slice(0,1800), ranking: null }
+      }
       if (session.phase !== 'vote' || direct) return { text: response.trim(), ranking: null }
       let ranking: unknown
       try {
