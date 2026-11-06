@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ROUNDTABLE_CAST } from '@shared/ai/roundtableCast'
 import { newId } from '@shared/ids'
 import type { ConversationFile } from '@shared/schema'
@@ -27,6 +27,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   const [saved, setSaved] = useState<ConversationSummary[]>([])
   const [tab, setTab] = useState<Tab>('floor')
   const [busy, setBusy] = useState<string | null>(null)
+  const activeRequest = useRef<string | null>(null)
   const [error, setError] = useState('')
   const [userText, setUserText] = useState('')
   const [sender, setSender] = useState('')
@@ -86,11 +87,13 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     const target = direct ? recipient : null
     if (!person || (direct && (!target || target === person.id))) return
     setBusy(person.id)
+    const requestId = id()
+    activeRequest.current = requestId
     setActive(person.id)
     setError('')
     try {
       const output = await api.invoke('ai:roundtableTurn', {
-        requestId: id(), session, speakerId: person.id, targetId: target, direct,
+        requestId, session, speakerId: person.id, targetId: target, direct,
       })
       const channel = direct ? 'direct' : session.phase === 'revision' ? 'private'
         : session.phase === 'vote' ? 'ballot' : 'open'
@@ -100,7 +103,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
       })
       setActive(direct ? target : person.id)
     } catch (err) { setError(describeError(err).message) }
-    finally { setBusy(null) }
+    finally { activeRequest.current = null; setBusy(null) }
   }
 
   const advance = async () => {
@@ -236,6 +239,9 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
         </div>}
       </div>}
       <footer className="rt-footer">
+        {busy && <div className="rt-running"><span className="muted small">{name(busy)} is responding</span>
+          <button onClick={() => { if (activeRequest.current) void api.invoke('ai:cancel', { requestId: activeRequest.current }) }}>Stop response</button>
+        </div>}
         {session.phase === 'revision' && <details className="rt-private">
           <summary>Private reconsiderations (visible to you only)</summary>
           {session.posts.filter((p) => p.channel === 'private').map((p) => <div key={p.id} className="rt-post"><strong>{name(p.speakerId)}</strong><p>{p.text}</p></div>)}
