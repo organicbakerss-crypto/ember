@@ -37,7 +37,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
   const [recipient, setRecipient] = useState('')
   const [active, setActive] = useState<string | null>(null)
   const session = file?.roundtable
-  const automatic = runStatus?.state === 'running' && runStatus.conversationId === file?.id
+  const automatic = (runStatus?.state === 'running' || runStatus?.state === 'pausing') && runStatus.conversationId === file?.id
   const members = session?.participants ?? []
   const name = (speakerId: string) => members.find((p) => p.id === speakerId)?.name ?? 'You'
 
@@ -337,7 +337,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
           {session.phase === 'complete' ? <strong>Roundtable finished. All peer ballots are available in Rankings.</strong> :
             automatic ? <>
               <span className="muted small">{runStatus?.speakerId ? `${name(runStatus.speakerId)} is contributing` : 'Advancing the discussion…'}</span>
-              <button onClick={() => void pause()}>Pause Roundtable</button>
+              <button disabled={runStatus?.state === 'pausing'} onClick={() => void pause()}>{runStatus?.state === 'pausing' ? 'Pausing…' : 'Pause Roundtable'}</button>
             </> : <>
               <span className="muted small">{runStatus?.state === 'failed' ? `Stopped: ${runStatus.error ?? 'AI request failed'}` : 'Paused · progress saved'}</span>
               <button className="primary" onClick={() => void run(file!.id)}>Resume automatically</button>
