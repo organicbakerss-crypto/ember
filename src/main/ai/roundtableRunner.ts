@@ -79,7 +79,7 @@ export class RoundtableRunner {
         const discussion = session.phase === 'discussion1' || session.phase === 'discussion2'
         const directSpeaker = !speaker && discussion
           ? session.participants.find((p) => !session.posts.some((post) =>
-            post.phase === session.phase && post.channel === 'direct' && post.speakerId === p.id))
+            post.phase === session.phase && post.channel === 'direct' && post.targetId !== 'writer' && post.speakerId === p.id))
           : null
         if (!speaker && !directSpeaker) {
           if (!phaseIsReady(session)) throw new Error('The current phase cannot advance.')
