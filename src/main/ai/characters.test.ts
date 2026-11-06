@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EMBER_CHARACTERS, emberCharacter } from '@shared/ai/characters'
 import { DEFAULT_AI_SETTINGS } from '@shared/settings'
 import { aiSettingsSchema } from '@shared/exportSettings'
+import { conversationFileSchema } from '@shared/schema'
 import { chatMessages, editMessages, type PromptContext } from './prompts'
 
 const context = (characterId: string): PromptContext => ({
@@ -37,6 +38,35 @@ describe('regular AI characters', () => {
     expect(roman[0]?.content).toContain('Every problem you point out comes with a specific fix')
     expect(bo[0]?.content).toContain('Every problem you point out comes with a specific fix')
     expect(roman[1]).toEqual(history[0])
+  })
+
+  it('loads only the selected versioned personality and shared behavior', () => {
+    for (const id of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
+      const profile = emberCharacter(id)
+      expect(profile.version).toBe(1)
+      expect(profile.personality.split(/\\s+/).length).toBeGreaterThan(200)
+      const message = chatMessages(context(id), [{ role: 'user', content: 'Hi' }])[0]!.content
+      expect(message).toContain(profile.personality)
+      expect(message).toContain('No invented childhood')
+      for (const other of ['john-ai', 'roman', 'bo', 'caesar', 'jake']) {
+        if (id !== other) expect(message).not.toContain(emberCharacter(other).personality)
+      }
+    }
+  })
+
+  it('preserves conversation persona and supports legacy conversations', () => {
+    const base = {
+      formatVersion: 1,
+      id: 'conversation_test',
+      mode: 'chat',
+      title: 'A conversation',
+      createdAt: '2026-11-06T00:00:00.000Z',
+      updatedAt: '2026-11-06T00:00:00.000Z',
+      messages: [],
+    }
+    const current = conversationFileSchema.parse({ ...base, characterId: 'roman' })
+    expect(current.characterId).toBe('roman')
+    expect(conversationFileSchema.parse(base).characterId ?? 'john-ai').toBe('john-ai')
   })
 
   it('does not add a character persona to exact chapter edits', () => {
