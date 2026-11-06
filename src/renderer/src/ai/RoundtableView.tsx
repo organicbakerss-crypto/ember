@@ -5,10 +5,9 @@ import type { ConversationFile } from '@shared/schema'
 import type { ConversationSummary } from '@shared/ipc'
 import {
   advancePhase, nextParticipant, phaseIsReady, PHASE_NAMES, roundtableResults,
-  type RoundtableSession, type RoundtableParticipant, type RoundtablePost,
+  type RoundtableSession, type RoundtablePost,
 } from '@shared/ai/roundtable'
 import { api, describeError } from '../api'
-import { parse } from './markdown'
 import './roundtable.css'
 
 type Tab = 'floor' | 'board' | 'network' | 'results'
