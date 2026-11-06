@@ -316,6 +316,14 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
           <ol>{post.ranking?.map((id) => <li key={id}>{name(id)}</li>)}</ol>
         </article>)}
       </div> : <div className="rt-feed">
+        {tab === 'floor' && !!session.briefing && <details className="rt-figurehead-notice">
+          <summary><strong>Figurehead</strong> · Shared manuscript briefing ({session.briefing.sources.length} sources)</summary>
+          <p className="rt-body">{session.briefing.text}</p>
+        </details>}
+        {tab === 'floor' && session.interventions?.map((note, i) => <article key={i} className="rt-post rt-moderator-post">
+          <div className="rt-post-head"><strong>Figurehead</strong><span className="muted small">{PHASE_NAMES[note.phase]} · Context check</span></div>
+          <div className="rt-body">{note.text}</div>
+        </article>)}
         {!visiblePosts.length && <p className="muted">No {tab === 'floor' ? 'open-floor posts' : currentPerson ? 'messages for this participant' : 'direct exchanges'} yet.</p>}
         {visiblePosts.map((post) => <article key={post.id} className="rt-post">
           <div className="rt-post-head"><strong>{name(post.speakerId)}</strong>
