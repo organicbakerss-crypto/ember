@@ -103,7 +103,7 @@ async function validateIdentity(
     valid = verify(
       'RSA-SHA256',
       Buffer.from(`${segments[0]}.${segments[1]}`),
-      createPublicKey({ key: key as JsonWebKey, format: 'jwk' }),
+      createPublicKey({ key: { kty: key.kty, n: key.n, e: key.e }, format: 'jwk' }),
       Buffer.from(segments[2]!, 'base64url'),
     )
   } catch {
