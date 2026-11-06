@@ -629,7 +629,7 @@ export const conversationFileSchema = z.looseObject({
   id: id('conversation'),
   mode: z.enum(['chat', 'brainstorm', 'ask']),
   /** Conversations keep the character they began with; legacy files default to John. */
-  characterId: z.string().min(1).max(80).catch('john-ai').default('john-ai'),
+  characterId: z.string().min(1).max(80).catch('john-ai').optional(),
   title: z.string().max(200),
   createdAt: timestamp,
   updatedAt: timestamp,
