@@ -38,6 +38,7 @@ export const roundtableSessionSchema = z.object({
     preparedAt: z.iso.datetime(),
   }).optional(),
   /** Moderator notices based on checked manuscript context. */
+  figureheadReviews: z.array(roundtablePhaseSchema).max(8).optional(),
   interventions: z.array(z.object({
     at: z.iso.datetime(),
     phase: roundtablePhaseSchema,
