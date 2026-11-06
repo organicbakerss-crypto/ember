@@ -168,7 +168,7 @@ export function registerIpc(
           ai.ask(
             {
               ...input,
-              characterId: input.conversation.characterId,
+              characterId: input.conversation.characterId ?? 'john-ai',
               attachments: input.attachmentIds?.length
                 ? await attachments.texts(input.conversation.id, input.attachmentIds)
                 : [],
