@@ -49,7 +49,7 @@ export const roundtableSessionSchema = z.object({
 export type RoundtableSession = z.infer<typeof roundtableSessionSchema>
 
 export const PHASES: readonly RoundtablePhase[] = [
-  'proposals', 'discussion1', 'revision', 'discussion2', 'vote', 'complete',
+  'proposals', 'discussion1', 'revision', 'discussion2', 'final', 'vote', 'complete',
 ]
 
 export const PHASE_NAMES: Record<RoundtablePhase, string> = {
