@@ -212,6 +212,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
         tab === 'results' ? post.channel === 'ballot' : post.channel !== 'private')
   const connections = (session?.posts ?? []).filter((post) => post.channel === 'direct' && post.targetId)
   const ballotCount = session?.posts.filter((p) => p.phase === 'vote' && p.channel === 'ballot').length ?? 0
+  const visibleRanking = session?.phase === 'complete' ? roundtableResults(session) : members.map((m) => ({ id: m.id, name: m.name, score: 0, votes: 0 }))
 
   return <div className="rt-root">
     <header className="rt-header">
@@ -297,11 +298,11 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
       </div> : tab === 'results' ? <div className="rt-feed">
         <h3>Final proposals and peer rankings {session.phase === 'complete' ? '' : '(in progress)'}</h3>
         {!resultsReady && <p className="muted">Final proposals remain sealed until everyone has locked in their position.</p>}
-        {resultsReady && roundtableResults(session).map((result, i) => {
+        {resultsReady && visibleRanking.map((result, i) => {
           const proposal = sealed.find((p) => p.speakerId === result.id)
           return <article key={result.id} className="rt-result-proposal rt-post">
-            <div className="rt-result-line"><strong>{i + 1}. {result.name}{i === 0 && session.phase === 'complete' ? ' · Winner' : ''}</strong>
-              <span className="muted small">{result.score} points · {result.votes} ballots</span></div>
+            <div className="rt-result-line"><strong>{session.phase === 'complete' ? `${i + 1}. ` : ''}{result.name}{i === 0 && session.phase === 'complete' ? ' · Winner' : ''}</strong>
+              {session.phase === 'complete' && <span className="muted small">{result.score} points · {result.votes} ballots</span>}</div>
             <p className="rt-result-summary">{proposal?.summary || 'No final summary was recorded for this participant.'}</p>
             <details><summary>Read full final proposal</summary>
               <div className="rt-body"><Blocks blocks={parse(proposal?.text || 'No final proposal was recorded.')} /></div>
