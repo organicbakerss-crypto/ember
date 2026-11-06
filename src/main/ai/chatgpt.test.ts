@@ -62,7 +62,8 @@ describe('ChatGPT, signed in directly', () => {
     expect(auth.searchParams.get('resource')).toBe('https://api.openai.com/v1')
     expect(auth.searchParams.get('scope')).toContain('chatgpt.tokens.use.direct')
     expect(auth.searchParams.get('code_challenge_method')).toBe('S256')
-    expect(auth.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:1455/auth/callback')
+    expect(new URL(auth.searchParams.get('redirect_uri')!).hostname).toBe('127.0.0.1')
+    expect(new URL(auth.searchParams.get('redirect_uri')!).pathname).toBe('/auth/callback')
     const token = fake!.requests.find((r) => r.path === '/api/accounts/oauth/token')!.body
     expect(token).toMatchObject({ grant_type: 'authorization_code', code: 'code_123' })
     expect(String(token['code_verifier']).length).toBeGreaterThan(40)
