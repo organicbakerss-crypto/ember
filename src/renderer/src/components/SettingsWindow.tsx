@@ -782,13 +782,13 @@ function AiSettingsSection() {
             {chatgpt ? (
               <>
                 <li>
-                  Uses your ChatGPT plan’s usage. No API key, no extra cost, nothing to install.
+                  Uses your ChatGPT plan’s usage allowance, with permission you approve during sign-in. No API key needed.
                 </li>
                 <li>
                   Nothing is sent until you ask; then only what the AI panel says it’s reading goes
                   to OpenAI.
                 </li>
-                <li>Chats are kept only while the app is open.</li>
+                <li>Ember retains its conversation history locally; selected AI requests are sent to OpenAI.</li>
               </>
             ) : (
               <>
