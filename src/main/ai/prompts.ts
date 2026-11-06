@@ -5,6 +5,7 @@
  * book, and it is told not to rewrite the writer's prose.
  */
 import type { ChatMessage } from './ollama'
+import { characterInstructions } from '@shared/ai/characters'
 
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
 export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story' | 'full'
@@ -32,6 +33,7 @@ const SCOPE_LABEL: Record<ScopeKind, string> = {
 }
 
 export interface PromptContext {
+  characterId?: string
   mode: AiMode
   scope: { kind: ScopeKind; text: string; chapterTitle: string } | null
   /** Text forms of the world entries named in the scope. */
@@ -52,7 +54,7 @@ const GROUNDED = `What you know about the writer's story comes only from what is
 
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
-  const parts = [BASE, MODES[context.mode], GROUNDED]
+  const parts = [BASE, MODES[context.mode], GROUNDED, characterInstructions(context.characterId)]
   if (context.attachments?.length) {
     parts.push(
       `Files the writer attached to this conversation (notes, hand-offs; not the story itself):\n\n${context.attachments
