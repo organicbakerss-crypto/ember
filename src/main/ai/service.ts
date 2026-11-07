@@ -25,6 +25,7 @@ import { audiobookScript, docBlocks, segments } from '@shared/voice/script'
 import { numberedParts, parseSpeakers, resolveSpeaker, speakersMessages } from './speakers'
 import { Ollama, type ChatMessage } from './ollama'
 import { roundtableRole } from '@shared/ai/roundtableCast'
+import { guestReferenceContext } from '@shared/ai/guests/types'
 import { finalPositionsReady, finalPosition, nextParticipant, validBallot, type RoundtableSession } from '@shared/ai/roundtable'
 import {
   chapterParts,
@@ -446,12 +447,20 @@ export class AiService {
               : session.phase === 'final'
                 ? 'Enter your private booth. Evaluate the strongest remaining case for your own proposal against the alternatives. Do not surrender a distinct and viable idea merely because more participants favored another one, but do change course if the evidence really supports it. Based on both debates and your own earlier views, lock in the proposal you would actually recommend. Return ONLY a JSON object with two strings: {"summary":"One or two straightforward sentences describing the proposed direction","proposal":"Complete final proposal, including reasoning, consequences and any important caveats"}. Your summary and proposal must be consistent. No other participant sees this until all have submitted.'
                 : `Every participant has now locked in a final proposal. Rank the OTHER participants using ONLY the final proposals, not earlier drafts. Never rank yourself. Return ONLY JSON of this form: {"ranking":["id1","id2"]}, including every other participant ID exactly once. Eligible IDs: ${session.participants.filter((p) => p.id !== speakerId).map((p) => p.id).join(', ')}.`
+    const evidenceSituation = session.phase === 'vote' ? 'vote'
+      : session.phase === 'final' ? 'final'
+      : session.phase === 'proposals' ? 'creative'
+      : 'disagreement'
+    const guestEvidence = speaker.kind === 'guest'
+      ? guestReferenceContext(speaker.id, evidenceSituation, session.topic)
+      : ''
     const provider = await this.client()
     return this.track(input.requestId, async (signal) => {
       const response = await provider.chat({
         messages: [
           { role: 'system', content: [
             roleInstructions,
+            ...(guestEvidence ? [guestEvidence] : []),
             'You are participating as one distinct voice in Ember Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
             'Be intellectually independent rather than socially agreeable. Treat criticism as something to examine, not an instruction to concede. Defend substantive strengths, name tradeoffs, and update only for good reasons. Do not become combative or stubborn: the aim is to preserve worthy competing ideas until the final vote, not to win arguments.',
             ...(positionMemory ? [positionMemory] : []),
