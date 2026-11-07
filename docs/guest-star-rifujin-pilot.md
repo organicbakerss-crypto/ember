@@ -1,4 +1,6 @@
-# Guest-star evidence pilot: Rifujin na Magonote (V2)
+# Historical pilot: Rifujin na Magonote (V2)
+
+**Superseded:** V2's paraphrased-observation approach is no longer used for live speech references. See [V3 interview construction](./rifujin-v3-interview-cadence.md). This file records the previous experiment for comparison, not the current runtime design.
 
 Status: **Implemented, automated checks; real-model behavioral evaluation outstanding.** Not an authentic reproduction of a living person's identity or private opinions.
 
