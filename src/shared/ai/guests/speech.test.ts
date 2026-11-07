@@ -40,7 +40,7 @@ describe('Rifujin V3 source-grounded question/answer construction', () => {
     expect(prompt).toContain('INTERVIEWER ASKED (paraphrase)')
     expect(prompt).toContain('ACTUAL ANSWER CONSTRUCTION (successive moves)')
     expect(prompt).toContain('edited-written-interview')
-    expect(prompt).toContain('not an English')
+    expect(prompt).toContain('not English speech')
     expect(prompt).toContain('SOURCE:')
     expect(prompt).not.toContain('He is patient and measured')
     expect(prompt.length).toBeLessThan(6500)
