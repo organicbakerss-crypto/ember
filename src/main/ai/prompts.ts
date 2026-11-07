@@ -6,6 +6,7 @@
  */
 import type { ChatMessage } from './ollama'
 import { characterInstructions } from '@shared/ai/characters'
+import { antiAiStyleGuidance } from '@shared/ai/antiAiStyle'
 import { GUEST_PROFILES } from '@shared/ai/roundtableCast'
 import { guestInstructions, guestReferenceContext } from '@shared/ai/guests/types'
 
@@ -57,7 +58,7 @@ const GROUNDED = `What you know about the writer's story comes only from what is
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
   const guest = GUEST_PROFILES.find((role) => role.id === context.characterId)
-  const parts = [guest ? guestInstructions(guest, 'chat') : characterInstructions(context.characterId), BASE, MODES[context.mode], GROUNDED]
+  const parts = [guest ? guestInstructions(guest, 'chat') : characterInstructions(context.characterId), BASE, MODES[context.mode], antiAiStyleGuidance('chat'), GROUNDED]
   if (context.attachments?.length) {
     parts.push(
       `Files the writer attached to this conversation (notes, hand-offs; not the story itself):\n\n${context.attachments
