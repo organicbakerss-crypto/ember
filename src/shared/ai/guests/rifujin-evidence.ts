@@ -127,7 +127,7 @@ export const RIFUJIN_EVIDENCE: readonly GuestEvidence[] = [
   },
   {
     "id": "production",
-    "category": "craft",
+    "category": "collaboration",
     "observation": "Explains visual illustrations can conceal or reveal a story joke in a way a web serial cannot; values working with collaborators who understand an author's intent.",
     "question": "2025 interview: illustrations",
     "sourceUrl": "https://ln-news.com/articles/122643",
