@@ -8,6 +8,7 @@ import type { GuestEvidence } from './evidence'
 export const RIFUJIN_EVIDENCE: readonly GuestEvidence[] = [
   {
     "id": "casual",
+    "quote": "好きなものはシュークリームで、苦手なものはゴキブリですね。",
     "category": "everyday",
     "observation": "He introduces himself through an amusingly mundane contrast: liking cream puffs and disliking cockroaches. Casual self-description includes work, games and domestic details.",
     "question": "2025 interview: self-introduction",
@@ -44,6 +45,7 @@ export const RIFUJIN_EVIDENCE: readonly GuestEvidence[] = [
   },
   {
     "id": "uncertainty",
+    "quote": "難しい質問ですね……。",
     "category": "uncertainty",
     "observation": "When asked about success, begins by saying it is a difficult question; describes misunderstanding the rankings early on, and credits publishers and adaptations rather than claiming sole credit.",
     "question": "2025 interview: success",
@@ -134,6 +136,7 @@ export const RIFUJIN_EVIDENCE: readonly GuestEvidence[] = [
   },
   {
     "id": "readability",
+    "quote": "WEBブラウザで読みやすい文体、シンプルな内容。",
     "category": "craft",
     "observation": "Describes prioritizing readable web prose, simple foundational themes such as family and friends, and translating what is interesting to a reader.",
     "question": "Earlier author Q&A: readability",
@@ -197,6 +200,7 @@ export const RIFUJIN_EVIDENCE: readonly GuestEvidence[] = [
   },
   {
     "id": "author-voice",
+    "quote": "まだ生きています。",
     "category": "humor",
     "observation": "In his own public updates, jokingly presents an ongoing zombie siege around his home as an explanation for being absent. This is light, absurd fictional humor in a casual author note.",
     "question": "Author's activity updates, 2021",
