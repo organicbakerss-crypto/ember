@@ -4,6 +4,7 @@ import type { PaneRoute } from '@shared/panes'
 import type { ConversationFile, ConversationMessage } from '@shared/schema'
 import { newId } from '@shared/ids'
 import { EMBER_CHARACTERS } from '@shared/ai/characters'
+import { GUEST_PROFILES } from '@shared/ai/roundtableCast'
 import { RoundtableView } from './RoundtableView'
 import { api, describeError, useIpcEvent } from '../api'
 import { formatWhen } from '../components/TrashPage'
@@ -920,11 +921,16 @@ export function AiView(props: {
               update(({ ai }) => ({ ai: { ...ai, characterId } }))
             }}
           >
-            {EMBER_CHARACTERS.map((character) => (
-              <option key={character.id} value={character.id}>
-                {character.name}
-              </option>
-            ))}
+            <optgroup label="Regular characters">
+              {EMBER_CHARACTERS.map((character) => (
+                <option key={character.id} value={character.id}>{character.name}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Guest stars (AI portrayals)">
+              {GUEST_PROFILES.map((guest) => (
+                <option key={guest.id} value={guest.id}>{guest.name}</option>
+              ))}
+            </optgroup>
           </select>
           {worldId && (
             <button
