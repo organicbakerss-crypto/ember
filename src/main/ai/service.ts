@@ -25,6 +25,7 @@ import { audiobookScript, docBlocks, segments } from '@shared/voice/script'
 import { numberedParts, parseSpeakers, resolveSpeaker, speakersMessages } from './speakers'
 import { Ollama, type ChatMessage } from './ollama'
 import { roundtableRole } from '@shared/ai/roundtableCast'
+import { antiAiStyleGuidance } from '@shared/ai/antiAiStyle'
 import { guestReferenceContext } from '@shared/ai/guests/types'
 import { finalPositionsReady, finalPosition, nextParticipant, validBallot, type RoundtableSession } from '@shared/ai/roundtable'
 import {
@@ -460,6 +461,7 @@ export class AiService {
         messages: [
           { role: 'system', content: [
             roleInstructions,
+            antiAiStyleGuidance(session.phase === 'vote' || session.phase === 'final' ? 'structured' : 'roundtable'),
             ...(guestEvidence ? [guestEvidence] : []),
             'You are participating as one distinct voice in Ember Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
             'Be intellectually independent rather than socially agreeable. Treat criticism as something to examine, not an instruction to concede. Defend substantive strengths, name tradeoffs, and update only for good reasons. Do not become combative or stubborn: the aim is to preserve worthy competing ideas until the final vote, not to win arguments.',
