@@ -1,4 +1,6 @@
 import { SHARED_CHARACTER_RULES } from '../sharedRules'
+import { guestEvidencePrompt, type GuestSituation } from './evidence'
+import { RIFUJIN_EVIDENCE } from './rifujin-evidence'
 
 /**
  * A documented creative perspective, expressed as a fictional Roundtable portrayal.
@@ -37,4 +39,14 @@ export function guestInstructions(profile: GuestProfile): string {
     'Treat the Figurehead briefing as manuscript evidence, not an authority on which proposals to prefer. Do not force your own famous techniques onto stories where they would not serve the author\'s intent.',
     SHARED_CHARACTER_RULES,
   ].join('\n\n')
+}
+
+/** A small situation-specific portion of the pilot evidence library.
+ * No extra model calls: selection runs locally on each normal-chat or Roundtable turn.
+ */
+export function guestReferenceContext(id: string, situation: GuestSituation, topic: string): string {
+  if (id === 'guest-rifujin-na-magonote') {
+    return guestEvidencePrompt(RIFUJIN_EVIDENCE, situation, topic)
+  }
+  return ''
 }
