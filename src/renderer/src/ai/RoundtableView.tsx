@@ -24,10 +24,11 @@ const id = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack: () => void }) {
   const { settings } = useSettings()
-  const currentCharacter = currentRoundtableCharacter(settings.ai.characterId || 'john-ai')
-  const available = [currentCharacter, ...ROUNDTABLE_CAST].map(({ id, name, kind }) => ({ id, name, kind }))
+  const currentCharacter = settings.ai.characterId?.startsWith('guest-')
+    ? null : currentRoundtableCharacter(settings.ai.characterId || 'john-ai')
+  const available = [...(currentCharacter ? [currentCharacter] : []), ...ROUNDTABLE_CAST].map(({ id, name, kind }) => ({ id, name, kind }))
   const [topic, setTopic] = useState('')
-  const [selected, setSelected] = useState<string[]>([currentCharacter.id, 'specialist-fantasy'])
+  const [selected, setSelected] = useState<string[]>([settings.ai.characterId || 'john-ai', 'specialist-fantasy'])
   const [file, setFile] = useState<ConversationFile | null>(null)
   const [saved, setSaved] = useState<ConversationSummary[]>([])
   const [tab, setTab] = useState<Tab>('floor')
@@ -47,10 +48,10 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     setSelected((list) => {
       const regularIds = list.filter((value) => !ROUNDTABLE_CAST.some((role) => role.id === value))
       const next = list.filter((value) => ROUNDTABLE_CAST.some((role) => role.id === value))
-      if (regularIds.length) next.unshift(currentCharacter.id)
+      if (regularIds.length && currentCharacter) next.unshift(currentCharacter.id)
       return next.length === list.length && next.every((value, i) => value === list[i]) ? list : next
     })
-  }, [currentCharacter.id])
+  }, [currentCharacter?.id])
 
   const session = file?.roundtable
   const automatic = (runStatus?.state === 'running' || runStatus?.state === 'pausing') && runStatus.conversationId === file?.id
@@ -110,7 +111,7 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     const state: RoundtableSession = { topic: topic.trim(), participants, phase: 'proposals', posts: [] }
     const base: ConversationFile = {
       formatVersion: 1, id: newId('conversation'), mode: 'chat',
-      characterId: currentCharacter.id, title: `Roundtable: ${topic.trim().slice(0, 110)}`,
+      characterId: currentCharacter?.id || settings.ai.characterId || 'john-ai', title: `Roundtable: ${topic.trim().slice(0, 110)}`,
       createdAt: now, updatedAt: now, messages: [], roundtable: state,
     }
     setError('')
