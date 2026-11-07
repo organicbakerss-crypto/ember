@@ -28,6 +28,7 @@ describe('Rifujin V3 source-grounded question/answer construction', () => {
       expect(chosen.length).toBe(4)
       expect(new Set(chosen.map(x=>x.id)).size).toBe(4)
       expect(chosen.some(x=>x.situation==='casual'||x.situation==='social')).toBe(true)
+      expect(chosen.some(x=>!!x.quote)).toBe(true)
       expect(selectInterviewExchanges(RIFUJIN_EXCHANGES, situation, 'Should everyone play more video games?')).toEqual(chosen)
     }
     expect(selectInterviewExchanges(RIFUJIN_EXCHANGES,'casual','hello',100).length).toBeLessThanOrEqual(5)
@@ -39,6 +40,7 @@ describe('Rifujin V3 source-grounded question/answer construction', () => {
     expect(prompt).toContain('REAL QUESTION/ANSWER PAIRS')
     expect(prompt).toContain('INTERVIEWER ASKED (paraphrase)')
     expect(prompt).toContain('ACTUAL ANSWER CONSTRUCTION (successive moves)')
+    expect(prompt).toContain('VERBATIM JAPANESE FRAGMENT')
     expect(prompt).toContain('edited-written-interview')
     expect(prompt).toContain('not a fixed four-step template')
     expect(prompt).toContain('SOURCE:')
