@@ -64,6 +64,12 @@ export function selectInterviewExchanges(
   add(rotated.slice(0,1))
   add(scored)
   add(scored,false)
+  // Every live prompt must include at least one actual original-language
+  // sentence fragment, not only our paraphrase of the answer's structure.
+  if (selected.length && !selected.some((item) => item.quote)) {
+    const quoted = scored.find(({ exchange }) => !!exchange.quote && !selected.includes(exchange))
+    if (quoted) selected[selected.length - 1] = quoted.exchange
+  }
   return selected
 }
 
