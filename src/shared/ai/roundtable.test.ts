@@ -24,18 +24,18 @@ const initial = (): RoundtableSession => ({
 
 describe('Roundtable phase engine', () => {
   it('exposes only specialists and installed guests in the candidate cast', () => {
-    expect(ROUNDTABLE_CAST).toHaveLength(7)
+    expect(ROUNDTABLE_CAST).toHaveLength(10)
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(0)
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(5)
-    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(2)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(5)
     expect(currentRoundtableCharacter('roman').name).toBe('Roman')
     expect(ROUNDTABLE_CAST.some((role) => role.id === 'roman')).toBe(false)
     expect(roundtableRole('roman', 'regular').instructions).toContain('You are Roman.')
     expect(() => roundtableRole('roman', 'guest')).toThrow()
   })
 
-  it('registers two source-based guest portrayals without mixing their creative viewpoints', () => {
-    expect(GUEST_PROFILES.map((profile) => profile.name)).toEqual(['Dan Harmon', 'Quentin Tarantino'])
+  it('registers five source-based guest portrayals without mixing their creative viewpoints', () => {
+    expect(GUEST_PROFILES.map((profile) => profile.name)).toEqual(['Dan Harmon', 'Quentin Tarantino', 'Rifujin na Magonote', 'Hideaki Anno', 'Shingo Natsume'])
     expect(GUEST_PROFILES.every((profile) => profile.sources.length >= 2)).toBe(true)
     for (const profile of GUEST_PROFILES) {
       const role = roundtableRole(profile.id, 'guest')
