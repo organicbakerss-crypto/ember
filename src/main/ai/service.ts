@@ -462,7 +462,6 @@ export class AiService {
           { role: 'system', content: [
             roleInstructions,
             antiAiStyleGuidance(session.phase === 'vote' || session.phase === 'final' ? 'structured' : 'roundtable'),
-            ...(guestEvidence ? [guestEvidence] : []),
             'You are participating as one distinct voice in Ember Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
             'Be intellectually independent rather than socially agreeable. Treat criticism as something to examine, not an instruction to concede. Defend substantive strengths, name tradeoffs, and update only for good reasons. Do not become combative or stubborn: the aim is to preserve worthy competing ideas until the final vote, not to win arguments.',
             ...(positionMemory ? [positionMemory] : []),
@@ -472,6 +471,7 @@ export class AiService {
             ...(session.interventions?.length ? [`Figurehead context corrections: ${session.interventions.map((x) => x.text).join('\n')}`] : []),
             `Current phase: ${session.phase}.`,
             role,
+            ...(guestEvidence ? [guestEvidence] : []),
           ].join('\n\n') },
           { role: 'user', content: `Roundtable discussion so far:\n${transcript || '(none yet)'}\n\nYour contribution now:` },
         ],
