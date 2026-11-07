@@ -1,6 +1,7 @@
 import { SHARED_CHARACTER_RULES } from '../sharedRules'
-import { guestEvidencePrompt, type GuestSituation } from './evidence'
-import { RIFUJIN_EVIDENCE } from './rifujin-evidence'
+import type { GuestSituation } from './evidence'
+import { interviewSpeechPrompt } from './speech'
+import { RIFUJIN_EXCHANGES } from './rifujin-exchanges'
 
 /**
  * A documented creative perspective, expressed as a fictional Roundtable portrayal.
@@ -43,12 +44,12 @@ export function guestInstructions(profile: GuestProfile, setting: 'roundtable' |
   ].join('\n\n')
 }
 
-/** A small situation-specific portion of the pilot evidence library.
+/** Speech construction learned from source-verified Q&A, not paraphrased personality traits.
  * No extra model calls: selection runs locally on each normal-chat or Roundtable turn.
  */
 export function guestReferenceContext(id: string, situation: GuestSituation, topic: string): string {
   if (id === 'guest-rifujin-na-magonote') {
-    return guestEvidencePrompt(RIFUJIN_EVIDENCE, situation, topic)
+    return interviewSpeechPrompt(RIFUJIN_EXCHANGES, situation, topic)
   }
   return ''
 }
