@@ -37,11 +37,12 @@ export function selectGuestEvidence(
   const budget = Math.max(0, Math.min(6, Math.trunc(max)))
   const tokens = new Set(NORMALIZE(topic).filter((token) => !STOP.has(token)))
   const wanted = TOPICS[situation]
+  const seed = [...(situation + ':' + topic.toLowerCase())].reduce((value, char) => (value * 31 + char.charCodeAt(0)) >>> 0, 0)
   const scored = evidence.map((sample, index) => ({
     sample, index,
     score: (wanted.some((tag) => sample.category.includes(tag) || tag.includes(sample.category)) ? 4 : 0) +
       NORMALIZE(sample.observation + ' ' + sample.question).reduce((score, token) => score + (tokens.has(token) ? 1 : 0), 0),
-  })).sort((a, b) => b.score - a.score || a.index - b.index)
+  })).sort((a, b) => b.score - a.score || ((a.index + seed) % evidence.length) - ((b.index + seed) % evidence.length))
   const selected: GuestEvidence[] = []
   const usedCategories = new Set<string>()
   const usedSources = new Set<string>()
@@ -58,7 +59,8 @@ export function selectGuestEvidence(
   }
   // Prefer two ordinary conversational samples, even for writing-specific questions.
   const ordinary = scored.filter((x) => ['everyday','humor','interests','social','reflection'].includes(x.sample.category))
-  take(ordinary.slice().sort((a, b) => a.index - b.index).slice(0,2))
+  const rotation = ordinary.length ? seed % ordinary.length : 0
+  take([...ordinary.slice(rotation), ...ordinary.slice(0, rotation)].slice(0,2))
   take(scored)
   // If diversity exhausts the sources, permit additional samples from the same source.
   if (selected.length < budget) {
