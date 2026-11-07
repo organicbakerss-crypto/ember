@@ -26,22 +26,24 @@ describe('guest personality runtime', () => {
     const system = chatMessages(ctx(id), [{ role:'user', content:'What games have you been enjoying?' }])[0]!.content
     expect(system).toContain('conversing privately with the writer in Ember')
     expect(system).not.toContain('fictional Roundtable portrayal of')
-    expect(system).toContain('PUBLIC-EVIDENCE REFERENCE')
+    expect(system).toContain('DOCUMENTED CONVERSATION CONSTRUCTION')
+    expect(system).toContain('INTERVIEWER ASKED (paraphrase)')
+    expect(system).toContain('ACTUAL ANSWER CONSTRUCTION (successive moves)')
     expect(system).toContain('All characters have equal factual standards')
     const table = roundtableRole(id, 'guest').instructions
     expect(table).toContain('fictional Roundtable portrayal')
-    expect(table).not.toContain('PUBLIC-EVIDENCE REFERENCE')
+    expect(table).not.toContain('DOCUMENTED CONVERSATION CONSTRUCTION')
     expect(guestInstructions(RIFUJIN_NA_MAGONOTE_GUEST, 'chat')).not.toBe(table)
   })
   it('does not contaminate other guest or regular character prompts', () => {
     const question = [{ role:'user' as const, content:'How do you think this character should act?' }]
     const id = RIFUJIN_NA_MAGONOTE_GUEST.id
     const rifujin = chatMessages(ctx(id), question)[0]!.content
-    expect(rifujin).toContain('PUBLIC-EVIDENCE REFERENCE')
+    expect(rifujin).toContain('DOCUMENTED CONVERSATION CONSTRUCTION')
     const dan = chatMessages(ctx('guest-dan-harmon'), question)[0]!.content
-    expect(dan).not.toContain('PUBLIC-EVIDENCE REFERENCE')
+    expect(dan).not.toContain('DOCUMENTED CONVERSATION CONSTRUCTION')
     const john = chatMessages(ctx('john-ai'), question)[0]!.content
-    expect(john).not.toContain('PUBLIC-EVIDENCE REFERENCE')
+    expect(john).not.toContain('DOCUMENTED CONVERSATION CONSTRUCTION')
   })
   it('uses the shared style catalog for every chat identity without replacing individual profiles', () => {
     for (const id of ['john-ai', 'roman', 'guest-rifujin-na-magonote', 'guest-dan-harmon']) {
