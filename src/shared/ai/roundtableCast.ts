@@ -13,6 +13,9 @@ import { COMEDY_SPECIALIST } from './specialists/comedy'
 import { guestInstructions, type GuestProfile } from './guests/types'
 import { DAN_HARMON_GUEST } from './guests/dan-harmon'
 import { QUENTIN_TARANTINO_GUEST } from './guests/quentin-tarantino'
+import { RIFUJIN_NA_MAGONOTE_GUEST } from './guests/rifujin-na-magonote'
+import { HIDEAKI_ANNO_GUEST } from './guests/hideaki-anno'
+import { SHINGO_NATSUME_GUEST } from './guests/shingo-natsume'
 
 export interface RoundtableRole extends RoundtableParticipant {
   /** Full, source-aware role instructions. Never generic filler. */
@@ -32,8 +35,11 @@ export const SPECIALIST_ROLES: readonly RoundtableRole[] = SPECIALIST_PROFILES.m
   instructions: specialistInstructions(profile),
 }))
 
-/** Guests are drafted and installed in pairs, after studying their creative practice. */
-export const GUEST_PROFILES: readonly GuestProfile[] = [DAN_HARMON_GUEST, QUENTIN_TARANTINO_GUEST]
+/** Five researched guest portrayals, in the first combined test cohort. */
+export const GUEST_PROFILES: readonly GuestProfile[] = [
+  DAN_HARMON_GUEST, QUENTIN_TARANTINO_GUEST, RIFUJIN_NA_MAGONOTE_GUEST,
+  HIDEAKI_ANNO_GUEST, SHINGO_NATSUME_GUEST,
+]
 export const GUEST_ROLES: readonly RoundtableRole[] = GUEST_PROFILES.map((profile) => ({
   id: profile.id, name: profile.name, kind: 'guest' as const,
   instructions: guestInstructions(profile),
