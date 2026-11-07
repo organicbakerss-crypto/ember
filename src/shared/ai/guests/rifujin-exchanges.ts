@@ -368,4 +368,4 @@ export const RIFUJIN_EXCHANGES: readonly InterviewExchange[] = [
     "medium": "edited-written-interview",
     "quote": null
   }
-]
+] as const
