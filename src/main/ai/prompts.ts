@@ -6,6 +6,8 @@
  */
 import type { ChatMessage } from './ollama'
 import { characterInstructions } from '@shared/ai/characters'
+import { GUEST_ROLES } from '@shared/ai/roundtableCast'
+import { guestReferenceContext } from '@shared/ai/guests/types'
 
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
 export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story' | 'full'
@@ -54,7 +56,8 @@ const GROUNDED = `What you know about the writer's story comes only from what is
 
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
-  const parts = [characterInstructions(context.characterId), BASE, MODES[context.mode], GROUNDED]
+  const guest = GUEST_ROLES.find((role) => role.id === context.characterId)
+  const parts = [guest?.instructions ?? characterInstructions(context.characterId), BASE, MODES[context.mode], GROUNDED]
   if (context.attachments?.length) {
     parts.push(
       `Files the writer attached to this conversation (notes, hand-offs; not the story itself):\n\n${context.attachments
@@ -102,7 +105,13 @@ export function chatMessages(
   context: PromptContext,
   history: { role: 'user' | 'assistant'; content: string }[],
 ): ChatMessage[] {
-  return [{ role: 'system', content: systemPrompt(context) }, ...history]
+  const latestQuestion = [...history].reverse().find((message) => message.role === 'user')?.content ?? ''
+  const evidence = context.characterId?.startsWith('guest-')
+    ? guestReferenceContext(context.characterId,
+      context.mode === 'chat' && !/story|novel|writing|character|plot|chapter|scene/i.test(latestQuestion) ? 'casual' : 'creative',
+      latestQuestion)
+    : ''
+  return [{ role: 'system', content: [systemPrompt(context), evidence].filter(Boolean).join('\n\n') }, ...history]
 }
 
 /* ---------- editing the chapter ---------- */
