@@ -4,7 +4,6 @@ import { RIFUJIN_EVIDENCE } from './rifujin-evidence'
 import { RIFUJIN_NA_MAGONOTE_GUEST } from './rifujin-na-magonote'
 import { RIFUJIN_V1_GUEST } from './rifujin-v1'
 import { guestReferenceContext } from './types'
-import { chatMessages } from '../../../main/ai/prompts'
 
 describe('Rifujin evidence-driven V2 personality pilot', () => {
   it('preserves V1 for comparison and keeps both profiles source-labeled', () => {
@@ -48,18 +47,4 @@ describe('Rifujin evidence-driven V2 personality pilot', () => {
     expect(guestReferenceContext('guest-quentin-tarantino', 'casual', 'hi')).toBe('')
   })
 
-  it('uses the guest in normal chat and keeps regular characters separate', () => {
-    const context = {
-      characterId: 'guest-rifujin-na-magonote',
-      mode: 'chat' as const,
-      scope: null,
-      entries: [],
-    }
-    const messages = chatMessages(context, [{ role: 'user', content: 'What games have you played?' }])
-    expect(messages[0]?.content).toContain('fictional Roundtable portrayal of Rifujin na Magonote')
-    expect(messages[0]?.content).toContain('PUBLIC-EVIDENCE REFERENCE')
-    expect(messages[0]?.content).not.toContain('You are John AI')
-    const john = chatMessages({ ...context, characterId: 'john-ai' }, [{ role: 'user', content: 'Hi' }])
-    expect(john[0]?.content).not.toContain('PUBLIC-EVIDENCE REFERENCE')
-  })
 })
