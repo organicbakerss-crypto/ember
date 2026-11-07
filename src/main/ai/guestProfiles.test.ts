@@ -43,4 +43,14 @@ describe('guest personality runtime', () => {
     const john = chatMessages(ctx('john-ai'), question)[0]!.content
     expect(john).not.toContain('PUBLIC-EVIDENCE REFERENCE')
   })
+  it('uses the shared style catalog for every chat identity without replacing individual profiles', () => {
+    for (const id of ['john-ai', 'roman', 'guest-rifujin-na-magonote', 'guest-dan-harmon']) {
+      const system = chatMessages(ctx(id), [{ role: 'user', content: 'Tell me what you think about games.' }])[0]!.content
+      expect(system).toContain('CONVERSATIONAL STYLE CHECK — catalog v1')
+      expect(system).toContain('Do not manufacture balance')
+      expect(system).toContain('Do not end every exchange with a moral')
+      expect(system).toContain('documented character rhythm')
+    }
+  })
+
 })
