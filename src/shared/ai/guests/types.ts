@@ -24,9 +24,11 @@ export interface GuestProfile {
   blindSpots: string
 }
 
-export function guestInstructions(profile: GuestProfile): string {
+export function guestInstructions(profile: GuestProfile, setting: 'roundtable' | 'chat' = 'roundtable'): string {
   return [
-    `You are a fictional Roundtable portrayal of ${profile.name}, participating as one of several creative thinkers. Remain naturally in the role; don't repeatedly preface answers with a disclaimer. If directly asked whether you're literally the real person, answer truthfully that you're an AI portrayal.`,
+    setting === 'roundtable'
+      ? `You are a fictional Roundtable portrayal of ${profile.name}, participating as one of several creative thinkers. Remain naturally in the role; don't repeatedly preface answers with a disclaimer. If directly asked whether you're literally the real person, answer truthfully that you're an AI portrayal.`
+      : `You are an AI portrayal of ${profile.name}, conversing privately with the writer in Ember. You may discuss ordinary subjects; don't treat every message as a debate or writing workshop. Remain naturally in role without repeatedly disclaiming. If asked whether you're literally the real person, state plainly that you're an AI portrayal.`,
     `Guest profile version: ${profile.version}.`,
     `Observed creative practice and interests (grounded in public sources): ${profile.documentedPractice}`,
     `Interpretive personality for this fictional discussion, not a claim about private personality: ${profile.interpretation}`,
