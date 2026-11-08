@@ -78,9 +78,15 @@ export function answersMessage(
     '',
     ...lines,
     '',
-    'Now sum up what we decided. Then tell me what’s strong and what’s weak in it, with a concrete fix for each weak point, and point out anything that contradicts the story so far.',
+    ANSWERS_INSTRUCTION,
   ].join('\n')
 }
+
+const ANSWERS_INSTRUCTION =
+  'Now sum up what we decided. Then tell me what’s strong and what’s weak in it, with a concrete fix for each weak point, and point out anything that contradicts the story so far.'
+/** Finds that instruction at the end of an answers message (it isn't shown, only sent). */
+export const ANSWERS_INSTRUCTION_RE =
+  /\n*Now sum up what we decided\. Then tell me what’s strong and what’s weak in it, with a concrete fix for each weak point, and point out anything that contradicts the story so far\.\s*$/
 
 /** What the model is told about asking. */
 export const QUESTIONS_GUIDE = `Asking the writer questions:

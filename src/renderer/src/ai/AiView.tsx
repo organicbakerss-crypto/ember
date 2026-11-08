@@ -15,7 +15,7 @@ import {
 import { useOverlays } from '../components/overlays'
 import { RoundtableView } from './RoundtableView'
 import { QuestionFlow, QuestionRecord, type QuestionProgress } from './QuestionFlow'
-import { answersMessage, findQuestions } from '@shared/ai/questions'
+import { ANSWERS_INSTRUCTION_RE, answersMessage, findQuestions } from '@shared/ai/questions'
 import { loadLocal, saveLocal } from '../storage'
 import { api, describeError, useIpcEvent } from '../api'
 import { formatWhen } from '../components/TrashPage'
@@ -122,6 +122,10 @@ const QUICK: { label: string; mode: Mode; text: string }[] = [
 const newRequestId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 /** The other character who wrote a second opinion, if this message is one. */
 const by = (m: Message): string | null => (typeof m.by === 'string' ? m.by : null)
+
+/** What a message shows: the answers to questions without the instruction that went with them. */
+const shown = (m: Message) =>
+  m.role === 'user' ? m.content.replace(ANSWERS_INSTRUCTION_RE, '').trimEnd() : m.content
 
 /** Messages as the model reads them: second opinions are marked as someone else's. */
 const forModel = (msgs: Message[]) =>
@@ -1080,18 +1084,15 @@ export function AiView(props: {
               </button>
             ))}
           </div>
-          <button
-            className="link small"
-            onClick={() => setRoundtableOpen(true)}
-            disabled={!!busy || !!worldJob}
-            title="Several characters discuss one question about your story"
-          >
-            Roundtable
-          </button>
           <span className="status-spacer" />
           <select
+            className="ai-character"
             aria-label="Current AI character"
-            title="AI character"
+            title={
+              isGuest(persona(settings.ai.characterId))
+                ? guestNotice(persona(settings.ai.characterId) as Parameters<typeof guestNotice>[0])
+                : 'Who answers'
+            }
             value={persona(settings.ai.characterId).id}
             disabled={!!busy}
             onChange={(e) => void pickCharacter(e.target.value)}
@@ -1106,40 +1107,42 @@ export function AiView(props: {
             <optgroup label="Guest stars (AI portrayals)">
               {GUESTS.map((p) => (
                 <option key={p.id} value={p.id} title={p.knownFor}>
-                  {p.name}
+                  {p.name} ★
                 </option>
               ))}
             </optgroup>
           </select>
-          {isGuest(persona(settings.ai.characterId)) && (
-            <span
-              className="ai-guest-tag small"
-              title={guestNotice(
-                persona(settings.ai.characterId) as Parameters<typeof guestNotice>[0],
-              )}
-            >
-              Guest star: own lens
-            </span>
-          )}
-          {worldId && (
-            <button
-              className="link small"
-              disabled={!!worldJob || !!busy}
-              title="Read the open chapter and suggest changes to the world (they wait in its inbox)"
-              onClick={() => void updateWorld()}
-            >
-              Update the world
-            </button>
-          )}
-          {messages.length > 0 && !busy && (
-            <button
-              className="link small"
-              title="Start a new conversation (this one stays in the list)"
-              onClick={() => setThreads((t) => ({ ...t, [mode]: empty(settings.ai.characterId) }))}
-            >
-              New conversation
-            </button>
-          )}
+          <button
+            className="icon ai-more"
+            aria-label="More AI actions"
+            title="More"
+            onClick={(e) =>
+              openMenu(e, [
+                {
+                  label: 'New conversation',
+                  disabled: !messages.length || !!busy,
+                  onSelect: () =>
+                    setThreads((t) => ({ ...t, [mode]: empty(settings.ai.characterId) })),
+                },
+                {
+                  label: 'Roundtable…',
+                  disabled: !!busy || !!worldJob,
+                  onSelect: () => setRoundtableOpen(true),
+                },
+                ...(worldId
+                  ? [
+                      {
+                        label: 'Update the world from this chapter',
+                        disabled: !!worldJob || !!busy,
+                        onSelect: () => void updateWorld(),
+                      },
+                    ]
+                  : []),
+              ])
+            }
+          >
+            ⋯
+          </button>
         </header>
 
         <div className="ai-scroll" ref={scroller} onScroll={onScroll} onMouseUp={onMouseUp}>
@@ -1178,7 +1181,7 @@ export function AiView(props: {
                       }
                       const found =
                         m.role === 'assistant' && !streaming ? findQuestions(m.content) : null
-                      if (!found) return <Blocks blocks={parse(m.content)} />
+                      if (!found) return <Blocks blocks={parse(shown(m))} />
                       return (
                         <>
                           {found.before && <Blocks blocks={parse(found.before)} />}
@@ -1308,65 +1311,6 @@ export function AiView(props: {
                 </button>
               </div>
             )}
-            {!editMode && (
-              <div className="ai-quick small" aria-label="One-click prompts">
-                {[
-                  ...QUICK,
-                  ...settings.ai.prompts.map((text) => ({
-                    label: text.length > 28 ? `${text.slice(0, 26)}…` : text,
-                    mode,
-                    text,
-                  })),
-                ].map((q) => (
-                  <button
-                    key={q.label + q.text}
-                    type="button"
-                    className="ai-quick-button"
-                    title={q.text}
-                    disabled={!!busy || !!worldJob}
-                    onClick={() => void send(q.text, { mode: q.mode })}
-                  >
-                    {q.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="ai-scope small">
-              <span className="ai-chip" title="What the AI reads with your message">
-                {chip}
-              </span>
-              {!editMode && (
-                <label className="ai-whole">
-                  Reads
-                  <select
-                    aria-label="What the AI reads"
-                    value={reach}
-                    onChange={(e) => setReach(e.target.value as typeof reach)}
-                  >
-                    <option value="here">Selection or screen</option>
-                    <option value="chapter">Whole chapter</option>
-                    <option value="story">Whole story (summaries)</option>
-                    <option value="full">Whole story, word for word</option>
-                  </select>
-                </label>
-              )}
-              <label
-                className="ai-whole ai-edit-toggle"
-                title={
-                  local
-                    ? 'Let the AI change the open chapter as you ask (you see every change after, and can undo it)'
-                    : 'Works when the AI is beside the page'
-                }
-              >
-                <input
-                  type="checkbox"
-                  checked={editMode}
-                  disabled={!local}
-                  onChange={(e) => setEditMode(e.target.checked)}
-                />
-                Edit chapter
-              </label>
-            </div>
             {(threads[mode].attachments?.length ?? 0) > 0 && (
               <div className="ai-attachments small">
                 {threads[mode].attachments!.map((a) => (
@@ -1413,19 +1357,56 @@ export function AiView(props: {
                 }
               }}
             />
-            <div className="row">
-              <span
-                className="muted small"
-                title="Nothing in your chapter changes unless Edit chapter is ticked. Conversations are saved with this story."
-              >
-                {provider === 'chatgpt' ? 'ChatGPT' : 'Ollama'}
-              </span>
+            <div className="row ai-controls small">
+              {!editMode && (
+                <button
+                  type="button"
+                  className="ai-prompts"
+                  disabled={!!busy || !!worldJob}
+                  title="One-click prompts"
+                  onClick={(e) =>
+                    openMenu(
+                      e,
+                      [
+                        ...QUICK,
+                        ...settings.ai.prompts.map((text) => ({
+                          label: text.length > 40 ? `${text.slice(0, 38)}…` : text,
+                          mode,
+                          text,
+                        })),
+                      ].map((q) => ({
+                        label: q.label,
+                        onSelect: () => void send(q.text, { mode: q.mode }),
+                      })),
+                    )
+                  }
+                >
+                  Prompts ▾
+                </button>
+              )}
+              {editMode ? (
+                <span className="muted ai-chip-text">{chip}</span>
+              ) : (
+                <select
+                  className="ai-reads"
+                  aria-label="What the AI reads"
+                  title={chip}
+                  value={reach}
+                  onChange={(e) => setReach(e.target.value as typeof reach)}
+                >
+                  <option value="here">Reads: selection or screen</option>
+                  <option value="chapter">Reads: whole chapter</option>
+                  <option value="story">Reads: whole story (summaries)</option>
+                  <option value="full">Reads: whole story, word for word</option>
+                </select>
+              )}
               {!editMode && (
                 <label
-                  className="link ai-attach"
+                  className="icon ai-attach"
+                  aria-label="Attach a file"
                   title="Attach a file (.txt, .md, .docx): the AI reads it with this conversation. The file stays on this computer."
                 >
-                  📎 Attach
+                  📎
                   <input
                     type="file"
                     multiple
@@ -1438,6 +1419,22 @@ export function AiView(props: {
                   />
                 </label>
               )}
+              <label
+                className="ai-edit-toggle"
+                title={
+                  local
+                    ? 'Let the AI change the open chapter as you ask (you see every change after, and can undo it)'
+                    : 'Works when the AI is beside the page'
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={editMode}
+                  disabled={!local}
+                  onChange={(e) => setEditMode(e.target.checked)}
+                />
+                Edit chapter
+              </label>
               <span className="status-spacer" />
               {busy || worldJob ? (
                 <button
@@ -1449,7 +1446,12 @@ export function AiView(props: {
                   Stop
                 </button>
               ) : (
-                <button className="primary" type="submit" disabled={!draft.trim()}>
+                <button
+                  className="primary"
+                  type="submit"
+                  disabled={!draft.trim()}
+                  title={`Sends to ${provider === 'chatgpt' ? 'ChatGPT' : 'Ollama'}. Nothing in your chapter changes unless Edit chapter is ticked; conversations are saved with this story.`}
+                >
                   {editMode ? 'Edit chapter' : 'Send'}
                 </button>
               )}

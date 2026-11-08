@@ -5057,3 +5057,67 @@ kbd {
 .qa-record li {
   margin-bottom: 0.35rem;
 }
+
+/* AI panel, tidied: one row on top, one row of controls under the message box. */
+.ai-head {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.ai-head .ai-modes button {
+  white-space: nowrap;
+}
+.ai-head .ai-character {
+  width: auto;
+  max-width: 11rem;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.ai-head .ai-more {
+  flex: none;
+}
+.ai-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+.ai-controls .ai-reads {
+  width: auto;
+  max-width: 15rem;
+  padding: 0.15rem 0.35rem;
+}
+.ai-controls .ai-prompts {
+  padding: 0.15rem 0.6rem;
+  white-space: nowrap;
+}
+.ai-controls .ai-edit-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+.ai-controls .ai-attach {
+  cursor: pointer;
+  margin: 0;
+}
+.ai-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18rem;
+}
+/* Copy / Reply / Second opinion show on the answer you're pointing at (or in, by keyboard). */
+.ai-message .ai-actions {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.ai-message:hover .ai-actions,
+.ai-message:focus-within .ai-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .ai-message .ai-actions {
+    opacity: 1;
+  }
+}
