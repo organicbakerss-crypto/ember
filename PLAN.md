@@ -871,6 +871,8 @@ Build in this order. Each milestone ends with a working app the user can actuall
     - **Second opinion** under any answer: the same question to another character.
     - **A short anti-slop list** with bad → plain examples, for every character. Prompts are about a third the size they were.
 
+18. **The AI asks questions** (Nov 2026). When asked to ("Ask me questions", or in its own words), or when it truly needs to know something, the AI plans its questions first and sends them as one block. The panel shows them one at a time ("Question 4 of 20"): ready answers only where they help, one maybe marked recommended with its reason (only when the story gives one), always a box for your own answer, Skip, and "That's enough". The answers go back in one message and the AI sums up what was decided, what's strong and weak (with fixes) and anything that contradicts the story. Progress is saved in the conversation. `src/shared/ai/questions.ts`, `QuestionFlow.tsx`.
+
 ## Open items
 
 None of these block milestone 1.

@@ -4997,3 +4997,38 @@ kbd {
   cursor: pointer;
   margin-right: 0.5rem;
 }
+
+/* The AI's questions, one at a time. */
+.qa {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+  border-radius: 8px;
+}
+.qa-q {
+  font-weight: 600;
+  margin: 0.25rem 0 0.5rem;
+}
+.qa-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+.qa-option.recommended {
+  border-color: var(--accent, #c76);
+}
+.qa-rec {
+  opacity: 0.75;
+  font-size: 0.85em;
+}
+.qa-why {
+  margin: 0 0 0.4rem;
+}
+.qa-own textarea {
+  width: 100%;
+  margin-bottom: 0.3rem;
+}
+.qa-done {
+  margin-top: 0.4rem;
+}

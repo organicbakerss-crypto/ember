@@ -6,6 +6,7 @@
  */
 import type { ChatMessage } from './ollama'
 import { personaInstructions, personaReminder } from '@shared/ai/personas'
+import { QUESTIONS_GUIDE } from '@shared/ai/questions'
 
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
 export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story' | 'full'
@@ -52,7 +53,13 @@ const GROUNDED = `What you know about the writer's story comes only from what is
 
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
-  const parts = [personaInstructions(context.characterId), BASE, MODES[context.mode], GROUNDED]
+  const parts = [
+    personaInstructions(context.characterId),
+    BASE,
+    MODES[context.mode],
+    QUESTIONS_GUIDE,
+    GROUNDED,
+  ]
   if (context.attachments?.length) {
     parts.push(
       `Files the writer attached to this conversation (notes, hand-offs; not the story itself):\n\n${context.attachments

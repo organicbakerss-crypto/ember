@@ -14,6 +14,8 @@ import {
 } from '@shared/ai/personas'
 import { useOverlays } from '../components/overlays'
 import { RoundtableView } from './RoundtableView'
+import { QuestionFlow, type QuestionProgress } from './QuestionFlow'
+import { answersMessage, findQuestions } from '@shared/ai/questions'
 import { loadLocal, saveLocal } from '../storage'
 import { api, describeError, useIpcEvent } from '../api'
 import { formatWhen } from '../components/TrashPage'
@@ -37,6 +39,8 @@ type Mode = 'chat' | 'brainstorm' | 'ask'
 type Message = Pick<ConversationMessage, 'role' | 'content' | 'at' | 'read'> & {
   /** A second opinion: the character who wrote it. */
   by?: string
+  /** How far the writer got through the questions in this answer. */
+  qa?: QuestionProgress
 }
 interface Thread {
   /** Set once the conversation has been saved (or a file attached). */
@@ -102,6 +106,11 @@ const QUICK: { label: string; mode: Mode; text: string }[] = [
     label: 'What happens next?',
     mode: 'brainstorm',
     text: 'What could happen next? Give several distinct options that fit what has happened so far.',
+  },
+  {
+    label: 'Ask me questions',
+    mode: 'brainstorm',
+    text: 'Ask me questions to help me work this out: plan them first, as many as you need, with ready answers only where they help.',
   },
   {
     label: 'Names that fit',
@@ -620,7 +629,7 @@ export function AiView(props: {
   }
 
   /** Sends a message (a one-click prompt may pick the mode and how much is read). */
-  const send = async (text: string, as?: { mode?: Mode; reach?: Reach }) => {
+  const send = async (text: string, as?: { mode?: Mode; reach?: Reach; messages?: Message[] }) => {
     const question = text.trim()
     if (!question || busy || worldJob) return
     if (editMode && !as) {
@@ -631,7 +640,7 @@ export function AiView(props: {
     const reads = as?.reach ?? reach
     if (into !== mode) setMode(into)
     if (as?.reach && as.reach !== reach) setReach(as.reach)
-    const current = threads[into]
+    const current = as?.messages ? { ...threads[into], messages: as.messages } : threads[into]
     const requestId = newRequestId()
     const scope = await fetchScope(seriesId)
     const kind =
@@ -940,6 +949,34 @@ export function AiView(props: {
     }
   }
 
+  /** An answer to the next question in message `i` (null: skipped); the last one sends them all. */
+  const answerQuestion = (i: number, answer: string | null) => {
+    const current = threads[mode]
+    const m = current.messages[i]
+    const found = m && findQuestions(m.content)
+    if (!m || !found) return
+    const answers = [...(m.qa?.answers ?? []), answer]
+    const finished = answers.length >= found.set.questions.length
+    const msgs = current.messages.map((x, j) =>
+      j === i ? { ...x, qa: { answers, done: finished } } : x,
+    )
+    if (finished) {
+      void send(answersMessage(found.set, answers, false), { mode, messages: msgs })
+    } else save(mode, current, msgs)
+  }
+  /** “That's enough”: stop and send what's been answered. */
+  const stopQuestions = (i: number) => {
+    const current = threads[mode]
+    const m = current.messages[i]
+    const found = m && findQuestions(m.content)
+    if (!m || !found) return
+    const answers = m.qa?.answers ?? []
+    const msgs = current.messages.map((x, j) =>
+      j === i ? { ...x, qa: { answers, done: true } } : x,
+    )
+    void send(answersMessage(found.set, answers, true), { mode, messages: msgs })
+  }
+
   const replyTo = (text: string) => {
     setQuote(text)
     setReplyAt(null)
@@ -1110,7 +1147,26 @@ export function AiView(props: {
                 )}
                 {m.content ? (
                   <div className="ai-text">
-                    <Blocks blocks={parse(m.content)} />
+                    {(() => {
+                      const found =
+                        m.role === 'assistant' && !(busy && i === messages.length - 1)
+                          ? findQuestions(m.content)
+                          : null
+                      if (!found) return <Blocks blocks={parse(m.content)} />
+                      return (
+                        <>
+                          {found.before && <Blocks blocks={parse(found.before)} />}
+                          <QuestionFlow
+                            set={found.set}
+                            progress={m.qa ?? { answers: [], done: false }}
+                            disabled={!!busy || !!worldJob}
+                            onAnswer={(a) => answerQuestion(i, a)}
+                            onStop={() => stopQuestions(i)}
+                          />
+                          {found.after && <Blocks blocks={parse(found.after)} />}
+                        </>
+                      )
+                    })()}
                   </div>
                 ) : (
                   <p className="muted">{(busy && i === messages.length - 1 && progress) || '…'}</p>
