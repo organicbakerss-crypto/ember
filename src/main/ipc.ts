@@ -204,6 +204,9 @@ export function registerIpc(
           ),
         async (job, outcome) => {
           if (!job.text) return
+          // Adaptive characters pick up lasting views from the writer's message (when on).
+          const said = [...input.messages].reverse().find((m) => m.role === 'user')?.content
+          if (said) void ai.learn(said).catch(() => {})
           const now = new Date().toISOString()
           const looked = outcome.value?.lookedAt ?? []
           await host.current.saveConversation(input.seriesId, {

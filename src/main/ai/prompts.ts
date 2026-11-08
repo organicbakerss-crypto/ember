@@ -33,6 +33,8 @@ const SCOPE_LABEL: Record<ScopeKind, string> = {
 
 export interface PromptContext {
   characterId?: string
+  /** What this (adaptive) character has learned from the writer. */
+  learned?: string[]
   mode: AiMode
   scope: { kind: ScopeKind; text: string; chapterTitle: string } | null
   /** Text forms of the world entries named in the scope. */
@@ -54,7 +56,7 @@ const GROUNDED = `What you know about the writer's story comes only from what is
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
   const parts = [
-    personaInstructions(context.characterId),
+    personaInstructions(context.characterId, context.learned),
     BASE,
     MODES[context.mode],
     QUESTIONS_GUIDE,

@@ -21,7 +21,7 @@ import { CloudError, PreconditionFailed, type CloudStore } from './cloud'
 import { SyncEngine, UNITS_PREFIX, type SyncHooks } from './engine'
 import { fetchHistory, uploadHistory } from './history'
 import { cleanUpCloud } from './cleanup'
-import { syncDictionary } from './dictionary'
+import { syncDictionary, syncLearned } from './dictionary'
 import { parseBucketUrl, S3Cloud } from './s3'
 import { setupFromToken } from './cloudflare'
 import { ConflictStore, type ConflictMeta } from './conflictStore'
@@ -72,6 +72,11 @@ export interface SyncServiceOptions {
   fetchImpl?: typeof fetch
   /** The personal dictionary (the one setting that syncs). */
   dictionary?: { read(): Promise<string[]>; write(words: string[]): Promise<void> }
+  /** What adaptive characters have learned (synced the same way as the dictionary). */
+  learned?: {
+    read(): Promise<Record<string, string[]>>
+    write(characterId: string, notes: string[]): Promise<void>
+  }
   /** For tests: where the Cloudflare API is. */
   tokenSetup?: Parameters<typeof setupFromToken>[1]
 }
@@ -258,6 +263,17 @@ export class SyncService {
             await this.options.dictionary.read(),
           )
           if (words) await this.options.dictionary.write(words)
+        }
+        if (this.options.learned) {
+          for (const [characterId, notes] of Object.entries(await this.options.learned.read())) {
+            const next = await syncLearned(
+              this.cloud!,
+              join(this.library!.paths.localDir, 'sync'),
+              characterId,
+              notes,
+            )
+            if (next) await this.options.learned.write(characterId, next)
+          }
         }
         await this.weeklyCleanUp()
         this.failures = 0

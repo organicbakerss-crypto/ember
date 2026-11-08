@@ -18,20 +18,52 @@ import { CLOUD_PREFIX } from './engine'
 export const DICTIONARY_KEY = `${CLOUD_PREFIX}dictionary.json`
 
 const entriesSchema = z.record(
-  z.string().min(1).max(100),
+  z.string().min(1).max(400),
   z.object({ on: z.boolean(), at: z.string() }),
 )
 type Entries = z.infer<typeof entriesSchema>
 const fileSchema = z.looseObject({ words: entriesSchema })
 
 /** Merges this computer's dictionary with the cloud's. The new list, or null when unchanged. */
-export async function syncDictionary(
+export function syncDictionary(
   cloud: CloudStore,
   stateDir: string,
   local: string[],
   now: Date = new Date(),
 ): Promise<string[] | null> {
-  const record = join(stateDir, 'dictionary.json')
+  return syncStringSet(cloud, DICTIONARY_KEY, join(stateDir, 'dictionary.json'), local, now)
+}
+
+/** What an adaptive character has learned syncs the same way, one cloud file per character. */
+export function syncLearned(
+  cloud: CloudStore,
+  stateDir: string,
+  characterId: string,
+  local: string[],
+  now: Date = new Date(),
+): Promise<string[] | null> {
+  if (!/^[a-z0-9-]{1,100}$/.test(characterId)) return Promise.resolve(null)
+  return syncStringSet(
+    cloud,
+    `${CLOUD_PREFIX}learned/${characterId}.json`,
+    join(stateDir, `learned-${characterId}.json`),
+    local,
+    now,
+  )
+}
+
+/**
+ * Merges a set of strings with the cloud's copy: each item remembers whether
+ * it's in and when that last changed, and the latest change wins. The new
+ * list, or null when unchanged.
+ */
+async function syncStringSet(
+  cloud: CloudStore,
+  key: string,
+  record: string,
+  local: string[],
+  now: Date,
+): Promise<string[] | null> {
   let known: Entries = {}
   try {
     known = (await readJsonFile(record, fileSchema)).words
@@ -46,7 +78,7 @@ export async function syncDictionary(
   for (const [w, e] of Object.entries(known)) if (e.on && !here.has(w)) mine[w] = { on: false, at }
 
   for (let attempt = 0; attempt < 5; attempt++) {
-    const got = await cloud.get(DICTIONARY_KEY)
+    const got = await cloud.get(key)
     let theirs: Entries = {}
     if (got) {
       try {
@@ -62,7 +94,7 @@ export async function syncDictionary(
     if (JSON.stringify(sorted(merged)) !== JSON.stringify(sorted(theirs)) || !got) {
       try {
         await cloud.put(
-          DICTIONARY_KEY,
+          key,
           new TextEncoder().encode(serializeJson({ formatVersion: 1, words: sorted(merged) })),
           got ? { ifMatch: got.etag } : { ifNoneMatch: '*' },
         )

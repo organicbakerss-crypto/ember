@@ -10,9 +10,9 @@ import {
 } from '.'
 
 describe('AI characters', () => {
-  it('has ten partners and ten guest stars, each with a voice shown by example', () => {
+  it('has ten partners and eleven guest stars, each with a voice shown by example', () => {
     expect(REGULARS).toHaveLength(10)
-    expect(GUESTS).toHaveLength(10)
+    expect(GUESTS).toHaveLength(11)
     for (const p of PERSONAS) expect(p.sounds.length).toBeGreaterThanOrEqual(3)
   })
 
@@ -43,7 +43,7 @@ describe('AI characters', () => {
     expect(prompt).toContain('That third one is sneaky.')
     expect(prompt).toContain('Suddenly it’s Sunday evening.')
     for (const p of PERSONAS)
-      expect(personaInstructions(p.id).length).toBeLessThan(p.kind === 'guest' ? 9000 : 5500)
+      expect(personaInstructions(p.id).length).toBeLessThan(p.kind === 'guest' ? 10000 : 5500)
   })
 })
 

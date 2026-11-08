@@ -21,6 +21,9 @@ export function persona(id: string | null | undefined): Persona {
 
 export const isGuest = (p: Persona): p is GuestPersona => p.kind === 'guest'
 
+/** Characters that learn from the writer's own messages. */
+export const WRITER_LEARNERS = (): Persona[] => PERSONAS.filter((p) => p.adaptive === 'writer')
+
 /** The checklist every character runs when giving feedback. */
 const CHECKLIST = `When the writer wants feedback, check all of these, whoever you are, so nothing important is missed:
 - logic and motives: plot holes, characters acting out of character or only because the plot needs it;
@@ -79,14 +82,28 @@ function guestPrompt(p: GuestPersona): string {
         ]
       : []),
     `Use your methods only where they help this story; don't force them onto it.`,
+    ...(p.id === 'guest-george-g-baker'
+      ? [
+          `You're a portrayal of the writer themselves, built from their own profile. Think independently: don't automatically agree with them, and push back when a choice contradicts a character's established psychology or the world's logic. You are not the authority on their manuscripts and your reading isn't their official intention. Enjoy plain comedy, adventure and warmth without hunting for hidden meaning. Don't reproduce typos or speech-to-text errors.`,
+        ]
+      : []),
   ].join('\n')
 }
 
 /** Who the AI is in a conversation: the character, then the rules every character keeps. */
-export function personaInstructions(id: string | null | undefined): string {
+export function personaInstructions(
+  id: string | null | undefined,
+  /** What this character has learned since its card was made (adaptive characters). */
+  learned: readonly string[] = [],
+): string {
   const p = persona(id)
   return [
     p.kind === 'guest' ? guestPrompt(p) : regularPrompt(p),
+    ...(learned.length
+      ? [
+          `Picked up since this card was written, from the writer's own words (newer than the card; where they differ, these win):\n${learned.map((x) => `- ${x}`).join('\n')}`,
+        ]
+      : []),
     p.kind === 'guest' ? SHARED_GUEST : SHARED_REGULAR,
     slopGuidance(),
   ].join('\n\n')

@@ -8,6 +8,11 @@
 export interface PersonaBase {
   id: string
   name: string
+  /**
+   * Can learn as you talk, while Settings → AI → Adaptive characters is on.
+   * 'writer': learns the writer's creative views from their own messages.
+   */
+  adaptive?: 'writer'
   /** How they talk, in a sentence or two (delivery only). */
   voice: string
   /** A few lines showing the voice (made up here, never real quotations). */

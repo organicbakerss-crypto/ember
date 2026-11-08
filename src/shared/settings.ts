@@ -146,6 +146,10 @@ export interface AiSettings {
   autoWorld: boolean
   /** The writer's own one-click prompts in the AI pane. */
   prompts: string[]
+  /** Characters that can learn (e.g. the writer's own guest star) pick things up as you talk. */
+  adaptive: boolean
+  /** What each adaptive character has learned, by character id (synced; you can delete any). */
+  learned: Record<string, string[]>
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
@@ -158,6 +162,8 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   worldChanges: 'apply',
   autoWorld: false,
   prompts: [],
+  adaptive: false,
+  learned: {},
 }
 
 /** How exports look (Word, PDF, EPUB, Markdown, Royal Road). */

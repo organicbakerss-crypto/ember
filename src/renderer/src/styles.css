@@ -5121,3 +5121,24 @@ kbd {
     opacity: 1;
   }
 }
+
+/* What adaptive characters have learned (Settings → AI). */
+.learned {
+  margin: 0.4rem 0 0.8rem;
+}
+.learned-list {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.learned-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+}
+.learned-list li span {
+  flex: 1;
+}

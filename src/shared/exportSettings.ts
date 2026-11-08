@@ -20,6 +20,11 @@ export const aiSettingsSchema = z.object({
   worldChanges: z.enum(['apply', 'suggest']).catch('apply').default('apply'),
   autoWorld: z.boolean().catch(false).default(false),
   prompts: z.array(z.string().trim().min(1).max(1000)).max(20).catch([]).default([]),
+  adaptive: z.boolean().catch(false).default(false),
+  learned: z
+    .record(z.string().max(100), z.array(z.string().trim().min(1).max(400)).max(100))
+    .catch({})
+    .default({}),
 })
 
 /** Voice settings as stored and as sent from a window (see VoiceSettings). */

@@ -17,6 +17,7 @@ import { handleMediaRequests, registerMediaScheme } from './media'
 import { setAppMenu } from './menu'
 import { applySpelling, attachTextMenu } from './spelling'
 import { SyncService } from './sync/service'
+import { WRITER_LEARNERS } from '@shared/ai/personas'
 import { AiService } from './ai/service'
 
 // Name and data folder come from the app config, not package.json.
@@ -133,6 +134,21 @@ void app.whenReady().then(async () => {
         broadcast('settings:changed', next)
       },
     },
+    learned: {
+      read: async () => {
+        const ai = (await appSettings.read()).ai
+        // Every adaptive character syncs (even with nothing learned yet, to pick up the other computer's).
+        const ids = WRITER_LEARNERS().map((p) => p.id)
+        return Object.fromEntries(ids.map((id) => [id, ai.learned[id] ?? []]))
+      },
+      write: async (characterId, notes) => {
+        const current = await appSettings.read()
+        const next = await appSettings.update({
+          ai: { ...current.ai, learned: { ...current.ai.learned, [characterId]: notes } },
+        })
+        broadcast('settings:changed', next)
+      },
+    },
     // End-to-end tests point setup at a stand-in for Cloudflare (never in a packaged app).
     ...(!app.isPackaged && process.env['SYNC_TEST_API'] && process.env['SYNC_TEST_S3']
       ? {
@@ -161,6 +177,13 @@ void app.whenReady().then(async () => {
   windows = manager
   const ai = new AiService({
     settings: async () => (await appSettings.read()).ai,
+    saveLearned: async (characterId, notes) => {
+      const current = await appSettings.read()
+      const next = await appSettings.update({
+        ai: { ...current.ai, learned: { ...current.ai.learned, [characterId]: notes } },
+      })
+      broadcast('settings:changed', next)
+    },
     host,
     fetchImpl: ((input: string, init?: RequestInit) => net.fetch(input, init)) as typeof fetch,
     chatgpt: {

@@ -11,7 +11,8 @@
  */
 import { docParagraphs } from '@shared/analysis/doc'
 import { roundtableRole } from '@shared/ai/roundtableCast'
-import { slopGuidance } from '@shared/ai/personas'
+import { WRITER_LEARNERS, persona, slopGuidance } from '@shared/ai/personas'
+import { MAX_LEARNED, learnMessages, parseLearned } from './learn'
 import {
   finalPositionsReady,
   nextParticipant,
@@ -156,6 +157,8 @@ export class AiService {
       idleMs?: number
       /** ChatGPT: where its login is kept, and how it's encrypted. */
       chatgpt: { file: string; secrets: SecretBox; authBase?: string; answersBase?: string }
+      /** Saves what an adaptive character has learned. */
+      saveLearned?: (characterId: string, notes: string[]) => Promise<void>
     },
   ) {
     this.chatgpt = new ChatGpt({ ...options.chatgpt, fetchImpl: options.fetchImpl })
@@ -289,7 +292,10 @@ export class AiService {
     return this.track(input.requestId, async (signal) => {
       const lookedAt: string[] = []
       const context = await this.context(input, provider, signal, onProgress, lookedAt)
-      context.characterId = input.characterId ?? (await this.options.settings()).characterId
+      const settings = await this.options.settings()
+      context.characterId = input.characterId ?? settings.characterId
+      const id = persona(context.characterId).id
+      if (settings.adaptive && persona(id).adaptive) context.learned = settings.learned[id] ?? []
       onProgress('')
       const text = await provider.chat({
         messages: chatMessages(context, input.messages),
@@ -703,6 +709,31 @@ export class AiService {
         })
       ).trim(),
     }))
+  }
+
+  /**
+   * Adaptive characters that learn the writer's views: picks out anything
+   * lasting in one of the writer's messages (taste, opinions, how they like
+   * to work; not story facts or one-off requests) and adds it to what each
+   * has learned. Off unless Settings → AI → Adaptive characters is on.
+   */
+  async learn(message: string): Promise<void> {
+    const settings = await this.options.settings()
+    const learners = WRITER_LEARNERS()
+    if (!settings.adaptive || !learners.length || !this.options.saveLearned) return
+    if (words(message) < 12) return
+    const known = [...new Set(learners.flatMap((p) => settings.learned[p.id] ?? []))]
+    const provider = await this.client()
+    const reply = await provider.chat({
+      messages: learnMessages(message, known),
+      temperature: 0.1,
+    })
+    const found = parseLearned(reply, known)
+    if (!found.length) return
+    for (const p of learners) {
+      const notes = [...(settings.learned[p.id] ?? []), ...found].slice(-MAX_LEARNED)
+      await this.options.saveLearned(p.id, notes)
+    }
   }
 
   /** The story's chapters in order, with their summaries, for looking things up. */

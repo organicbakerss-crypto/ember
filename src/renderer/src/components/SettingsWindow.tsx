@@ -9,7 +9,7 @@ import {
 } from '@shared/settings'
 import { DEFAULT_FILLER_WORDS } from '@shared/analysis/fillers'
 import { appConfig } from '../../../../app.config'
-import { GUESTS, REGULARS, guestNotice, persona } from '@shared/ai/personas'
+import { GUESTS, REGULARS, WRITER_LEARNERS, guestNotice, persona } from '@shared/ai/personas'
 import type { IpcResult } from '@shared/ipc'
 import { api, describeError } from '../api'
 import { STATUS_LABELS } from '../analysisFormat'
@@ -950,6 +950,68 @@ function AiSettingsSection() {
               <p className="muted small">{p.summary}</p>
             )
           })()}
+          <h3>Adaptive characters</h3>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={ai.adaptive}
+              onChange={(e) => set({ adaptive: e.target.checked })}
+            />
+            Let characters that can learn pick things up as you talk
+          </label>
+          <p className="muted small">
+            Right now that's{' '}
+            {WRITER_LEARNERS()
+              .map((p) => p.name)
+              .join(', ')}
+            , who learns your creative views from your own messages (in any conversation). After a
+            longer message, one small extra AI request picks out anything lasting (taste, opinions,
+            how you like to work), never story facts. What's learned syncs between your computers,
+            and you can delete any of it here.
+          </p>
+          {ai.adaptive &&
+            WRITER_LEARNERS().map((p) => {
+              const notes = ai.learned[p.id] ?? []
+              return (
+                <div key={p.id} className="learned">
+                  <div className="row">
+                    <strong className="small">
+                      {p.name}: {notes.length ? `${notes.length} learned` : 'nothing learned yet'}
+                    </strong>
+                    <span className="status-spacer" />
+                    {notes.length > 0 && (
+                      <button
+                        className="link small"
+                        onClick={() => set({ learned: { ...ai.learned, [p.id]: [] } })}
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  {notes.length > 0 && (
+                    <ul className="learned-list small">
+                      {notes.map((n, i) => (
+                        <li key={`${i}-${n}`}>
+                          <span>{n}</span>
+                          <button
+                            className="icon"
+                            aria-label={`Forget: ${n}`}
+                            title="Forget this"
+                            onClick={() =>
+                              set({
+                                learned: { ...ai.learned, [p.id]: notes.filter((_, j) => j !== i) },
+                              })
+                            }
+                          >
+                            ×
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )
+            })}
           <h3>Updating the world</h3>
           <p className="muted small">When the AI reads a chapter for the world, it should:</p>
           <label className="radio">

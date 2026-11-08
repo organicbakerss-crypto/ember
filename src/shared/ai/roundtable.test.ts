@@ -46,7 +46,7 @@ describe('Roundtable phase engine', () => {
   it('seats the brainstorming partners, the specialists and the guest stars', () => {
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(10)
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(5)
-    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(10)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(11)
     expect(roundtableRole('nora', 'regular').instructions).toContain('You are Nora')
     for (const guest of GUESTS) {
       const role = roundtableRole(guest.id, 'guest')
