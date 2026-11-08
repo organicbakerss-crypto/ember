@@ -24,7 +24,7 @@ describe('AI characters', () => {
   it('gives every partner the same full checklist, and no backstory', () => {
     for (const p of REGULARS) {
       const prompt = personaInstructions(p.id)
-      expect(prompt).toContain('always check all of these')
+      expect(prompt).toContain('check all of these')
       expect(prompt).toContain("Don't invent a personal history")
     }
   })
@@ -43,5 +43,16 @@ describe('AI characters', () => {
     expect(prompt).toContain('That third one is sneaky.')
     expect(prompt).toContain('Suddenly it’s Sunday evening.')
     for (const p of PERSONAS) expect(personaInstructions(p.id).length).toBeLessThan(5000)
+  })
+})
+
+describe('telling the partners apart', () => {
+  it('gives each partner its own way of answering and a full example answer', async () => {
+    const { personaReminder } = await import('.')
+    expect(new Set(REGULARS.map((p) => p.approach)).size).toBe(REGULARS.length)
+    for (const p of REGULARS) {
+      expect(personaInstructions(p.id)).toContain(p.example)
+      expect(personaReminder(p.id)).toContain(`Answer as ${p.name}`)
+    }
   })
 })

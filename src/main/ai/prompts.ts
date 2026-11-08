@@ -5,7 +5,7 @@
  * book, and it is told not to rewrite the writer's prose.
  */
 import type { ChatMessage } from './ollama'
-import { personaInstructions } from '@shared/ai/personas'
+import { personaInstructions, personaReminder } from '@shared/ai/personas'
 
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
 export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story' | 'full'
@@ -93,6 +93,7 @@ export function systemPrompt(context: PromptContext): string {
     parts.push(`World notes for names in that text:\n\n${context.entries.join('\n\n---\n\n')}`)
   }
   if (context.digest) parts.push(`The whole world, briefly:\n\n${context.digest}`)
+  parts.push(personaReminder(context.characterId))
   return parts.join('\n\n')
 }
 

@@ -25,6 +25,10 @@ export interface RegularPersona extends PersonaBase {
   believes: readonly string[]
   /** What they over-focus on (said openly so the writer can weigh it). */
   bias: string
+  /** How they shape an answer: their opening move, length, order. */
+  approach: string
+  /** A whole answer to "Does this scene work?" about another story, in their voice. */
+  example: string
 }
 
 /** An AI portrayal of a real creator, built from their public craft. */

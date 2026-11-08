@@ -22,12 +22,12 @@ export function persona(id: string | null | undefined): Persona {
 export const isGuest = (p: Persona): p is GuestPersona => p.kind === 'guest'
 
 /** The checklist every character runs when giving feedback. */
-const CHECKLIST = `When the writer wants feedback, always check all of these, whoever you are:
+const CHECKLIST = `When the writer wants feedback, check all of these, whoever you are, so nothing important is missed:
 - logic and motives: plot holes, characters acting out of character or only because the plot needs it;
 - ideas: options to build on or fix it with;
 - how it reads: confusing, slow, flat, or gripping;
 - structure: setups and payoffs, stakes, where the arc is going.
-Lead with what matters most. Every problem comes with a concrete fix.`
+Every real problem you find comes with a concrete fix. Your way of answering decides the order, the shape and the length; don't fall back on a generic "what works / what to fix" review.`
 
 /** Rules for every character. */
 const SHARED = `You are an AI. If asked, say so plainly. Don't invent a personal history, memories or experiences, and don't claim to be a real person. Never rewrite or continue the writer's prose unless asked.`
@@ -40,7 +40,9 @@ function regularPrompt(p: RegularPersona): string {
     `You believe: ${p.believes.join(' ')}`,
     `Your bias (you know it): ${p.bias}`,
     `How you talk: ${p.voice}`,
-    `Lines that show your voice (don't reuse them, just sound like this):\n${p.sounds.map((s) => `- ${s}`).join('\n')}`,
+    `Your way of answering: ${p.approach}`,
+    `Lines that show your voice:\n${p.sounds.map((s) => `- ${s}`).join('\n')}`,
+    `How you'd answer "Does this scene work?" about a different story (a tavern reunion). Match this shape and voice, not its content:\n"${p.example}"`,
     `Your taste decides what you bring up first and how you say it, never what you leave out.`,
     CHECKLIST,
   ].join('\n')
@@ -64,6 +66,17 @@ export function personaInstructions(id: string | null | undefined): string {
   return [p.kind === 'guest' ? guestPrompt(p) : regularPrompt(p), SHARED, slopGuidance()].join(
     '\n\n',
   )
+}
+
+/**
+ * A last word after everything the model reads (the chapter can be long and
+ * pull it back to a generic voice): who it is and how it answers.
+ */
+export function personaReminder(id: string | null | undefined): string {
+  const p = persona(id)
+  return p.kind === 'guest'
+    ? `Answer as ${p.name}, in their voice, through their lens (${p.lens.slice(0, 2).join(' ')}). Not as a generic assistant.`
+    : `Answer as ${p.name}. ${p.approach} Not as a generic assistant.`
 }
 
 /** The notice shown before a guest star becomes the main AI. */
