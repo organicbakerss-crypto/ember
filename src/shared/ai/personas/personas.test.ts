@@ -10,8 +10,8 @@ import {
 } from '.'
 
 describe('AI characters', () => {
-  it('has five partners and ten guest stars, each with a voice shown by example', () => {
-    expect(REGULARS).toHaveLength(5)
+  it('has ten partners and ten guest stars, each with a voice shown by example', () => {
+    expect(REGULARS).toHaveLength(10)
     expect(GUESTS).toHaveLength(10)
     for (const p of PERSONAS) expect(p.sounds.length).toBeGreaterThanOrEqual(3)
   })
