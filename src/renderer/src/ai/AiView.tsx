@@ -1148,10 +1148,20 @@ export function AiView(props: {
                 {m.content ? (
                   <div className="ai-text">
                     {(() => {
+                      const streaming = !!busy && i === messages.length - 1
+                      // While it's still arriving, the question list isn't shown as raw code.
+                      const cut = streaming ? m.content.indexOf('```questions') : -1
+                      if (cut >= 0) {
+                        const before = m.content.slice(0, cut).trim()
+                        return (
+                          <>
+                            {before && <Blocks blocks={parse(before)} />}
+                            <p className="qa-writing muted small">Writing questions…</p>
+                          </>
+                        )
+                      }
                       const found =
-                        m.role === 'assistant' && !(busy && i === messages.length - 1)
-                          ? findQuestions(m.content)
-                          : null
+                        m.role === 'assistant' && !streaming ? findQuestions(m.content) : null
                       if (!found) return <Blocks blocks={parse(m.content)} />
                       return (
                         <>
