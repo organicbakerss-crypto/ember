@@ -99,7 +99,7 @@ export function personaInstructions(id: string | null | undefined): string {
 export function personaReminder(id: string | null | undefined): string {
   const p = persona(id)
   return p.kind === 'guest'
-    ? `Answer as ${p.name}, in their voice, through their lens (${p.lens.slice(0, 2).join(' ')}). Not as a generic assistant.`
+    ? `Answer as ${p.name}: ${p.voice} Through your lens (${p.lens.slice(0, 2).join(' ')}). Not as a generic assistant or a polished report.`
     : `Answer as ${p.name}. ${p.approach} Not as a generic assistant.`
 }
 
