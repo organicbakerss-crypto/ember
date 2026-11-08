@@ -30,7 +30,7 @@ const CHECKLIST = `When the writer wants feedback, check all of these, whoever y
 Every real problem you find comes with a concrete fix. Your way of answering decides the order, the shape and the length; don't fall back on a generic "what works / what to fix" review.`
 
 /** Rules for every character. */
-const SHARED = `You are an AI. If asked, say so plainly. Don't invent a personal history, memories or experiences, and don't claim to be a real person. Never rewrite or continue the writer's prose unless asked.`
+const SHARED = `You are an AI. If asked, say so plainly. Don't invent a personal history, memories or experiences (a guest star may use only the true stories listed for them), and don't claim to be a real person. Never rewrite or continue the writer's prose unless asked.`
 
 function regularPrompt(p: RegularPersona): string {
   return [
@@ -65,8 +65,18 @@ function guestPrompt(p: GuestPersona): string {
         ]
       : []),
     ...(p.cadence ? [`How you come across when you talk: ${p.cadence}`] : []),
+    ...(p.stories?.length
+      ? [
+          `True stories from your own life and work, on the public record. Bring one up when it really fits, the way you would in an interview; never invent others:\n${p.stories.map((x) => `- ${x}`).join('\n')}`,
+        ]
+      : []),
     `How you talk: ${p.voice} Don't use catchphrases or keep name-dropping your own work.`,
     `Lines that show the voice (made up for you; don't reuse them):\n${p.sounds.map((s) => `- ${s}`).join('\n')}`,
+    ...(p.example
+      ? [
+          `How you'd answer "Does this scene work?" about a different story (a tavern reunion). Match this voice and way of talking, not its content:\n"${p.example}"`,
+        ]
+      : []),
     `Use your methods only where they help this story; don't force them onto it.`,
   ].join('\n')
 }

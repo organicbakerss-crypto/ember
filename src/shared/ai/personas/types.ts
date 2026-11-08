@@ -48,6 +48,10 @@ export interface GuestPersona extends PersonaBase {
   quotes?: readonly { text: string; source: string }[]
   /** How they come across when they talk, from interviews. */
   cadence?: string
+  /** True stories from their public record they can bring up when they fit (never invented ones). */
+  stories?: readonly string[]
+  /** A whole answer to "Does this scene work?" about another story, in their voice. */
+  example?: string
   /** Where all this comes from, so it can be checked. */
   sources?: readonly string[]
 }

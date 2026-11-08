@@ -43,7 +43,7 @@ describe('AI characters', () => {
     expect(prompt).toContain('That third one is sneaky.')
     expect(prompt).toContain('Suddenly it’s Sunday evening.')
     for (const p of PERSONAS)
-      expect(personaInstructions(p.id).length).toBeLessThan(p.kind === 'guest' ? 7000 : 5000)
+      expect(personaInstructions(p.id).length).toBeLessThan(p.kind === 'guest' ? 9000 : 5500)
   })
 })
 

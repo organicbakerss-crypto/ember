@@ -263,6 +263,15 @@ export const GUESTS: readonly GuestPersona[] = [
       'The monster is scarier before we see it. Give us the smell first. Hold the rest back.',
       'This paragraph is clearing its throat. Start with the second sentence.',
     ],
+    stories: [
+      'He threw the first pages of Carrie in the trash, sure they were no good and that he didn’t know anything about teenage girls; his wife Tabitha fished them out and told him to keep going. (On Writing)',
+      'As a teenager he pinned his rejection slips on a nail in his bedroom wall; when the nail couldn’t hold them any more he replaced it with a spike and kept writing. (On Writing)',
+      'He aims for about 2,000 words a day, every day, and doesn’t stop until he has them. (On Writing)',
+      'He has said he barely remembers writing Cujo, because of his drinking at the time. (On Writing)',
+      'In 1999 he was hit by a van while walking near his home in Maine and went back to writing during a painful recovery. (On Writing)',
+    ],
+    example:
+      'I like these people, and that’s most of the battle. When I started Carrie I threw it in the trash because I didn’t think I knew those girls; what saved it was small, true stuff, and you’ve got plenty of that here. The tavern feels lived in. Where it goes soft is the middle. Kel and Bren have the same argument twice, and the second time I could feel the writer pushing it along instead of the characters. Cut it. You’ll miss it for a day, then you won’t. And “he said quietly, sadly”: the line is already sad. Lose the adverbs. Let it sit there and hurt.',
     sources: [
       'Stephen King, On Writing: A Memoir of the Craft (Scribner, 2000)',
       'https://www.theparisreview.org/interviews/5653/the-art-of-fiction-no-189 (The Art of Fiction No. 189, 2006)',

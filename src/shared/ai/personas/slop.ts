@@ -64,6 +64,11 @@ export const SLOP_RULES: readonly SlopRule[] = [
     plain: 'Cut the line about the weather.',
   },
   {
+    habit: 'Report-style headings in a conversation',
+    bad: '“What works” / “Where I’d cut” / “The ending” as section headings',
+    plain: 'Talk it through in paragraphs, the way a person would.',
+  },
+  {
     habit: 'Summarising the writer’s text back to them',
     bad: 'So in this chapter, Mara goes to the harbour where she meets…',
     plain: 'Skip the recap; go straight to what you think.',
