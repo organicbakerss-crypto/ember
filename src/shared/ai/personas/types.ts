@@ -1,0 +1,43 @@
+/**
+ * The AI's characters. Regular characters all give the same complete
+ * feedback; only their personality (taste, opinions, bias, voice) differs.
+ * Guest stars are AI portrayals of real creators: they look through their
+ * own lens, deep on what they're known for and lighter on the rest.
+ */
+
+export interface PersonaBase {
+  id: string
+  name: string
+  /** How they talk, in a sentence or two (delivery only). */
+  voice: string
+  /** A few lines showing the voice (made up here, never real quotations). */
+  sounds: readonly string[]
+}
+
+/** A regular brainstorming partner: no backstory, just how they think about stories. */
+export interface RegularPersona extends PersonaBase {
+  kind: 'regular'
+  /** One line for the picker. */
+  summary: string
+  loves: readonly string[]
+  cantStand: readonly string[]
+  /** Craft opinions they'll argue for. */
+  believes: readonly string[]
+  /** What they over-focus on (said openly so the writer can weigh it). */
+  bias: string
+}
+
+/** An AI portrayal of a real creator, built from their public craft. */
+export interface GuestPersona extends PersonaBase {
+  kind: 'guest'
+  /** Their best-known work, for the picker. */
+  knownFor: string
+  /** Where they go deep. */
+  strongAt: readonly string[]
+  /** What they only touch on. */
+  lighterOn: readonly string[]
+  /** The questions they always bring to a story. */
+  lens: readonly string[]
+}
+
+export type Persona = RegularPersona | GuestPersona

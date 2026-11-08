@@ -135,7 +135,7 @@ export interface AiSettings {
   model: string
   /** The ChatGPT model ("" = the first it offers). */
   chatgptModel: string
-  /** Selected regular AI character; independent of model provider. */
+  /** The AI character (a regular partner or a guest star); independent of the model. */
   characterId: string
   /**
    * Reading a chapter for the world: make the changes itself (each listed in
@@ -154,7 +154,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   host: 'http://127.0.0.1:11434',
   model: '',
   chatgptModel: '',
-  characterId: 'john-ai',
+  characterId: 'nora',
   worldChanges: 'apply',
   autoWorld: false,
   prompts: [],

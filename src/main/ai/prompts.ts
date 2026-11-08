@@ -5,19 +5,14 @@
  * book, and it is told not to rewrite the writer's prose.
  */
 import type { ChatMessage } from './ollama'
-import { characterInstructions } from '@shared/ai/characters'
-import { antiAiStyleGuidance } from '@shared/ai/antiAiStyle'
-import { GUEST_PROFILES } from '@shared/ai/roundtableCast'
-import { guestInstructions, guestReferenceContext } from '@shared/ai/guests/types'
+import { personaInstructions } from '@shared/ai/personas'
 
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
 export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story' | 'full'
 
-const BASE = `You are speaking with a writer inside a novel-writing app. The writer writes their own prose: never rewrite or continue their text unless they clearly ask, and never claim to have changed their files. To show what you mean, give at most one example line. Be concise and concrete. Use plain text with short lists when helpful; no headings.
-How you give feedback:
-- Give opinions on the writing only when asked.
-- Every problem you point out comes with a specific fix: what to add, cut, move or clarify, and where.
-- If the writer pushes back on a point, offer one new angle with a new fix. If they push back on it again, drop it gracefully and don't raise it again in this conversation.
+const BASE = `You're talking with a writer inside their novel-writing app. They write their own prose: never rewrite or continue their text unless they clearly ask, and never claim to have changed their files. To show what you mean, give at most one example line.
+- Give opinions on the writing when asked for them.
+- If the writer pushes back on a point, offer one new angle. If they push back again, drop it and don't raise it again in this conversation.
 - A continuity slip (an eye colour that changed, someone in two places) gets one mention with its fix; if the writer says it's intentional, let it go.`
 
 const MODES: Record<AiMode, string> = {
@@ -57,8 +52,7 @@ const GROUNDED = `What you know about the writer's story comes only from what is
 
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
-  const guest = GUEST_PROFILES.find((role) => role.id === context.characterId)
-  const parts = [guest ? guestInstructions(guest, 'chat') : characterInstructions(context.characterId), BASE, MODES[context.mode], antiAiStyleGuidance('chat'), GROUNDED]
+  const parts = [personaInstructions(context.characterId), BASE, MODES[context.mode], GROUNDED]
   if (context.attachments?.length) {
     parts.push(
       `Files the writer attached to this conversation (notes, hand-offs; not the story itself):\n\n${context.attachments
@@ -106,13 +100,7 @@ export function chatMessages(
   context: PromptContext,
   history: { role: 'user' | 'assistant'; content: string }[],
 ): ChatMessage[] {
-  const latestQuestion = [...history].reverse().find((message) => message.role === 'user')?.content ?? ''
-  const evidence = context.characterId?.startsWith('guest-')
-    ? guestReferenceContext(context.characterId,
-      context.mode === 'chat' && !/story|novel|writing|character|plot|chapter|scene/i.test(latestQuestion) ? 'casual' : 'creative',
-      latestQuestion)
-    : ''
-  return [{ role: 'system', content: [systemPrompt(context), evidence].filter(Boolean).join('\n\n') }, ...history]
+  return [{ role: 'system', content: systemPrompt(context) }, ...history]
 }
 
 /* ---------- editing the chapter ---------- */

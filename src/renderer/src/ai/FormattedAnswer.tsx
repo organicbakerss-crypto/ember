@@ -69,4 +69,3 @@ export function Blocks(props: { blocks: Block[] }): ReactNode {
     }
   })
 }
-

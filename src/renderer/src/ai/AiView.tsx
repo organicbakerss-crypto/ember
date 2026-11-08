@@ -3,9 +3,17 @@ import type { AiJobInfo, ConversationSummary } from '@shared/ipc'
 import type { PaneRoute } from '@shared/panes'
 import type { ConversationFile, ConversationMessage } from '@shared/schema'
 import { newId } from '@shared/ids'
-import { EMBER_CHARACTERS } from '@shared/ai/characters'
-import { GUEST_PROFILES } from '@shared/ai/roundtableCast'
-import { RoundtableView } from './RoundtableView'
+import {
+  DEFAULT_PERSONA_ID,
+  GUESTS,
+  PERSONAS,
+  REGULARS,
+  guestNotice,
+  isGuest,
+  persona,
+} from '@shared/ai/personas'
+import { useOverlays } from '../components/overlays'
+import { loadLocal, saveLocal } from '../storage'
 import { api, describeError, useIpcEvent } from '../api'
 import { formatWhen } from '../components/TrashPage'
 import { useSettings } from '../useTheme'
@@ -25,7 +33,10 @@ import {
 } from './scope'
 
 type Mode = 'chat' | 'brainstorm' | 'ask'
-type Message = Pick<ConversationMessage, 'role' | 'content' | 'at' | 'read'>
+type Message = Pick<ConversationMessage, 'role' | 'content' | 'at' | 'read'> & {
+  /** A second opinion: the character who wrote it. */
+  by?: string
+}
 interface Thread {
   /** Set once the conversation has been saved (or a file attached). */
   id: string | null
@@ -99,7 +110,22 @@ const QUICK: { label: string; mode: Mode; text: string }[] = [
 ]
 /** An id for one request to the AI. */
 const newRequestId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
-const empty = (characterId = 'john-ai'): Thread => ({ id: null, createdAt: null, characterId, messages: [] })
+/** The other character who wrote a second opinion, if this message is one. */
+const by = (m: Message): string | null => (typeof m.by === 'string' ? m.by : null)
+
+/** Messages as the model reads them: second opinions are marked as someone else's. */
+const forModel = (msgs: Message[]) =>
+  msgs.map((m) => ({
+    role: m.role,
+    content: by(m) ? `(A second opinion from ${persona(by(m)).name}:)\n${m.content}` : m.content,
+  }))
+
+const empty = (characterId = DEFAULT_PERSONA_ID): Thread => ({
+  id: null,
+  createdAt: null,
+  characterId,
+  messages: [],
+})
 
 /* ---------- formatted answers ---------- */
 
@@ -116,17 +142,12 @@ export function AiView(props: {
   onRoute?: (route: PaneRoute) => void
   /** Opens the story's world at its inbox (after it was updated). */
   onOpenInbox?: (worldId: string) => void
-  /** Controlled by Home when the Roundtable takes over the full AI workspace. */
-  roundtableActive?: boolean
-  onRoundtableChange?: (active: boolean) => void
 }) {
   const { seriesId } = props
   const { settings, update } = useSettings()
   const provider = settings.ai.provider
   const [mode, setMode] = useState<Mode>('chat')
-  const [localRoundtableOpen, setLocalRoundtableOpen] = useState(false)
-  const roundtableOpen = props.onRoundtableChange ? !!props.roundtableActive : localRoundtableOpen
-  const setRoundtableOpen = props.onRoundtableChange ?? setLocalRoundtableOpen
+  const { choose, openMenu } = useOverlays()
   const [threads, setThreads] = useState<Record<Mode, Thread>>({
     chat: empty(),
     brainstorm: empty(),
@@ -190,16 +211,21 @@ export function AiView(props: {
 
   // Settings can change from another window. Never reuse messages across personalities.
   // Hold any active request until it finishes; its identity was captured on submission.
-  useEffect(() => {
-    if (busy) return
-    const selected = settings.ai.characterId ?? 'john-ai'
-    setThreads((current) => {
-      if (Object.values(current).every((t) => t.characterId === selected || (!t.id && !t.messages.length && !t.attachments?.length))) {
-        return current
-      }
-      return { chat: empty(selected), brainstorm: empty(selected), ask: empty(selected) }
+  // (Adjusted while rendering, not in an effect.)
+  const selectedCharacter = persona(settings.ai.characterId).id
+  if (
+    !busy &&
+    Object.values(threads).some(
+      (t) =>
+        t.characterId !== selectedCharacter && (t.id || t.messages.length || t.attachments?.length),
+    )
+  ) {
+    setThreads({
+      chat: empty(selectedCharacter),
+      brainstorm: empty(selectedCharacter),
+      ask: empty(selectedCharacter),
     })
-  }, [settings.ai.characterId, busy])
+  }
 
   const { onRoute, volumeId } = props
   useEffect(() => {
@@ -222,7 +248,10 @@ export function AiView(props: {
   })
 
   const refreshPast = () => {
-    api.invoke('ai:conversations', { seriesId }).then((all) => setPast(all.filter((c) => !c.roundtable)), () => {})
+    api.invoke('ai:conversations', { seriesId }).then(
+      (all) => setPast(all.filter((c) => !c.roundtable)),
+      () => {},
+    )
   }
   useEffect(refreshPast, [seriesId])
 
@@ -286,15 +315,15 @@ export function AiView(props: {
       const c = await api.invoke('ai:conversation', { seriesId, conversationId: id })
       setMode(c.mode)
       // Opening a saved chat restores its original character, not the current global choice.
-      update(({ ai }) => ({ ai: { ...ai, characterId: (c.characterId ?? 'john-ai') } }))
+      update(({ ai }) => ({ ai: { ...ai, characterId: persona(c.characterId).id } }))
       setThreads({
-        chat: empty((c.characterId ?? 'john-ai')),
-        brainstorm: empty((c.characterId ?? 'john-ai')),
-        ask: empty((c.characterId ?? 'john-ai')),
+        chat: empty(persona(c.characterId).id),
+        brainstorm: empty(persona(c.characterId).id),
+        ask: empty(persona(c.characterId).id),
         [c.mode]: {
           id: c.id,
           createdAt: c.createdAt,
-          characterId: (c.characterId ?? 'john-ai'),
+          characterId: persona(c.characterId).id,
           messages: c.messages,
           attachments: attachedOf(c),
         },
@@ -321,7 +350,8 @@ export function AiView(props: {
     setPast((p) => p.filter((c) => c.id !== id))
     setThreads((t) => {
       const next = { ...t }
-      for (const m of Object.keys(next) as Mode[]) if (next[m].id === id) next[m] = empty(settings.ai.characterId)
+      for (const m of Object.keys(next) as Mode[])
+        if (next[m].id === id) next[m] = empty(settings.ai.characterId)
       return next
     })
   }
@@ -346,7 +376,7 @@ export function AiView(props: {
   const threadOf = (c: ConversationFile): Thread => ({
     id: c.id,
     createdAt: c.createdAt,
-    characterId: (c.characterId ?? 'john-ai'),
+    characterId: persona(c.characterId).id,
     messages: c.messages,
     attachments: attachedOf(c),
   })
@@ -648,9 +678,7 @@ export function AiView(props: {
         seriesId,
         conversation,
         mode: into,
-        messages: history
-          .slice(-CONTEXT_MESSAGES)
-          .map((m) => ({ role: m.role, content: m.content })),
+        messages: forModel(history.slice(-CONTEXT_MESSAGES)),
         attachmentIds: (current.attachments ?? []).map((a) => a.id),
         scope:
           kind === 'story' || kind === 'full'
@@ -816,6 +844,95 @@ export function AiView(props: {
     setReplyAt({ x: r.left - box.left + r.width / 2, y: r.top - box.top, text })
   }
 
+  /** Switches character. A guest star first says what you trade for their lens (once each). */
+  const pickCharacter = async (characterId: string) => {
+    if (characterId === persona(settings.ai.characterId).id) return
+    const next = persona(characterId)
+    if (isGuest(next)) {
+      const seen = (loadLocal('ai.guestsSeen') ?? '').split(',').filter(Boolean)
+      if (!seen.includes(next.id)) {
+        const ok = await choose(
+          `${next.name} sees your story through their own lens`,
+          [
+            { value: 'use', label: `Use ${next.name}`, primary: true },
+            { value: 'cancel', label: 'Cancel' },
+          ],
+          `${guestNotice(next)} This is an AI portrayal, not the real person.`,
+        )
+        if (ok !== 'use') return
+        saveLocal('ai.guestsSeen', [...seen, next.id].join(','))
+      }
+    }
+    // Never feed one character's conversation into another's prompt.
+    setThreads({ chat: empty(next.id), brainstorm: empty(next.id), ask: empty(next.id) })
+    setMissing(new Set())
+    setQuote(null)
+    setListOpen(false)
+    update(({ ai }) => ({ ai: { ...ai, characterId: next.id } }))
+  }
+
+  /** Asks another character the question that led to answer `i`; their reply goes under it. */
+  const secondOpinion = async (i: number, characterId: string) => {
+    const into = mode
+    const current = threads[into]
+    const upTo = current.messages.slice(0, i)
+    if (!upTo.some((m) => m.role === 'user')) return
+    const scope = await fetchScope(seriesId)
+    const kind =
+      reach === 'story' || reach === 'full'
+        ? reach
+        : reach === 'chapter'
+          ? 'chapter'
+          : scope?.selection
+            ? 'selection'
+            : 'screen'
+    const text =
+      kind === 'selection' ? scope!.selection! : kind === 'screen' ? (scope?.screen ?? '') : ''
+    const requestId = newRequestId()
+    setBusy({ id: requestId, mode: into })
+    setProgress(`Asking ${persona(characterId).name}…`)
+    setError(null)
+    try {
+      const answer = await api.invoke('ai:secondOpinion', {
+        requestId,
+        seriesId,
+        characterId,
+        mode: into,
+        messages: forModel(upTo.slice(-CONTEXT_MESSAGES)),
+        conversationId: current.id,
+        attachmentIds: (current.attachments ?? []).map((a) => a.id),
+        scope:
+          kind === 'story' || kind === 'full'
+            ? { kind, seriesId, volumeId: null, chapterId: null, text: '' }
+            : scope?.chapterId
+              ? { kind, seriesId, volumeId: scope.volumeId, chapterId: scope.chapterId, text }
+              : null,
+      })
+      if (!mounted.current) return
+      const reply: Message = {
+        role: 'assistant',
+        content: answer.text,
+        at: new Date().toISOString(),
+        read: null,
+        by: characterId,
+      }
+      // Under the answer it's a second opinion on (after any earlier second opinions).
+      let at = i + 1
+      while (at < current.messages.length && by(current.messages[at]!)) at++
+      const msgs = [...current.messages.slice(0, at), reply, ...current.messages.slice(at)]
+      save(into, current, msgs)
+    } catch (err) {
+      if (!mounted.current) return
+      const e = describeError(err)
+      if (e.code !== 'cancelled') setError(e.message)
+    } finally {
+      if (mounted.current) {
+        setBusy(null)
+        setProgress('')
+      }
+    }
+  }
+
   const replyTo = (text: string) => {
     setQuote(text)
     setReplyAt(null)
@@ -867,10 +984,6 @@ export function AiView(props: {
     </aside>
   )
 
-  if (roundtableOpen) {
-    return <div className="ai-view ai-roundtable-view"><RoundtableView seriesId={seriesId} onBack={() => setRoundtableOpen(false)} /></div>
-  }
-
   return (
     <div className="ai-view" ref={root}>
       {history}
@@ -899,39 +1012,39 @@ export function AiView(props: {
               </button>
             ))}
           </div>
-          <button className="link small" onClick={() => setRoundtableOpen(true)} disabled={!!busy || !!worldJob} title="Open the multi-character Roundtable">Roundtable</button>
           <span className="status-spacer" />
           <select
             aria-label="Current AI character"
             title="AI character"
-            value={settings.ai.characterId ?? 'john-ai'}
+            value={persona(settings.ai.characterId).id}
             disabled={!!busy}
-            onChange={(e) => {
-              const characterId = e.target.value
-              if (characterId === settings.ai.characterId) return
-              // Never feed an old persona's conversation into a new character's prompt.
-              setThreads({
-                chat: empty(characterId),
-                brainstorm: empty(characterId),
-                ask: empty(characterId),
-              })
-              setMissing(new Set())
-              setQuote(null)
-              setListOpen(false)
-              update(({ ai }) => ({ ai: { ...ai, characterId } }))
-            }}
+            onChange={(e) => void pickCharacter(e.target.value)}
           >
-            <optgroup label="Regular characters">
-              {EMBER_CHARACTERS.map((character) => (
-                <option key={character.id} value={character.id}>{character.name}</option>
+            <optgroup label="Brainstorming partners">
+              {REGULARS.map((p) => (
+                <option key={p.id} value={p.id} title={p.summary}>
+                  {p.name}
+                </option>
               ))}
             </optgroup>
             <optgroup label="Guest stars (AI portrayals)">
-              {GUEST_PROFILES.map((guest) => (
-                <option key={guest.id} value={guest.id}>{guest.name}</option>
+              {GUESTS.map((p) => (
+                <option key={p.id} value={p.id} title={p.knownFor}>
+                  {p.name}
+                </option>
               ))}
             </optgroup>
           </select>
+          {isGuest(persona(settings.ai.characterId)) && (
+            <span
+              className="ai-guest-tag small"
+              title={guestNotice(
+                persona(settings.ai.characterId) as Parameters<typeof guestNotice>[0],
+              )}
+            >
+              Guest star: own lens
+            </span>
+          )}
           {worldId && (
             <button
               className="link small"
@@ -969,6 +1082,9 @@ export function AiView(props: {
             )}
             {messages.map((m, i) => (
               <div key={i} className={`ai-message ${m.role}`}>
+                {by(m) && (
+                  <div className="ai-by muted small">Second opinion from {persona(by(m)).name}</div>
+                )}
                 {m.content ? (
                   <div className="ai-text">
                     <Blocks blocks={parse(m.content)} />
@@ -989,6 +1105,23 @@ export function AiView(props: {
                     <button className="link" onClick={() => replyTo(m.content.slice(0, 400))}>
                       Reply to this
                     </button>
+                    {!busy && messages.slice(0, i).some((x) => x.role === 'user') && (
+                      <button
+                        className="link"
+                        title="Ask another character the same question"
+                        onClick={(e) =>
+                          openMenu(
+                            e,
+                            PERSONAS.filter((p) => p.id !== thread.characterId).map((p) => ({
+                              label: `${p.name}${isGuest(p) ? ' (guest star)' : ''}`,
+                              onSelect: () => void secondOpinion(i, p.id),
+                            })),
+                          )
+                        }
+                      >
+                        Second opinion
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

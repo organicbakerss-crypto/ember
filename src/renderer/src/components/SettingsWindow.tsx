@@ -8,8 +8,8 @@ import {
   type PaperSize,
 } from '@shared/settings'
 import { DEFAULT_FILLER_WORDS } from '@shared/analysis/fillers'
-import { EMBER_CHARACTERS, emberCharacter } from '@shared/ai/characters'
-import { GUEST_PROFILES } from '@shared/ai/roundtableCast'
+import { appConfig } from '../../../../app.config'
+import { GUESTS, REGULARS, guestNotice, persona } from '@shared/ai/personas'
 import type { IpcResult } from '@shared/ipc'
 import { api, describeError } from '../api'
 import { STATUS_LABELS } from '../analysisFormat'
@@ -783,13 +783,17 @@ function AiSettingsSection() {
             {chatgpt ? (
               <>
                 <li>
-                  Uses your ChatGPT plan’s usage allowance, with permission you approve during sign-in. No API key needed.
+                  Uses your ChatGPT plan’s usage allowance, with permission you approve during
+                  sign-in. No API key needed.
                 </li>
                 <li>
                   Nothing is sent until you ask; then only what the AI panel says it’s reading goes
                   to OpenAI.
                 </li>
-                <li>Ember retains its conversation history locally; selected AI requests are sent to OpenAI.</li>
+                <li>
+                  {appConfig.name} retains its conversation history locally; selected AI requests
+                  are sent to OpenAI.
+                </li>
               </>
             ) : (
               <>
@@ -909,31 +913,43 @@ function AiSettingsSection() {
           )}
           <h3>AI character</h3>
           <p className="muted small">
-            Choose who answers in Chat, Brainstorm and Ask the story. Every character uses the same
-            writing-feedback standards and model. These are provisional foundations; the full
-            character rubric will come later.
+            Who answers in Chat, Brainstorm and Ask the story. The brainstorming partners all give
+            the same complete feedback; only their personality differs. Guest stars are AI
+            portrayals of real creators who look through their own lens. Under any answer, “Second
+            opinion” asks someone else.
           </p>
           <label>
-            Current character
+            Character
             <select
-              value={ai.characterId ?? 'john-ai'}
+              value={persona(ai.characterId).id}
               onChange={(e) => set({ characterId: e.target.value })}
             >
-              <optgroup label="Regular characters">
-                {EMBER_CHARACTERS.map((character) => (
-                  <option key={character.id} value={character.id}>{character.name}</option>
+              <optgroup label="Brainstorming partners">
+                {REGULARS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </optgroup>
               <optgroup label="Guest stars (AI portrayals)">
-                {GUEST_PROFILES.map((guest) => (
-                  <option key={guest.id} value={guest.id}>{guest.name}</option>
+                {GUESTS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </optgroup>
             </select>
           </label>
-          <p className="muted small">{GUEST_PROFILES.find((guest) => guest.id === ai.characterId)
-            ? 'A fictional AI portrayal grounded in public interviews and writing. This is not the real person.'
-            : emberCharacter(ai.characterId).foundation}</p>
+          {(() => {
+            const p = persona(ai.characterId)
+            return p.kind === 'guest' ? (
+              <p className="muted small">
+                {p.knownFor}. {guestNotice(p)} An AI portrayal, not the real person.
+              </p>
+            ) : (
+              <p className="muted small">{p.summary}</p>
+            )
+          })()}
           <h3>Updating the world</h3>
           <p className="muted small">When the AI reads a chapter for the world, it should:</p>
           <label className="radio">

@@ -37,7 +37,6 @@ import type { LibraryHost } from './libraryHost'
 import type { SyncService } from './sync/service'
 import type { AiService } from './ai/service'
 import { AiJobs } from './ai/jobs'
-import { RoundtableRunner } from './ai/roundtableRunner'
 import { Attachments } from './ai/attachments'
 import { AutoWorld } from './ai/autoWorld'
 import { docBlocks, segments } from '@shared/voice/script'
@@ -78,8 +77,6 @@ export function registerIpc(
       }
     },
   })
-  // Roundtable continues in the main process if the AI tab is closed or hidden.
-  const roundtable = new RoundtableRunner(host, ai, (status) => broadcast('ai:roundtableStatus', status))
   /** Reads a chapter for the world, as a background job (`auto`: started by itself). */
   const updateWorld = async (
     input: { requestId: string; seriesId: string; volumeId: string; chapterId: string },
@@ -150,15 +147,18 @@ export function registerIpc(
       copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
     'ai:status': (input) => ai.status(input),
-    'ai:roundtableRun': async (input) => {
-      const file = await host.current.readConversation(input.seriesId, input.conversationId)
-      if (!file.roundtable) throw new AppError('invalid-input', 'This is not a Roundtable session.')
-      return roundtable.start(input.seriesId, input.conversationId)
-    },
-    'ai:roundtablePause': (input) => roundtable.pause(input.seriesId, input.conversationId),
-    'ai:roundtableStatus': (input) => roundtable.status(input.seriesId, input.conversationId),
-    'ai:roundtablePrivate': (input) => ai.roundtablePrivate(input),
-    'ai:roundtableTurn': (input) => ai.roundtableTurn(input),
+    'ai:secondOpinion': async (input) =>
+      ai.ask(
+        {
+          ...input,
+          attachments:
+            input.conversationId && input.attachmentIds?.length
+              ? await attachments.texts(input.conversationId, input.attachmentIds)
+              : [],
+        },
+        () => {},
+        (text) => broadcast('ai:progress', { requestId: input.requestId, text }),
+      ),
     'ai:attach': (input) => attachments.add(input.conversationId, input.name, input.data),
     'ai:attachmentsHere': (input) => attachments.here(input.conversationId, input.ids),
     'ai:ask': async (input, event) => {
@@ -180,7 +180,7 @@ export function registerIpc(
           ai.ask(
             {
               ...input,
-              characterId: input.conversation.characterId ?? 'john-ai',
+              characterId: input.conversation.characterId,
               attachments: input.attachmentIds?.length
                 ? await attachments.texts(input.conversation.id, input.attachmentIds)
                 : [],

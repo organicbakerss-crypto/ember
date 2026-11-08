@@ -95,9 +95,11 @@ async function validateIdentity(
   const jwks = await fetchImpl(`${authBase}/.well-known/jwks.json`)
   if (!jwks.ok) throw fail('Couldn’t verify the ChatGPT sign-in (identity keys unavailable).')
   const keys = (await jwks.json()) as { keys?: Jwk[] }
-  const key = keys.keys?.find((item) => item.kid === header.kid && item.kty === 'RSA' && (!item.use || item.use === 'sig'))
+  const key = keys.keys?.find(
+    (item) => item.kid === header.kid && item.kty === 'RSA' && (!item.use || item.use === 'sig'),
+  )
   if (!key) throw fail('Couldn’t verify the ChatGPT sign-in (unknown signing key).')
-  let valid = false
+  let valid: boolean
   try {
     valid = verify(
       'RSA-SHA256',
@@ -113,11 +115,13 @@ async function validateIdentity(
     !valid ||
     claims.iss !== authBase ||
     !(typeof claims.aud === 'string' ? claims.aud === clientId : claims.aud?.includes(clientId)) ||
-    typeof claims.exp !== 'number' || claims.exp <= now ||
+    typeof claims.exp !== 'number' ||
+    claims.exp <= now ||
     (typeof claims.iat === 'number' && claims.iat > now + 60) ||
     !claims.sub ||
     (nonce !== null && claims.nonce !== nonce)
-  ) throw fail('OpenAI identity verification failed. Please sign in again.')
+  )
+    throw fail('OpenAI identity verification failed. Please sign in again.')
   return claims as JwtClaims & { sub: string }
 }
 
@@ -128,25 +132,37 @@ export class ChatGpt {
   private cancelPending: (() => void) | null = null
   private refreshPending: Promise<Login> | null = null
 
-  constructor(private readonly options: {
-    file: string
-    secrets: SecretBox
-    fetchImpl?: typeof fetch
-    authBase?: string
-    answersBase?: string
-  }) {}
+  constructor(
+    private readonly options: {
+      file: string
+      secrets: SecretBox
+      fetchImpl?: typeof fetch
+      authBase?: string
+      answersBase?: string
+    },
+  ) {}
 
-  private get fetch(): typeof fetch { return this.options.fetchImpl ?? fetch }
-  private get authBase(): string { return this.options.authBase ?? AUTH_BASE }
-  private get answersBase(): string { return this.options.answersBase ?? ANSWERS_BASE }
-  private get hostFile(): string { return `${this.options.file}.host-id` }
+  private get fetch(): typeof fetch {
+    return this.options.fetchImpl ?? fetch
+  }
+  private get authBase(): string {
+    return this.options.authBase ?? AUTH_BASE
+  }
+  private get answersBase(): string {
+    return this.options.answersBase ?? ANSWERS_BASE
+  }
+  private get hostFile(): string {
+    return `${this.options.file}.host-id`
+  }
 
   private async host(): Promise<string> {
     if (this.hostId) return this.hostId
     try {
       const stored = (await fs.promises.readFile(this.hostFile, 'utf8')).trim()
       if (/^urn:uuid:[0-9a-f-]{36}$/i.test(stored)) return (this.hostId = stored)
-    } catch { /* first sign-in */ }
+    } catch {
+      /* first sign-in */
+    }
     const id = `urn:uuid:${randomUUID()}`
     await fs.promises.mkdir(join(this.hostFile, '..'), { recursive: true })
     await writeFileAtomic(this.hostFile, id)
@@ -158,12 +174,19 @@ export class ChatGpt {
   private async load(): Promise<Login | null> {
     if (this.login !== undefined) return this.login
     try {
-      const raw = JSON.parse(await fs.promises.readFile(this.options.file, 'utf8')) as { encrypted: boolean; data: string }
+      const raw = JSON.parse(await fs.promises.readFile(this.options.file, 'utf8')) as {
+        encrypted: boolean
+        data: string
+      }
       const text = raw.encrypted ? this.options.secrets.decrypt(raw.data) : raw.data
       const data = JSON.parse(text) as Partial<Login>
       // Old Codex OAuth tokens must NOT be reused for the supported SIWC flow.
-      this.login = typeof data.clientId === 'string' && typeof data.subject === 'string' &&
-        Array.isArray(data.scopes) ? data as Login : null
+      this.login =
+        typeof data.clientId === 'string' &&
+        typeof data.subject === 'string' &&
+        Array.isArray(data.scopes)
+          ? (data as Login)
+          : null
     } catch {
       this.login = null
     }
@@ -179,10 +202,13 @@ export class ChatGpt {
     }
     const encrypted = this.options.secrets.canEncrypt()
     await fs.promises.mkdir(join(this.options.file, '..'), { recursive: true })
-    await writeFileAtomic(this.options.file, JSON.stringify({
-      encrypted,
-      data: encrypted ? this.options.secrets.encrypt(text) : text,
-    }))
+    await writeFileAtomic(
+      this.options.file,
+      JSON.stringify({
+        encrypted,
+        data: encrypted ? this.options.secrets.encrypt(text) : text,
+      }),
+    )
     await fs.promises.chmod(this.options.file, 0o600)
     this.login = login
   }
@@ -200,16 +226,23 @@ export class ChatGpt {
     try {
       const discovery = await this.fetch(`${this.authBase}/.well-known/openid-configuration`)
       if (!discovery.ok) throw Error('Discovery unavailable')
-      const config = await discovery.json() as { revocation_endpoint?: string }
-      if (!config.revocation_endpoint?.startsWith(`${this.authBase}/`)) throw Error('Invalid revocation endpoint')
+      const config = (await discovery.json()) as { revocation_endpoint?: string }
+      if (!config.revocation_endpoint?.startsWith(`${this.authBase}/`))
+        throw Error('Invalid revocation endpoint')
       const response = await this.fetch(config.revocation_endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: form({ token: previous.refresh, token_type_hint: 'refresh_token', client_id: previous.clientId }),
+        body: form({
+          token: previous.refresh,
+          token_type_hint: 'refresh_token',
+          client_id: previous.clientId,
+        }),
       })
       if (!response.ok) throw Error('Revocation refused')
     } catch {
-      throw fail('Signed out locally. Remote token revocation could not be confirmed; you can disconnect Ember in ChatGPT settings.')
+      throw fail(
+        `Signed out locally. Remote token revocation could not be confirmed; you can disconnect ${appConfig.name} in ChatGPT settings.`,
+      )
     }
   }
 
@@ -227,6 +260,8 @@ export class ChatGpt {
 
     const result = await new Promise<{ code: string; clientId: string }>((resolve, reject) => {
       let settled = false
+      // Set once the callback server is listening (below); cleared when it settles.
+      // eslint-disable-next-line prefer-const
       let timer: ReturnType<typeof setTimeout> | undefined
       const done = (err?: Error, value?: { code: string; clientId: string }) => {
         if (settled) return
@@ -247,12 +282,22 @@ export class ChatGpt {
         const error = url.searchParams.get('error')
         const issued = url.searchParams.get('client_id')
         const code = url.searchParams.get('code')
-        if (url.searchParams.get('state') !== state || error || !code ||
-            (registering && (!issued || issued === 'dynamic_agent_client')) ||
-            (!registering && issued && issued !== selectedClient)) {
+        if (
+          url.searchParams.get('state') !== state ||
+          error ||
+          !code ||
+          (registering && (!issued || issued === 'dynamic_agent_client')) ||
+          (!registering && issued && issued !== selectedClient)
+        ) {
           res.writeHead(400, { 'content-type': 'text/html', connection: 'close' })
-          res.end(page('Sign-in not completed', 'Return to Ember and try again.'))
-          done(fail(error ? `ChatGPT sign-in was declined: ${error}` : 'ChatGPT sign-in validation failed.'))
+          res.end(page('Sign-in not completed', `Return to ${appConfig.name} and try again.`))
+          done(
+            fail(
+              error
+                ? `ChatGPT sign-in was declined: ${error}`
+                : 'ChatGPT sign-in validation failed.',
+            ),
+          )
           return
         }
         res.writeHead(200, { 'content-type': 'text/html', connection: 'close' })
@@ -262,7 +307,8 @@ export class ChatGpt {
       this.waiting = server
       this.cancelPending = () => done(fail('ChatGPT sign-in cancelled.'))
       server.once('error', (e: NodeJS.ErrnoException) =>
-        done(fail(`Couldn’t start ChatGPT sign-in: ${e.message}`)))
+        done(fail(`Couldn’t start ChatGPT sign-in: ${e.message}`)),
+      )
       timer = setTimeout(() => done(fail('ChatGPT sign-in timed out.')), timeoutMs)
       server.listen(0, '127.0.0.1', () => {
         const address = server.address()
@@ -289,7 +335,8 @@ export class ChatGpt {
           if (previous?.email) params.set('login_hint', previous.email)
         }
         open(`${this.authBase}/api/accounts/authorize?${params}`).catch((error) =>
-          done(fail(`Couldn’t open ChatGPT sign-in: ${String(error)}`)))
+          done(fail(`Couldn’t open ChatGPT sign-in: ${String(error)}`)),
+        )
       })
     })
 
@@ -305,15 +352,27 @@ export class ChatGpt {
         resource: RESOURCE,
       }),
     })
-    if (!res.ok) throw fail(`ChatGPT declined the authorization exchange (HTTP ${res.status}). Try again.`)
-    const tokens = await res.json() as TokenResponse
+    if (!res.ok)
+      throw fail(`ChatGPT declined the authorization exchange (HTTP ${res.status}). Try again.`)
+    const tokens = (await res.json()) as TokenResponse
     if (!tokens.access_token || !tokens.id_token || !tokens.refresh_token)
       throw fail('ChatGPT did not return complete sign-in credentials.')
-    const identity = await validateIdentity(tokens.id_token, result.clientId, nonce, this.fetch, this.authBase)
+    const identity = await validateIdentity(
+      tokens.id_token,
+      result.clientId,
+      nonce,
+      this.fetch,
+      this.authBase,
+    )
     if (previous?.subject && previous.subject !== identity.sub)
-      throw fail('This sign-in belongs to a different ChatGPT account. The existing registration was not replaced.')
+      throw fail(
+        'This sign-in belongs to a different ChatGPT account. The existing registration was not replaced.',
+      )
     const scopes = tokens.scope?.split(/\s+/).filter(Boolean) ?? []
-    if (!scopes.includes(PERMISSION)) throw fail('ChatGPT plan use was not authorized. Please reconnect and approve the plan-use permission.')
+    if (!scopes.includes(PERMISSION))
+      throw fail(
+        'ChatGPT plan use was not authorized. Please reconnect and approve the plan-use permission.',
+      )
     await this.save({
       clientId: result.clientId,
       subject: identity.sub,
@@ -330,7 +389,9 @@ export class ChatGpt {
     const current = await this.load()
     if (!current?.access) throw fail('Connect your ChatGPT account in Settings → AI.')
     if (!current.scopes.includes(PERMISSION)) {
-      throw fail('ChatGPT plan use was not authorized. Reconnect and allow Ember to use your plan.')
+      throw fail(
+        `ChatGPT plan use was not authorized. Reconnect and allow ${appConfig.name} to use your plan.`,
+      )
     }
     if (current.expires > Date.now() / 1000 + 90) return current
     if (this.refreshPending) return this.refreshPending
@@ -339,27 +400,47 @@ export class ChatGpt {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: form({
-          grant_type: 'refresh_token', client_id: current.clientId,
-          refresh_token: current.refresh, resource: RESOURCE,
+          grant_type: 'refresh_token',
+          client_id: current.clientId,
+          refresh_token: current.refresh,
+          resource: RESOURCE,
         }),
       })
       if (!res.ok) {
         if (res.status === 400 || res.status === 401) {
-          const body = await res.json().catch(() => ({})) as { error?: string }
-          if (['invalid_grant', 'invalid_refresh_token', 'token_expired', 'refresh_token_expired', 'refresh_token_invalidated', 'refresh_token_reused'].includes(body.error ?? '')) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string }
+          if (
+            [
+              'invalid_grant',
+              'invalid_refresh_token',
+              'token_expired',
+              'refresh_token_expired',
+              'refresh_token_invalidated',
+              'refresh_token_reused',
+            ].includes(body.error ?? '')
+          ) {
             await this.save({ ...current, access: '', refresh: '', idToken: '' })
             throw fail('ChatGPT sign-in expired. Reconnect in Settings → AI.')
           }
         }
         throw fail(`Couldn’t renew ChatGPT sign-in (HTTP ${res.status}). Try again.`)
       }
-      const tokens = await res.json() as TokenResponse
-      if (!tokens.access_token || !tokens.refresh_token) throw fail('ChatGPT returned an incomplete token refresh.')
+      const tokens = (await res.json()) as TokenResponse
+      if (!tokens.access_token || !tokens.refresh_token)
+        throw fail('ChatGPT returned an incomplete token refresh.')
       if (tokens.id_token) {
-        const identity = await validateIdentity(tokens.id_token, current.clientId, null, this.fetch, this.authBase)
-        if (identity.sub !== current.subject) throw fail('ChatGPT returned a refreshed token for a different account.')
+        const identity = await validateIdentity(
+          tokens.id_token,
+          current.clientId,
+          null,
+          this.fetch,
+          this.authBase,
+        )
+        if (identity.sub !== current.subject)
+          throw fail('ChatGPT returned a refreshed token for a different account.')
       }
-      const next = { ...current,
+      const next = {
+        ...current,
         access: tokens.access_token,
         refresh: tokens.refresh_token,
         idToken: tokens.id_token ?? current.idToken,
@@ -369,8 +450,11 @@ export class ChatGpt {
       await this.save(next)
       return next
     })()
-    try { return await this.refreshPending }
-    finally { this.refreshPending = null }
+    try {
+      return await this.refreshPending
+    } finally {
+      this.refreshPending = null
+    }
   }
 
   async models(): Promise<string[]> {
@@ -379,7 +463,7 @@ export class ChatGpt {
       headers: { authorization: `Bearer ${login.access}` },
     })
     if (!res.ok) throw fail(`Couldn’t retrieve ChatGPT models (HTTP ${res.status}).`)
-    const data = await res.json() as { models?: { slug: string; visibility?: string }[] }
+    const data = (await res.json()) as { models?: { slug: string; visibility?: string }[] }
     return (data.models ?? []).filter((m) => m.visibility === 'list').map((m) => m.slug)
   }
 
@@ -392,23 +476,32 @@ export class ChatGpt {
     onToken?: (text: string) => void
   }): Promise<string> {
     const limit = idleLimit(input.signal, input.idleMs ?? 120000)
-    try { return await this.stream(input, limit) }
-    catch (error) {
-      if (limit.timedOut) throw fail('ChatGPT stopped responding. Try again or check your plan usage.')
+    try {
+      return await this.stream(input, limit)
+    } catch (error) {
+      if (limit.timedOut)
+        throw fail('ChatGPT stopped responding. Try again or check your plan usage.')
       throw error
-    } finally { limit.done() }
+    } finally {
+      limit.done()
+    }
   }
 
   private async stream(input: Parameters<ChatGpt['chat']>[0], limit: IdleLimit): Promise<string> {
     const login = await this.fresh()
-    const instructions = input.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n')
+    const instructions = input.messages
+      .filter((m) => m.role === 'system')
+      .map((m) => m.content)
+      .join('\n\n')
     const body = {
       model: input.model,
       instructions,
-      input: input.messages.filter((m) => m.role !== 'system').map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
+      input: input.messages
+        .filter((m) => m.role !== 'system')
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
       store: false,
       stream: true,
     }
@@ -432,9 +525,14 @@ export class ChatGpt {
       const raw = await response.text().catch(() => '')
       let diagnostic = raw
       try {
-        const data = JSON.parse(raw) as { detail?: string; error?: { message?: string; code?: string } }
+        const data = JSON.parse(raw) as {
+          detail?: string
+          error?: { message?: string; code?: string }
+        }
         diagnostic = data.error?.message ?? data.detail ?? raw
-      } catch { /* non-JSON response */ }
+      } catch {
+        /* non-JSON response */
+      }
       throw fail(`ChatGPT request failed (HTTP ${response.status}): ${diagnostic.slice(0, 350)}`)
     }
     let result = ''
@@ -442,18 +540,36 @@ export class ChatGpt {
     let completed = false
     const decoder = new TextDecoder()
     const consume = (block: string) => {
-      const data = block.split('\n').filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart()).join('\n')
+      const data = block
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trimStart())
+        .join('\n')
       if (!data || data === '[DONE]') return
-      let event: { type?: string; delta?: string; response?: { error?: { message?: string; code?: string } }; message?: string }
-      try { event = JSON.parse(data) } catch { throw fail('ChatGPT sent an unreadable stream event.') }
+      let event: {
+        type?: string
+        delta?: string
+        response?: { error?: { message?: string; code?: string } }
+        message?: string
+      }
+      try {
+        event = JSON.parse(data)
+      } catch {
+        throw fail('ChatGPT sent an unreadable stream event.')
+      }
       if (event.type === 'response.output_text.delta' && event.delta) {
         result += event.delta
         input.onToken?.(event.delta)
       } else if (event.type === 'response.completed') {
         completed = true
-      } else if (event.type === 'response.failed' || event.type === 'response.incomplete' || event.type === 'error') {
-        throw fail(`ChatGPT response did not complete: ${event.response?.error?.message ?? event.message ?? event.type}`)
+      } else if (
+        event.type === 'response.failed' ||
+        event.type === 'response.incomplete' ||
+        event.type === 'error'
+      ) {
+        throw fail(
+          `ChatGPT response did not complete: ${event.response?.error?.message ?? event.message ?? event.type}`,
+        )
       }
     }
     try {

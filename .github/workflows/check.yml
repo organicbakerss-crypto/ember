@@ -1,11 +1,11 @@
-name: Ember checks
+name: Checks
 
 on:
   push:
   pull_request:
 
 concurrency:
-  group: ember-check-${{ github.ref }}
+  group: check-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
