@@ -19,7 +19,7 @@ const BASE = `You're talking with a writer inside their novel-writing app. They 
 const MODES: Record<AiMode, string> = {
   chat: 'Talk with the writer about their story and their writing.',
   brainstorm:
-    'Brainstorm with the writer: offer several distinct, specific options (names, plot turns, what-ifs) as a short numbered list, each a line or two. Fit them to the story and world shown.',
+    'Brainstorm with the writer: offer distinct, specific options (names, plot turns, what-ifs) that fit the story and world shown, presented in your own way.',
   ask: 'Answer questions about the story using only the text and world notes provided. Quote or point to where the answer comes from. If the answer is not in them, say plainly that you can’t find it rather than guessing.',
 }
 
