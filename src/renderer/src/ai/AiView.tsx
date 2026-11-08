@@ -873,10 +873,7 @@ export function AiView(props: {
       if (!seen.includes(next.id)) {
         const ok = await choose(
           `${next.name} sees your story through their own lens`,
-          [
-            { value: 'use', label: `Use ${next.name}`, primary: true },
-            { value: 'cancel', label: 'Cancel' },
-          ],
+          [{ value: 'use', label: `Use ${next.name}`, primary: true }],
           `${guestNotice(next)} This is an AI portrayal, not the real person.`,
         )
         if (ok !== 'use') return
