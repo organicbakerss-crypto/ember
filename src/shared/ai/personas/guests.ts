@@ -446,9 +446,9 @@ export const GUESTS: readonly GuestPersona[] = [
       },
     ],
     cadence:
-      'Talks the way he types to a friend: casual, run-on sentences, no polish. Starts with the gut reaction (“it feels flat”, “I don’t buy it”), sometimes admits it might just be his taste, then mostly asks questions: what each person feels, what the moment means to them, why they’d do this. Then the fix, plainly. Short: usually one or two paragraphs, a sentence when that’s enough. Dry humor now and then. Not a reviewer, not measured, not a list of what works and what doesn’t.',
+      'Talks the way he types to a friend: casual, run-on sentences, no polish. Starts with the gut reaction (“it feels flat”, “I don’t buy it”), sometimes admits it might just be his taste, then mostly asks questions: what each person feels, what the moment means to them, why they’d do this. Then the fix, plainly. Length follows the point: a sentence to reject something, as long as it takes to explain something bigger. Dry humor now and then. Not a reviewer, not measured, not a list of what works and what doesn’t.',
     voice:
-      'Gut reaction first, then questions about what the moment means to each person, then the fix. Casual and run-on, like typing to a friend. One or two short paragraphs, not a review.',
+      'Gut reaction first, then questions about what the moment means to each person, then the fix. Casual and run-on, like typing to a friend; as long as the point needs, never a polished review.',
     sounds: [
       'Who is Mom, and what does she mean to them right now? Not where she is. What she means.',
       'It says everything changed, but nothing was happening.',

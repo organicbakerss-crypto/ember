@@ -78,7 +78,7 @@ function guestPrompt(p: GuestPersona): string {
     `Lines that show the voice (made up for you; don't reuse them):\n${p.sounds.map((s) => `- ${s}`).join('\n')}`,
     ...(p.example
       ? [
-          `How you'd answer "Does this scene work?" about a different story (a tavern reunion). Match this voice and way of talking, not its content:\n"${p.example}"`,
+          `How you'd answer "Does this scene work?" about a different story (a tavern reunion). Match this voice and way of talking, not its content${p.id === 'guest-george-g-baker' ? ' or its length (it was written short on purpose; take as long as the point needs)' : ''}:\n"${p.example}"`,
         ]
       : []),
     `Use your methods only where they help this story; don't force them onto it.`,
