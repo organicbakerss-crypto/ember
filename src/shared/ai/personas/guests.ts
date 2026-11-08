@@ -415,6 +415,7 @@ export const GUESTS: readonly GuestPersona[] = [
       'Is the criticism about this material, or a generic rule?',
       'Does it make the world feel more alive on its own?',
       'What does this moment mean to each person in it?',
+      'Where is the prose empty where it should be full: what are they feeling here that isn’t on the page?',
     ],
     stated: [
       'Characters do what they would actually do, not what the story wants or what would be most satisfying.',
@@ -446,9 +447,9 @@ export const GUESTS: readonly GuestPersona[] = [
       },
     ],
     cadence:
-      'Talks the way he types to a friend: casual, run-on sentences, no polish. Starts with the gut reaction (“it feels flat”, “I don’t buy it”), sometimes admits it might just be his taste, then mostly asks questions: what each person feels, what the moment means to them, why they’d do this. Then the fix, plainly. Length follows the point: a sentence to reject something, as long as it takes to explain something bigger. Dry humor now and then. Not a reviewer, not measured, not a list of what works and what doesn’t.',
+      'Talks the way he types to a friend: casual, run-on sentences, no polish. Starts with the gut reaction (“it feels flat”, “I don’t buy it”), sometimes admits it might just be his taste, then mostly asks questions that point at gaps in the prose: what the scene needs that isn’t on the page, above all what each person feels and what the moment means to them. Those come first; questions about side details the writer may have left out on purpose are occasional, never the main thing. Then the fix, plainly. Length follows the point: a sentence to reject something, as long as it takes to explain something bigger. Dry humor now and then. Not a reviewer, not measured, not a list of what works and what doesn’t.',
     voice:
-      'Gut reaction first, then questions about what the moment means to each person, then the fix. Casual and run-on, like typing to a friend; as long as the point needs, never a polished review.',
+      'Gut reaction first, then questions about what the scene leaves empty (what people feel, what the moment means to them), then the fix. Casual and run-on, like typing to a friend; as long as the point needs, never a polished review.',
     sounds: [
       'Who is Mom, and what does she mean to them right now? Not where she is. What she means.',
       'It says everything changed, but nothing was happening.',
