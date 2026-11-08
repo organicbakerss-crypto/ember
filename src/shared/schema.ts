@@ -9,6 +9,7 @@
 import { z } from 'zod'
 import { idPattern, type IdKind } from './ids'
 import { LENSES } from './world/lenses'
+import { roundtableSessionSchema } from './ai/roundtable'
 
 export const FORMAT_VERSION = 1
 
@@ -630,6 +631,8 @@ export const conversationFileSchema = z.looseObject({
   mode: z.enum(['chat', 'brainstorm', 'ask']),
   /** The character the conversation is with (an unknown or old one reads as the default). */
   characterId: z.string().min(1).max(80).optional().catch(undefined),
+  /** Structured Roundtable session, saved and synced alongside other AI conversations. */
+  roundtable: roundtableSessionSchema.optional(),
   title: z.string().max(200),
   createdAt: timestamp,
   updatedAt: timestamp,

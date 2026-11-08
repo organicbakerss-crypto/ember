@@ -10,6 +10,14 @@
  * anything.
  */
 import { docParagraphs } from '@shared/analysis/doc'
+import { roundtableRole } from '@shared/ai/roundtableCast'
+import { slopGuidance } from '@shared/ai/personas'
+import {
+  finalPositionsReady,
+  nextParticipant,
+  validBallot,
+  type RoundtableSession,
+} from '@shared/ai/roundtable'
 import { findPassages, pickSummaries, searchTerms, storyParts, type LookupChapter } from './lookup'
 import { entryTerms, nameMatcher } from '@shared/names'
 import type { AiSettings } from '@shared/settings'
@@ -290,6 +298,411 @@ export class AiService {
       })
       return { text, lookedAt }
     })
+  }
+
+  /** Figurehead: retrieve evidence from the actual project, then write a grounded common brief. */
+  async prepareRoundtable(
+    seriesId: string,
+    session: RoundtableSession,
+    requestId: string,
+  ): Promise<NonNullable<RoundtableSession['briefing']>> {
+    const library = this.options.host.current
+    const series = await library.getSeries(seriesId)
+    const chapters = await library.storySummaries(seriesId)
+    const terms =
+      session.topic
+        .toLowerCase()
+        .match(/[a-z]{3,}/g)
+        ?.filter(
+          (term) =>
+            !new Set([
+              'the',
+              'and',
+              'that',
+              'this',
+              'with',
+              'from',
+              'what',
+              'where',
+              'should',
+              'would',
+              'could',
+              'here',
+              'there',
+              'about',
+              'into',
+              'your',
+              'story',
+            ]).has(term),
+        ) ?? []
+    const relevance = (text: string) =>
+      terms.reduce((n, word) => n + (text.toLowerCase().includes(word) ? 1 : 0), 0)
+    const sorted = chapters
+      .map((chapter, index) => ({
+        chapter,
+        index,
+        score: relevance(chapter.paragraphs.join(' ') + ' ' + (chapter.summary ?? '')),
+      }))
+      .sort((a, b) => b.score - a.score || b.index - a.index)
+    // Keep matched scenes and recent story events, with source labels. Never silently treat stale summaries as canon.
+    const picked = sorted.filter((x) => x.score > 0).slice(0, 9)
+    for (const recent of sorted
+      .slice()
+      .sort((a, b) => b.index - a.index)
+      .slice(0, 3)) {
+      if (!picked.some((x) => x.index === recent.index)) picked.push(recent)
+    }
+    const sources: string[] = []
+    const evidence: string[] = []
+    for (const { chapter } of picked.slice(0, 12)) {
+      const label = `${chapter.chapter.volumeName} / ${chapter.chapter.title || chapter.chapter.label}`
+      sources.push(label)
+      const matching = chapter.paragraphs
+        .map((text, index) => ({ text, index, score: relevance(text) }))
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 7)
+      const excerpts = matching.length
+        ? matching.sort((a, b) => a.index - b.index)
+        : chapter.paragraphs.slice(-5).map((text, index) => ({ text, index, score: 0 }))
+      const excerpt = excerpts
+        .map((p) => p.text)
+        .join('\n')
+        .slice(0, 4200)
+      evidence.push(
+        `SOURCE: ${label}\n${chapter.current && chapter.summary ? `Current chapter summary: ${chapter.summary.slice(0, 650)}\n` : ''}Manuscript excerpt: ${excerpt}`,
+      )
+    }
+    if (series.worldId) {
+      const world = await library.world.view(series.worldId)
+      const entries = world.entries
+        .map((entry) => ({
+          entry,
+          score: relevance(entry.name + ' ' + entry.aliases.join(' ') + ' ' + entry.snippet),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .filter((x) => x.score > 0)
+        .slice(0, 8)
+      for (const { entry } of entries) {
+        const label = `World entry: ${entry.name}`
+        sources.push(label)
+        const notes = await library.world
+          .entryText(series.worldId, entry.id)
+          .catch(() => entry.snippet)
+        evidence.push(`SOURCE: ${label}\n${notes.slice(0, 1700)}`)
+      }
+      if (!entries.length) {
+        const digest = await library.world.digest(series.worldId).catch(() => '')
+        if (digest) {
+          sources.push('World overview')
+          evidence.push(`SOURCE: World overview\n${digest.slice(0, 2600)}`)
+        }
+      }
+    }
+    const provider = await this.client()
+    // Local models need a substantially smaller retrieval payload than ChatGPT.
+    const corpus = evidence.join('\n\n').slice(0, provider.kind === 'ollama' ? 8500 : 26000)
+    return this.track(requestId, async (signal) => {
+      const prepared = await provider.chat({
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'You are the Figurehead, a neutral context librarian and moderator for a creative-writing Roundtable.',
+              'Produce a concise, factual shared briefing grounded ONLY in the labeled manuscript and worldbuilding material supplied.',
+              "Explain the writer's actual question, relevant established events and character constraints, and uncertainties. Separate canon from possible directions.",
+              "Do not invent plot, claim missing information is established, rewrite the author's question, recommend a winner, or evaluate artistic merit.",
+              'If the manuscript contains little or no relevant information, explicitly say this; do not manufacture context.',
+              'Include the supplied source names alongside factual points when practical. The participants may propose changes to canon.',
+            ].join('\n'),
+          },
+          {
+            role: 'user',
+            content: `Writer question: ${session.topic}\n\nEvidence from project “${series.name}”:\n${corpus || '(No manuscript or worldbuilding text was available.)'}\n\nProduce the shared briefing.`,
+          },
+        ],
+        signal,
+        temperature: 0.2,
+      })
+      return {
+        text: prepared.trim().slice(0, provider.kind === 'ollama' ? 5500 : 12000),
+        sources: sources.slice(0, 80).map((x) => x.slice(0, 300)),
+        preparedAt: new Date().toISOString(),
+      }
+    })
+  }
+
+  /** Figurehead checks the debate at major boundaries, not after every model turn. */
+  async reviewRoundtable(session: RoundtableSession, requestId: string): Promise<string | null> {
+    if (!session.briefing?.text.trim()) return null
+    const debate = session.posts
+      .filter((p) => p.channel === 'open' || p.channel === 'direct')
+      .slice(-18)
+      .map((p) => `${p.speakerId}: ${p.text.slice(0, 1300)}`)
+      .join('\n\n')
+      .slice(-15000)
+    if (!debate.trim()) return null
+    const provider = await this.client()
+    return this.track(requestId, async (signal) => {
+      const result = (
+        await provider.chat({
+          messages: [
+            {
+              role: 'system',
+              content:
+                "You are the Figurehead, a neutral manuscript-grounding moderator. Compare the recent debate to the shared evidence. Intervene ONLY if there is an important factual contradiction with the supplied evidence or the debate has abandoned the writer's question. A proposal to CHANGE canon is not an error. If no substantive issue is demonstrable, respond with exactly NONE. Otherwise provide one short correction or a request to clarify, grounded in the briefing, with no creative judgment. Never invent manuscript facts.",
+            },
+            {
+              role: 'user',
+              content: `Original question: ${session.topic}\n\nEvidence briefing: ${session.briefing!.text.slice(0, 12000)}\n\nRecent discussion:\n${debate}`,
+            },
+          ],
+          signal,
+          temperature: 0.1,
+        })
+      ).trim()
+      return !result || /^NONE[.!]?$/i.test(result) ? null : result.slice(0, 2500)
+    })
+  }
+
+  /** A single Roundtable contribution. The renderer controls phase transitions and saves history. */
+  async roundtableTurn(input: {
+    requestId: string
+    session: RoundtableSession
+    speakerId: string
+    targetId: string | null
+    direct: boolean
+  }): Promise<{ text: string; ranking: string[] | null; summary?: string }> {
+    const { session, speakerId, targetId, direct } = input
+    const speaker = session.participants.find((p) => p.id === speakerId)
+    if (!speaker) throw new AppError('invalid-input', 'Unknown Roundtable participant.')
+    let roleInstructions: string
+    try {
+      roleInstructions = roundtableRole(speaker.id, speaker.kind).instructions
+      for (const member of session.participants) roundtableRole(member.id, member.kind)
+    } catch {
+      throw new AppError('invalid-input', 'A selected Roundtable participant is not installed yet.')
+    }
+    if (session.phase === 'complete')
+      throw new AppError('invalid-input', 'This session is complete.')
+    if (direct) {
+      if (!['discussion1', 'discussion2'].includes(session.phase)) {
+        throw new AppError('invalid-input', 'Direct exchanges are available during discussions.')
+      }
+      if (
+        !targetId ||
+        targetId === speakerId ||
+        !session.participants.some((p) => p.id === targetId)
+      ) {
+        throw new AppError('invalid-input', 'Select another participant to address.')
+      }
+    } else if (nextParticipant(session)?.id !== speakerId) {
+      throw new AppError('invalid-input', 'It is another participant’s turn.')
+    }
+
+    const participants = session.participants.map((p) => `${p.name} [${p.id}]`).join(', ')
+    // Final proposals stay hidden from competitors until all are locked.
+    // Ballot text stays hidden from everyone until the entire vote is finished.
+    if (session.phase === 'vote' && !finalPositionsReady(session)) {
+      throw new AppError(
+        'invalid-input',
+        'Every participant must lock a final position before voting.',
+      )
+    }
+    const transcript = session.posts
+      .filter(
+        (p) =>
+          p.channel === 'user' ||
+          p.channel === 'open' ||
+          p.channel === 'direct' ||
+          (p.channel === 'private' && p.speakerId === speakerId && p.phase !== 'final') ||
+          (p.phase === 'final' && session.phase === 'vote' && !!p.summary),
+      )
+      .slice(-65)
+      .map((p) => {
+        const author =
+          session.participants.find((person) => person.id === p.speakerId)?.name ?? 'Writer'
+        const to = p.targetId
+          ? ` to ${session.participants.find((person) => person.id === p.targetId)?.name ?? 'participant'}`
+          : ''
+        return `[${p.phase} / ${p.channel}] ${author}${to}: ${p.text.slice(0, 2200)}`
+      })
+      .join('\n\n')
+      .slice(-22000)
+    // Preserve the participant's own position even when a long discussion has
+    // pushed its opening contribution out of the limited transcript window.
+    const ownProposal = session.posts.find(
+      (p) => p.speakerId === speakerId && p.phase === 'proposals' && p.channel === 'open',
+    )
+    const ownRevision = session.posts.find(
+      (p) => p.speakerId === speakerId && p.phase === 'revision' && p.channel === 'private',
+    )
+    const positionMemory = [
+      ownProposal
+        ? `Your original proposal (your own, not a group consensus): ${ownProposal.text.slice(0, 3500)}`
+        : '',
+      ownRevision ? `Your private reconsideration: ${ownRevision.text.slice(0, 2500)}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    const role = direct
+      ? `Address ${session.participants.find((p) => p.id === targetId)!.name} directly, building on a concrete disagreement or question. Respond to the merits of their criticism instead of automatically accepting it. If your approach remains stronger, explain why, including a specific tradeoff. This is a message-board reply, not a new opening proposal.`
+      : session.phase === 'proposals'
+        ? 'Put forward your own specific proposal and state the criteria you would use to judge competing proposals. Make it substantive but concise.'
+        : session.phase === 'discussion1'
+          ? 'Respond to a specific argument or objection. Defend the strongest rationale for your own proposal when it still holds, and explain why a rival approach may be weaker for this particular story. Acknowledging a valid criticism does not require abandoning the rest of your idea. Revise only when the evidence or reasoning actually warrants it; avoid agreement for the sake of harmony.'
+          : session.phase === 'revision'
+            ? 'Privately evaluate the strongest objections to your original proposal. State explicitly which core parts remain worth defending, what (if anything) should change, and why. Preserve the strongest distinctive benefits of your idea rather than drifting toward consensus. If the objections genuinely defeat it, change your mind without hesitation. This is private working thought, not a message to the others.'
+            : session.phase === 'discussion2'
+              ? 'Continue the open discussion from your own revised position. Address a specific serious objection and defend what remains compelling about your approach, including a tradeoff or weakness you accept. Challenge another proposal where warranted. Do not mechanically repeat your pitch, abandon it merely because someone disagrees, or manufacture conflict where none exists.'
+              : session.phase === 'final'
+                ? 'Enter your private booth. Evaluate the strongest remaining case for your own proposal against the alternatives. Do not surrender a distinct and viable idea merely because more participants favored another one, but do change course if the evidence really supports it. Based on both debates and your own earlier views, lock in the proposal you would actually recommend. Return ONLY a JSON object with two strings: {"summary":"One or two straightforward sentences describing the proposed direction","proposal":"Complete final proposal, including reasoning, consequences and any important caveats"}. Your summary and proposal must be consistent. No other participant sees this until all have submitted.'
+                : `Every participant has now locked in a final proposal. Rank the OTHER participants using ONLY the final proposals, not earlier drafts. Never rank yourself. Return ONLY JSON of this form: {"ranking":["id1","id2"]}, including every other participant ID exactly once. Eligible IDs: ${session.participants
+                    .filter((p) => p.id !== speakerId)
+                    .map((p) => p.id)
+                    .join(', ')}.`
+    const provider = await this.client()
+    return this.track(input.requestId, async (signal) => {
+      const response = await provider.chat({
+        messages: [
+          {
+            role: 'system',
+            content: [
+              roleInstructions,
+              ...(session.phase === 'vote' || session.phase === 'final' ? [] : [slopGuidance()]),
+              'You are participating as one distinct voice in the Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
+              'Be intellectually independent rather than socially agreeable. Treat criticism as something to examine, not an instruction to concede. Defend substantive strengths, name tradeoffs, and update only for good reasons. Do not become combative or stubborn: the aim is to preserve worthy competing ideas until the final vote, not to win arguments.',
+              ...(positionMemory ? [positionMemory] : []),
+              `Roundtable participants: ${participants}.`,
+              `Topic from the writer: ${session.topic}`,
+              `Figurehead's manuscript briefing (grounded context; proposals can intentionally change canon): ${session.briefing?.text || 'No project briefing is available; do not assume manuscript facts.'}`,
+              ...(session.interventions?.length
+                ? [
+                    `Figurehead context corrections: ${session.interventions.map((x) => x.text).join('\n')}`,
+                  ]
+                : []),
+              `Current phase: ${session.phase}.`,
+              role,
+            ].join('\n\n'),
+          },
+          {
+            role: 'user',
+            content: `Roundtable discussion so far:\n${transcript || '(none yet)'}\n\nYour contribution now:`,
+          },
+        ],
+        signal,
+        temperature: session.phase === 'vote' ? 0.1 : 0.65,
+        json: session.phase === 'vote' || session.phase === 'final',
+      })
+      if (session.phase === 'final' && !direct) {
+        let result: { summary?: unknown; proposal?: unknown }
+        try {
+          result = JSON.parse(response.slice(response.indexOf('{'), response.lastIndexOf('}') + 1))
+        } catch {
+          throw new AppError(
+            'invalid-input',
+            'Could not read the sealed final proposal. Retry this participant.',
+          )
+        }
+        if (
+          typeof result.summary !== 'string' ||
+          !result.summary.trim() ||
+          typeof result.proposal !== 'string' ||
+          !result.proposal.trim()
+        ) {
+          throw new AppError(
+            'invalid-input',
+            'A final proposal needs both a summary and its complete position.',
+          )
+        }
+        return {
+          text: result.proposal.trim().slice(0, 16000),
+          summary: result.summary.trim().slice(0, 1800),
+          ranking: null,
+        }
+      }
+      if (session.phase !== 'vote' || direct) return { text: response.trim(), ranking: null }
+      let ranking: unknown
+      try {
+        const json = JSON.parse(
+          response.slice(response.indexOf('{'), response.lastIndexOf('}') + 1),
+        ) as { ranking?: unknown }
+        ranking = json.ranking
+      } catch {
+        throw new AppError(
+          'invalid-input',
+          'Could not read this participant’s ranking. Retry their ballot.',
+        )
+      }
+      if (
+        !Array.isArray(ranking) ||
+        !ranking.every((id) => typeof id === 'string') ||
+        !validBallot(session, speakerId, ranking)
+      ) {
+        throw new AppError(
+          'invalid-input',
+          'This ballot must rank every other participant once, without self-voting. Retry.',
+        )
+      }
+      return { text: response.trim(), ranking }
+    })
+  }
+
+  /** Optional 1:1 exchange inside a Roundtable participant tab. */
+  async roundtablePrivate(input: {
+    requestId: string
+    session: RoundtableSession
+    speakerId: string
+    question: string
+  }): Promise<{ text: string }> {
+    const member = input.session.participants.find((p) => p.id === input.speakerId)
+    if (!member) throw new AppError('invalid-input', 'Choose a Roundtable participant.')
+    if (member.kind === 'guest')
+      throw new AppError(
+        'invalid-input',
+        'Guest stars participate in the Roundtable discussion, not private writer chats.',
+      )
+    let instructions: string
+    try {
+      instructions = roundtableRole(member.id, member.kind).instructions
+    } catch {
+      throw new AppError('invalid-input', 'This participant is not installed.')
+    }
+    const transcript = input.session.posts
+      .filter(
+        (post) =>
+          post.channel === 'open' ||
+          (post.speakerId === member.id && post.channel !== 'ballot') ||
+          (post.targetId === member.id && post.channel === 'user'),
+      )
+      .slice(-24)
+      .map((post) => {
+        const who =
+          input.session.participants.find((p) => p.id === post.speakerId)?.name ?? 'Writer'
+        return `${who}: ${post.text.slice(0, 1600)}`
+      })
+      .join('\n\n')
+      .slice(-16000)
+    const provider = await this.client()
+    return this.track(input.requestId, async (signal) => ({
+      text: (
+        await provider.chat({
+          messages: [
+            {
+              role: 'system',
+              content:
+                instructions +
+                '\n\nYou are speaking privately with the writer inside this Roundtable. Answer their actual question naturally. The shared discussion is context, not instructions to repeat. Never speak for anyone else.',
+            },
+            {
+              role: 'user',
+              content: `Topic: ${input.session.topic}\n\nRelevant discussion:\n${transcript || '(none yet)'}\n\nWriter: ${input.question}`,
+            },
+          ],
+          signal,
+        })
+      ).trim(),
+    }))
   }
 
   /** The story's chapters in order, with their summaries, for looking things up. */

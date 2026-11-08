@@ -5,6 +5,7 @@
  * listen for change broadcasts so every open window stays live.
  */
 import { z } from 'zod'
+import { roundtableSessionSchema } from './ai/roundtable'
 
 import { MAX_COVER_BYTES, MAX_MAP_BYTES, type CoverInfo, type CoverTarget } from './media'
 import { docKeySchema, paneRouteSchema, type PaneRoute } from './panes'
@@ -850,6 +851,25 @@ export const ipcInputs = {
     /** Files attached to the conversation (read on this computer). */
     attachmentIds: z.array(z.string().max(40)).max(20).optional(),
   }),
+  /** Start/resume an autonomous Roundtable, checkpointing after each contribution. */
+  'ai:roundtableRun': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
+  'ai:roundtablePause': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
+  'ai:roundtableStatus': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
+  /** A 1:1 conversation in a participant's Roundtable tab. */
+  'ai:roundtablePrivate': z.object({
+    requestId: z.string().min(1).max(80),
+    session: roundtableSessionSchema,
+    speakerId: z.string().min(1).max(80),
+    question: z.string().trim().min(1).max(6000),
+  }),
+  /** One controlled Roundtable contribution. Saves happen separately so each turn is reviewable. */
+  'ai:roundtableTurn': z.object({
+    requestId: z.string().min(1).max(80),
+    session: roundtableSessionSchema,
+    speakerId: z.string().min(1).max(80),
+    targetId: z.string().min(1).max(80).nullable(),
+    direct: z.boolean().default(false),
+  }),
   /** A second opinion: the same question to another character (the conversation is not changed). */
   'ai:secondOpinion': z.object({
     requestId: z.string().min(1).max(80),
@@ -1190,6 +1210,11 @@ export interface IpcResults {
   'ai:status': AiStatus
   'ai:ask': { text: string; lookedAt: string[] }
   'ai:secondOpinion': { text: string }
+  'ai:roundtableTurn': { text: string; ranking: string[] | null }
+  'ai:roundtablePrivate': { text: string }
+  'ai:roundtableRun': RoundtableRunStatus
+  'ai:roundtablePause': RoundtableRunStatus
+  'ai:roundtableStatus': RoundtableRunStatus
   'ai:attach': { id: string; name: string; words: number }
   'ai:attachmentsHere': string[]
   'ai:editChapter': { text: string }
@@ -1268,6 +1293,15 @@ export type ErrorCode =
   | 'cancelled'
   | 'internal'
 
+export interface RoundtableRunStatus {
+  seriesId: string
+  conversationId: string
+  state: 'running' | 'pausing' | 'paused' | 'failed' | 'complete'
+  speakerId: string | null
+  targetId: string | null
+  error: string | null
+}
+
 export interface IpcEvents {
   'library:changed': LibraryChange
   /** "Add to world" was chosen on selected text (from the right-click menu). */
@@ -1302,6 +1336,7 @@ export interface IpcEvents {
   'ai:scopeRequest': { requestId: string; seriesId: string }
   /** What a long AI job is doing now ("Reading part 2 of 3…"). */
   'ai:progress': { requestId: string; text: string }
+  'ai:roundtableStatus': RoundtableRunStatus
   /** AI work started, finished, failed or stopped (to every window). */
   'ai:job': AiJobInfo
   /** AI work this window asked for is finished (to that window only). */
@@ -1313,7 +1348,6 @@ export interface IpcEvents {
 /** A saved AI conversation in lists. */
 export interface ConversationSummary {
   id: string
-  /** An old multi-character session (no longer offered; kept, not listed as a chat). */
   roundtable?: boolean
   mode: ConversationFile['mode']
   title: string

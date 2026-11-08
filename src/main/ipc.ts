@@ -38,6 +38,7 @@ import type { SyncService } from './sync/service'
 import type { AiService } from './ai/service'
 import { AiJobs } from './ai/jobs'
 import { Attachments } from './ai/attachments'
+import { RoundtableRunner } from './ai/roundtableRunner'
 import { AutoWorld } from './ai/autoWorld'
 import { docBlocks, segments } from '@shared/voice/script'
 import type { VoiceService } from './voice/service'
@@ -60,6 +61,10 @@ export function registerIpc(
 ): { libraryChanged: (change: LibraryChange) => void } {
   const { manager, leases } = windows
   // Asking the other windows what they show (for a torn-off AI window).
+  // Roundtable continues in the main process if the AI tab is closed or hidden.
+  const roundtable = new RoundtableRunner(host, ai, (status) =>
+    broadcast('ai:roundtableStatus', status),
+  )
   const attachments = new Attachments(() => join(host.current.paths.localDir, 'ai-attachments'))
   const scopeAsks = new Map<string, (scope: IpcResult<'ai:scope'>) => void>()
   let scopeAskId = 0
@@ -147,6 +152,15 @@ export function registerIpc(
       copyForRoyalRoad(host.current, { ...input, settings: (await settings.read()).export }),
     'import:docx': (_input, event) => readDocx(BrowserWindow.fromWebContents(event.sender)),
     'ai:status': (input) => ai.status(input),
+    'ai:roundtableRun': async (input) => {
+      const file = await host.current.readConversation(input.seriesId, input.conversationId)
+      if (!file.roundtable) throw new AppError('invalid-input', 'This is not a Roundtable session.')
+      return roundtable.start(input.seriesId, input.conversationId)
+    },
+    'ai:roundtablePause': (input) => roundtable.pause(input.seriesId, input.conversationId),
+    'ai:roundtableStatus': (input) => roundtable.status(input.seriesId, input.conversationId),
+    'ai:roundtablePrivate': (input) => ai.roundtablePrivate(input),
+    'ai:roundtableTurn': (input) => ai.roundtableTurn(input),
     'ai:secondOpinion': async (input) =>
       ai.ask(
         {

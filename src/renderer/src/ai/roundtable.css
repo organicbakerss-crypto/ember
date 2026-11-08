@@ -1,0 +1,405 @@
+/* The AI's ordinary two-column chat layout must not constrain Roundtable. */
+.ai-view.ai-roundtable-view {
+  display: flex;
+  grid-template-columns: none;
+  width: 100%;
+  min-width: 0;
+}
+.ai-roundtable-view .rt-root {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+/* Roundtable inherits the app's theme palette. */
+.rt-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--text);
+  background: var(--bg);
+}
+.rt-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.65rem 1rem;
+}
+.rt-header strong {
+  font-size: 1rem;
+}
+.rt-error {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.rt-setup {
+  overflow: auto;
+  padding: 1.5rem;
+  max-width: 850px;
+  width: 100%;
+  margin: 0 auto;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+.rt-setup h3 {
+  margin: 0;
+}
+.rt-setup label {
+  display: grid;
+  gap: 0.4rem;
+}
+.rt-setup textarea,
+.rt-writer textarea {
+  resize: vertical;
+  width: 100%;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem;
+  font: inherit;
+}
+.rt-picker {
+  display: grid;
+  gap: 0.7rem;
+}
+.rt-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 0.45rem;
+}
+.rt-choice {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem !important;
+  padding: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  cursor: pointer;
+}
+.rt-choice input {
+  width: auto;
+}
+.rt-setup > button {
+  justify-self: start;
+}
+.rt-saved {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  display: grid;
+  gap: 0.45rem;
+}
+.rt-saved-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0;
+}
+.rt-saved-row .link {
+  text-align: left;
+}
+.rt-workspace {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.rt-topic {
+  padding: 0.9rem 1rem;
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.rt-topic strong {
+  font-weight: 600;
+}
+.rt-tabs {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.3rem 1rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.rt-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+}
+.rt-tabs button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 -2px var(--accent);
+}
+.rt-feed {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.rt-feed > p {
+  margin: 1rem 0;
+}
+.rt-post {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 9px;
+  padding: 0.85rem 1rem;
+  overflow-wrap: anywhere;
+}
+.rt-post-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+.rt-post-head span:last-child {
+  margin-left: auto;
+}
+.rt-body {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+.rt-post ol {
+  margin: 0.6rem 0 0.2rem;
+}
+.rt-writer {
+  margin-top: auto;
+  display: grid;
+  justify-items: end;
+  gap: 0.5rem;
+  padding-top: 1rem;
+}
+.rt-direct {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.8rem;
+  background: var(--surface);
+  border-radius: 8px;
+}
+.rt-direct select {
+  width: auto;
+  flex: 1;
+  min-width: 120px;
+}
+.rt-footer {
+  border-top: 1px solid var(--border);
+  padding: 0.6rem 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.rt-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.rt-private {
+  font-size: 0.85rem;
+  max-height: 180px;
+  overflow: auto;
+}
+.rt-private summary {
+  cursor: pointer;
+  color: var(--muted);
+  margin: 0.35rem 0;
+}
+.rt-private .rt-post {
+  margin: 0.35rem 0;
+}
+.rt-private p {
+  white-space: pre-wrap;
+}
+.rt-network {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+}
+.rt-network svg {
+  width: min(100%, 650px);
+  max-height: 62vh;
+  overflow: visible;
+}
+.rt-line {
+  stroke: var(--border);
+  stroke-width: 1.8;
+}
+.rt-line.between {
+  stroke-width: 0.7;
+  opacity: 0.55;
+}
+.rt-line.active {
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+.rt-center {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.rt-center-text {
+  fill: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+}
+.rt-node circle {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 2.5;
+}
+.rt-node text {
+  fill: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.rt-node.active circle {
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+.rt-result {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 620px) {
+  .rt-setup {
+    padding: 0.85rem;
+  }
+  .rt-feed {
+    padding: 0.6rem;
+  }
+  .rt-topic {
+    padding: 0.6rem;
+  }
+  .rt-direct select {
+    flex-basis: 100%;
+  }
+}
+
+.rt-topic {
+  padding: 1rem 1.4rem;
+}
+.rt-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+.rt-tab-divider {
+  border-left: 1px solid var(--border);
+  margin: 0 0.45rem;
+  align-self: stretch;
+}
+.rt-feed {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem clamp(0.75rem, 2vw, 2rem);
+}
+.rt-post {
+  padding: 1rem 1.25rem;
+}
+.rt-body {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+.rt-running {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.rt-line.direct {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  opacity: 0.8;
+}
+.rt-network {
+  width: 100%;
+}
+.rt-private-chat {
+  margin-top: auto;
+}
+
+/* Figurehead is a distinct non-voting inner-circle role. */
+.rt-figurehead {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2.5px;
+}
+.rt-figurehead.active {
+  stroke-width: 5px;
+}
+.rt-figurehead-text {
+  fill: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+  pointer-events: none;
+}
+.rt-context {
+  max-width: 780px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  margin: 0 auto;
+}
+.rt-context summary,
+.rt-result-proposal summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.rt-context .rt-body {
+  white-space: pre-wrap;
+  margin: 0.75rem 0;
+}
+.rt-result-proposal {
+  display: grid;
+  gap: 0.65rem;
+}
+.rt-result-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.rt-result-summary {
+  margin: 0;
+  line-height: 1.55;
+}
+.rt-result-proposal details {
+  border-top: 1px solid var(--border);
+  padding-top: 0.65rem;
+}
+.rt-result-proposal details .rt-body {
+  padding-top: 0.65rem;
+}
+.rt-body > *:first-child {
+  margin-top: 0;
+}
+.rt-body > *:last-child {
+  margin-bottom: 0;
+}

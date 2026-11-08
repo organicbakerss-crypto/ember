@@ -13,6 +13,7 @@ import {
   persona,
 } from '@shared/ai/personas'
 import { useOverlays } from '../components/overlays'
+import { RoundtableView } from './RoundtableView'
 import { loadLocal, saveLocal } from '../storage'
 import { api, describeError, useIpcEvent } from '../api'
 import { formatWhen } from '../components/TrashPage'
@@ -142,12 +143,18 @@ export function AiView(props: {
   onRoute?: (route: PaneRoute) => void
   /** Opens the story's world at its inbox (after it was updated). */
   onOpenInbox?: (worldId: string) => void
+  /** Controlled by Home when the Roundtable takes over the full AI workspace. */
+  roundtableActive?: boolean
+  onRoundtableChange?: (active: boolean) => void
 }) {
   const { seriesId } = props
   const { settings, update } = useSettings()
   const provider = settings.ai.provider
   const [mode, setMode] = useState<Mode>('chat')
   const { choose, openMenu } = useOverlays()
+  const [localRoundtableOpen, setLocalRoundtableOpen] = useState(false)
+  const roundtableOpen = props.onRoundtableChange ? !!props.roundtableActive : localRoundtableOpen
+  const setRoundtableOpen = props.onRoundtableChange ?? setLocalRoundtableOpen
   const [threads, setThreads] = useState<Record<Mode, Thread>>({
     chat: empty(),
     brainstorm: empty(),
@@ -984,6 +991,14 @@ export function AiView(props: {
     </aside>
   )
 
+  if (roundtableOpen) {
+    return (
+      <div className="ai-view ai-roundtable-view">
+        <RoundtableView seriesId={seriesId} onBack={() => setRoundtableOpen(false)} />
+      </div>
+    )
+  }
+
   return (
     <div className="ai-view" ref={root}>
       {history}
@@ -1012,6 +1027,14 @@ export function AiView(props: {
               </button>
             ))}
           </div>
+          <button
+            className="link small"
+            onClick={() => setRoundtableOpen(true)}
+            disabled={!!busy || !!worldJob}
+            title="Several characters discuss one question about your story"
+          >
+            Roundtable
+          </button>
           <span className="status-spacer" />
           <select
             aria-label="Current AI character"
