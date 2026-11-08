@@ -40,9 +40,24 @@ export function QuestionFlow(props: {
   }
   return (
     <div className="qa">
-      {at === 0 && set.intro && <p className="qa-intro">{set.intro}</p>}
+      {at === 0 && set.intro && <p className="qa-intro small">{set.intro}</p>}
       <div className="qa-count small muted">
-        Question {at + 1} of {total}
+        <span>
+          Question {at + 1} of {total}
+        </span>
+        <span className="status-spacer" />
+        <button type="button" className="link" disabled={props.disabled} onClick={() => give(null)}>
+          Skip
+        </button>
+        <button
+          type="button"
+          className="link"
+          disabled={props.disabled}
+          title="Stop here and get the summary"
+          onClick={props.onStop}
+        >
+          That’s enough
+        </button>
       </div>
       <p className="qa-q">{q.q}</p>
       {q.options && (
@@ -84,29 +99,49 @@ export function QuestionFlow(props: {
           }}
         />
         <div className="row">
-          <button type="submit" disabled={props.disabled || !own.trim()}>
-            Answer
-          </button>
-          <button
-            type="button"
-            className="link"
-            disabled={props.disabled}
-            onClick={() => give(null)}
-          >
-            Skip
-          </button>
           <span className="status-spacer" />
-          <button
-            type="button"
-            className="link"
-            disabled={props.disabled}
-            title="Stop here and get the summary"
-            onClick={props.onStop}
-          >
-            That’s enough
+          <button type="submit" className="primary" disabled={props.disabled || !own.trim()}>
+            Answer
           </button>
         </div>
       </form>
     </div>
+  )
+}
+
+/**
+ * In the conversation: a short line while the questions are open (they're
+ * answered in the box below), then a record of the answers that opens.
+ */
+export function QuestionRecord(props: { set: QuestionSet; progress?: QuestionProgress }) {
+  const total = props.set.questions.length
+  const answers = props.progress?.answers ?? []
+  const finished = !!props.progress?.done || answers.length >= total
+  if (!finished) {
+    return (
+      <p className="qa-line small muted">
+        {total === 1 ? 'A question' : `${total} questions`}: answer below
+        {answers.length ? ` (${answers.length} done)` : ''}.
+      </p>
+    )
+  }
+  const answered = answers.filter((a) => a !== null).length
+  return (
+    <details className="qa-record small">
+      <summary className="muted">
+        {answered} of {total} questions answered{answers.length < total ? ', then stopped' : ''}
+      </summary>
+      <ol>
+        {props.set.questions.map((q, i) =>
+          i < answers.length ? (
+            <li key={i}>
+              <span className="muted">{q.q}</span>
+              <br />
+              {answers[i] ?? <em className="muted">skipped</em>}
+            </li>
+          ) : null,
+        )}
+      </ol>
+    </details>
   )
 }

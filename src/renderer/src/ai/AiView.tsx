@@ -14,7 +14,7 @@ import {
 } from '@shared/ai/personas'
 import { useOverlays } from '../components/overlays'
 import { RoundtableView } from './RoundtableView'
-import { QuestionFlow, type QuestionProgress } from './QuestionFlow'
+import { QuestionFlow, QuestionRecord, type QuestionProgress } from './QuestionFlow'
 import { answersMessage, findQuestions } from '@shared/ai/questions'
 import { loadLocal, saveLocal } from '../storage'
 import { api, describeError, useIpcEvent } from '../api'
@@ -949,6 +949,22 @@ export function AiView(props: {
     }
   }
 
+  /** The questions waiting for answers (the latest unfinished set), shown in place of the message box. */
+  const lastIndex = messages.length - 1
+  const asking = (() => {
+    if (busy && busy.mode === mode) return null
+    for (let j = lastIndex; j >= 0; j--) {
+      const m = messages[j]!
+      if (m.role !== 'assistant') continue
+      const found = findQuestions(m.content)
+      if (!found) return null
+      const progress = m.qa ?? { answers: [], done: false }
+      if (progress.done || progress.answers.length >= found.set.questions.length) return null
+      return { index: j, set: found.set, progress }
+    }
+    return null
+  })()
+
   /** An answer to the next question in message `i` (null: skipped); the last one sends them all. */
   const answerQuestion = (i: number, answer: string | null) => {
     const current = threads[mode]
@@ -1166,13 +1182,7 @@ export function AiView(props: {
                       return (
                         <>
                           {found.before && <Blocks blocks={parse(found.before)} />}
-                          <QuestionFlow
-                            set={found.set}
-                            progress={m.qa ?? { answers: [], done: false }}
-                            disabled={!!busy || !!worldJob}
-                            onAnswer={(a) => answerQuestion(i, a)}
-                            onStop={() => stopQuestions(i)}
-                          />
+                          <QuestionRecord set={found.set} progress={m.qa} />
                           {found.after && <Blocks blocks={parse(found.after)} />}
                         </>
                       )
@@ -1266,172 +1276,186 @@ export function AiView(props: {
           </button>
         )}
 
-        <form
-          className="ai-input ai-column"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void send(draft)
-          }}
-        >
-          {error && <p className="error small">{error}</p>}
-          {quote && (
-            <div className="ai-quote small">
-              <blockquote>{quote}</blockquote>
-              <button
-                type="button"
-                className="icon"
-                aria-label="Don’t reply to this"
-                onClick={() => setQuote(null)}
-              >
-                ✕
-              </button>
-            </div>
-          )}
-          {!editMode && (
-            <div className="ai-quick small" aria-label="One-click prompts">
-              {[
-                ...QUICK,
-                ...settings.ai.prompts.map((text) => ({
-                  label: text.length > 28 ? `${text.slice(0, 26)}…` : text,
-                  mode,
-                  text,
-                })),
-              ].map((q) => (
-                <button
-                  key={q.label + q.text}
-                  type="button"
-                  className="ai-quick-button"
-                  title={q.text}
-                  disabled={!!busy || !!worldJob}
-                  onClick={() => void send(q.text, { mode: q.mode })}
-                >
-                  {q.label}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="ai-scope small">
-            <span className="ai-chip" title="What the AI reads with your message">
-              {chip}
-            </span>
-            {!editMode && (
-              <label className="ai-whole">
-                Reads
-                <select
-                  aria-label="What the AI reads"
-                  value={reach}
-                  onChange={(e) => setReach(e.target.value as typeof reach)}
-                >
-                  <option value="here">Selection or screen</option>
-                  <option value="chapter">Whole chapter</option>
-                  <option value="story">Whole story (summaries)</option>
-                  <option value="full">Whole story, word for word</option>
-                </select>
-              </label>
-            )}
-            <label
-              className="ai-whole ai-edit-toggle"
-              title={
-                local
-                  ? 'Let the AI change the open chapter as you ask (you see every change after, and can undo it)'
-                  : 'Works when the AI is beside the page'
-              }
-            >
-              <input
-                type="checkbox"
-                checked={editMode}
-                disabled={!local}
-                onChange={(e) => setEditMode(e.target.checked)}
-              />
-              Edit chapter
-            </label>
+        {asking ? (
+          <div className="ai-input ai-column ai-asking">
+            <QuestionFlow
+              set={asking.set}
+              progress={asking.progress}
+              disabled={!!busy || !!worldJob}
+              onAnswer={(a) => answerQuestion(asking.index, a)}
+              onStop={() => stopQuestions(asking.index)}
+            />
           </div>
-          {(threads[mode].attachments?.length ?? 0) > 0 && (
-            <div className="ai-attachments small">
-              {threads[mode].attachments!.map((a) => (
-                <span
-                  key={a.id}
-                  className={`ai-attachment ${missing.has(a.id) ? 'missing' : ''}`}
-                  title={
-                    missing.has(a.id)
-                      ? 'Attached on another computer: the AI can’t read it here'
-                      : `~${a.words.toLocaleString()} words, kept on this computer`
+        ) : (
+          <form
+            className="ai-input ai-column"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void send(draft)
+            }}
+          >
+            {error && <p className="error small">{error}</p>}
+            {quote && (
+              <div className="ai-quote small">
+                <blockquote>{quote}</blockquote>
+                <button
+                  type="button"
+                  className="icon"
+                  aria-label="Don’t reply to this"
+                  onClick={() => setQuote(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            {!editMode && (
+              <div className="ai-quick small" aria-label="One-click prompts">
+                {[
+                  ...QUICK,
+                  ...settings.ai.prompts.map((text) => ({
+                    label: text.length > 28 ? `${text.slice(0, 26)}…` : text,
+                    mode,
+                    text,
+                  })),
+                ].map((q) => (
+                  <button
+                    key={q.label + q.text}
+                    type="button"
+                    className="ai-quick-button"
+                    title={q.text}
+                    disabled={!!busy || !!worldJob}
+                    onClick={() => void send(q.text, { mode: q.mode })}
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="ai-scope small">
+              <span className="ai-chip" title="What the AI reads with your message">
+                {chip}
+              </span>
+              {!editMode && (
+                <label className="ai-whole">
+                  Reads
+                  <select
+                    aria-label="What the AI reads"
+                    value={reach}
+                    onChange={(e) => setReach(e.target.value as typeof reach)}
+                  >
+                    <option value="here">Selection or screen</option>
+                    <option value="chapter">Whole chapter</option>
+                    <option value="story">Whole story (summaries)</option>
+                    <option value="full">Whole story, word for word</option>
+                  </select>
+                </label>
+              )}
+              <label
+                className="ai-whole ai-edit-toggle"
+                title={
+                  local
+                    ? 'Let the AI change the open chapter as you ask (you see every change after, and can undo it)'
+                    : 'Works when the AI is beside the page'
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={editMode}
+                  disabled={!local}
+                  onChange={(e) => setEditMode(e.target.checked)}
+                />
+                Edit chapter
+              </label>
+            </div>
+            {(threads[mode].attachments?.length ?? 0) > 0 && (
+              <div className="ai-attachments small">
+                {threads[mode].attachments!.map((a) => (
+                  <span
+                    key={a.id}
+                    className={`ai-attachment ${missing.has(a.id) ? 'missing' : ''}`}
+                    title={
+                      missing.has(a.id)
+                        ? 'Attached on another computer: the AI can’t read it here'
+                        : `~${a.words.toLocaleString()} words, kept on this computer`
+                    }
+                  >
+                    📎 {a.name}
+                    <button
+                      aria-label={`Remove ${a.name}`}
+                      type="button"
+                      onClick={() => detach(a.id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <textarea
+              ref={input}
+              aria-label="Message to the AI"
+              placeholder={
+                editMode
+                  ? 'What should change? e.g. “fix the spelling and grammar”, or “add the scene above where they reach the harbour”'
+                  : quote
+                    ? 'Reply to that part…'
+                    : mode === 'ask'
+                      ? 'Ask about your story…'
+                      : 'Message…'
+              }
+              value={draft}
+              rows={3}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  void send(draft)
+                }
+              }}
+            />
+            <div className="row">
+              <span
+                className="muted small"
+                title="Nothing in your chapter changes unless Edit chapter is ticked. Conversations are saved with this story."
+              >
+                {provider === 'chatgpt' ? 'ChatGPT' : 'Ollama'}
+              </span>
+              {!editMode && (
+                <label
+                  className="link ai-attach"
+                  title="Attach a file (.txt, .md, .docx): the AI reads it with this conversation. The file stays on this computer."
+                >
+                  📎 Attach
+                  <input
+                    type="file"
+                    multiple
+                    hidden
+                    accept=".txt,.md,.markdown,.docx,.html,.htm,.json,.csv"
+                    onChange={(e) => {
+                      void attach(e.target.files)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              )}
+              <span className="status-spacer" />
+              {busy || worldJob ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void api.invoke('ai:cancel', { requestId: (busy ?? worldJob)!.id })
                   }
                 >
-                  📎 {a.name}
-                  <button
-                    aria-label={`Remove ${a.name}`}
-                    type="button"
-                    onClick={() => detach(a.id)}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
+                  Stop
+                </button>
+              ) : (
+                <button className="primary" type="submit" disabled={!draft.trim()}>
+                  {editMode ? 'Edit chapter' : 'Send'}
+                </button>
+              )}
             </div>
-          )}
-          <textarea
-            ref={input}
-            aria-label="Message to the AI"
-            placeholder={
-              editMode
-                ? 'What should change? e.g. “fix the spelling and grammar”, or “add the scene above where they reach the harbour”'
-                : quote
-                  ? 'Reply to that part…'
-                  : mode === 'ask'
-                    ? 'Ask about your story…'
-                    : 'Message…'
-            }
-            value={draft}
-            rows={3}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                void send(draft)
-              }
-            }}
-          />
-          <div className="row">
-            <span
-              className="muted small"
-              title="Nothing in your chapter changes unless Edit chapter is ticked. Conversations are saved with this story."
-            >
-              {provider === 'chatgpt' ? 'ChatGPT' : 'Ollama'}
-            </span>
-            {!editMode && (
-              <label
-                className="link ai-attach"
-                title="Attach a file (.txt, .md, .docx): the AI reads it with this conversation. The file stays on this computer."
-              >
-                📎 Attach
-                <input
-                  type="file"
-                  multiple
-                  hidden
-                  accept=".txt,.md,.markdown,.docx,.html,.htm,.json,.csv"
-                  onChange={(e) => {
-                    void attach(e.target.files)
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-            )}
-            <span className="status-spacer" />
-            {busy || worldJob ? (
-              <button
-                type="button"
-                onClick={() => void api.invoke('ai:cancel', { requestId: (busy ?? worldJob)!.id })}
-              >
-                Stop
-              </button>
-            ) : (
-              <button className="primary" type="submit" disabled={!draft.trim()}>
-                {editMode ? 'Edit chapter' : 'Send'}
-              </button>
-            )}
-          </div>
-        </form>
+          </form>
+        )}
       </section>
       {compare && (
         <CompareDialog
