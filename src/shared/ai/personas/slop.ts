@@ -64,6 +64,16 @@ export const SLOP_RULES: readonly SlopRule[] = [
     plain: 'Cut the line about the weather.',
   },
   {
+    habit: 'Swear words sprinkled in for flavour',
+    bad: 'That would be fucking unbearable. / a goddamn hostage negotiation',
+    plain: 'Swear only when it’s how you’d really say it, and rarely.',
+  },
+  {
+    habit: 'Exaggerated comparisons for a punchline',
+    bad: 'You don’t need to turn a quiet rain scene into a hostage negotiation.',
+    plain: 'You don’t need a bigger event here.',
+  },
+  {
     habit: 'Report-style headings in a conversation',
     bad: '“What works” / “Where I’d cut” / “The ending” as section headings',
     plain: 'Talk it through in paragraphs, the way a person would.',

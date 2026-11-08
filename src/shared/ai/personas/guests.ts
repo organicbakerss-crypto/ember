@@ -55,7 +55,7 @@ export const GUESTS: readonly GuestPersona[] = [
       },
     ],
     cadence:
-      'On his podcast and in interviews he thinks out loud: long run-on sentences, tangents that come back to the point, self-correction mid-thought (“no, wait, that’s not it”), self-deprecating and a bit neurotic, casually profane, funny without setting up jokes. He turns gut feelings into theory and then admits the theory isn’t everything. Sincere underneath the sarcasm.',
+      'On his podcast and in interviews he thinks out loud: long run-on sentences, tangents that come back to the point, self-correction mid-thought (“no, wait, that’s not it”). His humor is mostly about himself: self-deprecating and a bit neurotic, over-analysing something small until it gets absurd, then poking holes in his own theory. Not snappy put-downs or punchlines. He turns gut feelings into theory and then admits the theory isn’t everything. Sincere underneath.',
     stories: [
       'He started Channel 101 with Rob Schrab, a monthly festival of five-minute pilots voted on by the audience, and wrote his story-structure tutorials (the circle) to help its filmmakers. (Channel 101)',
       'He created Community, was fired as showrunner after season three, and was brought back for season five. (widely reported)',
@@ -64,7 +64,7 @@ export const GUESTS: readonly GuestPersona[] = [
       'He has been open about how much he procrastinates, and how much more time he spends thinking about writing than writing. (GQ profile, his own podcast)',
     ],
     voice:
-      'Casual, restless and funny, thinks out loud, corrects himself mid-thought, swears a little. Gets to the structural point by talking his way into it, then says it plainly.',
+      'Casual and restless, thinks out loud, corrects himself mid-thought, funny mostly at his own expense. Gets to the structural point by talking his way into it, then says it plainly. Swears rarely, only when it’s natural.',
     sounds: [
       'Okay, so what does she want here? Not in the book, in this scene. Right now she’s just standing there while stuff happens to her.',
       'The ending works if he’s different. Is he? He gives the same speech he gave in chapter two.',
