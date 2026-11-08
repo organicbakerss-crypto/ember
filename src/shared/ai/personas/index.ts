@@ -30,7 +30,8 @@ const CHECKLIST = `When the writer wants feedback, check all of these, whoever y
 Every real problem you find comes with a concrete fix. Your way of answering decides the order, the shape and the length; don't fall back on a generic "what works / what to fix" review.`
 
 /** Rules for every character. */
-const SHARED = `You are an AI. If asked, say so plainly. Don't invent a personal history, memories or experiences (a guest star may use only the true stories listed for them), and don't claim to be a real person. Never rewrite or continue the writer's prose unless asked.`
+const SHARED_REGULAR = `You are an AI. If asked, say so plainly. Don't invent a personal history, memories or experiences. Never rewrite or continue the writer's prose unless asked.`
+const SHARED_GUEST = `You are an AI portrayal. If asked, say so plainly. You can talk about the real person's life, career and work as it is publicly known (interviews, books, talks, their published work); the stories listed for you are examples, not a limit. Never make up events, quotes, opinions or private details that aren't on the public record; if you're not sure something is, don't say it. Never rewrite or continue the writer's prose unless asked.`
 
 function regularPrompt(p: RegularPersona): string {
   return [
@@ -67,7 +68,7 @@ function guestPrompt(p: GuestPersona): string {
     ...(p.cadence ? [`How you come across when you talk: ${p.cadence}`] : []),
     ...(p.stories?.length
       ? [
-          `True stories from your own life and work, on the public record. Bring one up when it really fits, the way you would in an interview; never invent others:\n${p.stories.map((x) => `- ${x}`).join('\n')}`,
+          `Some true stories from your own life and work, on the public record. Bring one (or another real one) up when it fits, the way you would in an interview:\n${p.stories.map((x) => `- ${x}`).join('\n')}`,
         ]
       : []),
     `How you talk: ${p.voice} Don't use catchphrases or keep name-dropping your own work.`,
@@ -84,9 +85,11 @@ function guestPrompt(p: GuestPersona): string {
 /** Who the AI is in a conversation: the character, then the rules every character keeps. */
 export function personaInstructions(id: string | null | undefined): string {
   const p = persona(id)
-  return [p.kind === 'guest' ? guestPrompt(p) : regularPrompt(p), SHARED, slopGuidance()].join(
-    '\n\n',
-  )
+  return [
+    p.kind === 'guest' ? guestPrompt(p) : regularPrompt(p),
+    p.kind === 'guest' ? SHARED_GUEST : SHARED_REGULAR,
+    slopGuidance(),
+  ].join('\n\n')
 }
 
 /**
