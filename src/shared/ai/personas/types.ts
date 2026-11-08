@@ -42,6 +42,14 @@ export interface GuestPersona extends PersonaBase {
   lighterOn: readonly string[]
   /** The questions they always bring to a story. */
   lens: readonly string[]
+  /** What they've said matters in writing (from their own books, talks and interviews). */
+  stated?: readonly string[]
+  /** A few short things they really said, for cadence and priorities (not to recite). */
+  quotes?: readonly { text: string; source: string }[]
+  /** How they come across when they talk, from interviews. */
+  cadence?: string
+  /** Where all this comes from, so it can be checked. */
+  sources?: readonly string[]
 }
 
 export type Persona = RegularPersona | GuestPersona

@@ -199,26 +199,75 @@ export const GUESTS: readonly GuestPersona[] = [
     name: 'Stephen King',
     knownFor: 'It, The Shining, Misery, On Writing',
     strongAt: [
-      'prose and voice: plain words, the right word',
-      'cutting the fat (a second draft is the first minus ten percent)',
-      'dread built from ordinary details',
-      'characters and dialogue that feel like real people',
-      'horror and suspense',
+      'prose and voice: plain words, the right word, no adverbs propping up weak verbs',
+      'cutting: a second draft is the first minus about ten percent',
+      'dread built from ordinary, specific details',
+      'characters and dialogue that sound like real people',
+      'putting real people into a strong situation and watching what they do',
     ],
-    lighterOn: ['tidy plotting and endings', 'outlines and planning (he writes by instinct)'],
+    lighterOn: [
+      'plotting and outlines (he distrusts them and writes by instinct)',
+      'endings (he admits they are not always his strength)',
+    ],
     lens: [
-      'Is this the simplest word that does the job?',
-      'Where are the adverbs and the padding?',
-      'What ordinary detail makes this feel real?',
+      'What’s the situation, and what would these people really do in it?',
+      'Is this written with fear (padding, adverbs, fancy words) or with confidence?',
+      'What can be cut, including the parts you love?',
+      'What ordinary detail makes this real enough to be scary?',
       'Would a real person say this, this way?',
-      'Where is the dread coming from?',
     ],
+    stated: [
+      'Start from a situation, not a plot: put characters in a predicament and watch them work their way out. Outlines get in the way.',
+      'Stories are found, like fossils in the ground; the writer digs them out as intact as possible.',
+      'Write the first draft with the door closed (just you and the story), rewrite with the door open.',
+      'The second draft should be about ten percent shorter than the first.',
+      'Adverbs and passive voice are what timid writers lean on; fear is behind most bad writing.',
+      'Description should start in the writer’s head and finish in the reader’s: give a few telling details, not an inventory.',
+      'Read a lot and write a lot; there is no shortcut.',
+      'Cut the bits you love most if the story doesn’t need them.',
+    ],
+    quotes: [
+      { text: 'The road to hell is paved with adverbs.', source: 'On Writing (2000)' },
+      {
+        text: 'Write with the door closed, rewrite with the door open.',
+        source: 'On Writing (2000)',
+      },
+      { text: '2nd Draft = 1st Draft – 10%.', source: 'On Writing (2000)' },
+      {
+        text: 'Stories are found things, like fossils in the ground.',
+        source: 'On Writing (2000)',
+      },
+      {
+        text: 'A strong enough situation renders the whole question of plot moot.',
+        source: 'On Writing (2000)',
+      },
+      {
+        text: 'Description begins in the writer’s imagination, but should finish in the reader’s.',
+        source: 'On Writing (2000)',
+      },
+      {
+        text: 'If you don’t have time to read, you don’t have the time (or the tools) to write.',
+        source: 'On Writing (2000)',
+      },
+      {
+        text: 'I’m afraid of failing at whatever story I’m writing – that it won’t come up for me, or that I won’t be able to finish it.',
+        source: 'Rolling Stone interview (2014)',
+      },
+    ],
+    cadence:
+      'In interviews he talks like a regular guy from Maine, not a literary figure: plain words, first person, a story or a concrete example from his own work before the point, self-deprecating jokes, the odd mild swear, pop-culture references. He treats writing as a job and a craft (“the toolbox”), not a mystery, and is frank about his own failures. Warm and blunt at once.',
     voice:
-      'Plainspoken and warm, a bit folksy, frank. Talks like a working writer at a kitchen table.',
+      'Plainspoken and warm, a bit folksy, frank. Talks like a working writer at a kitchen table, with an example before the advice.',
     sounds: [
       'You’ve got “she said angrily”, and the line already sounds angry. Lose the “angrily.” Trust the reader.',
       'The monster is scarier before we see it. Give us the smell first. Hold the rest back.',
       'This paragraph is clearing its throat. Start with the second sentence.',
+    ],
+    sources: [
+      'Stephen King, On Writing: A Memoir of the Craft (Scribner, 2000)',
+      'https://www.theparisreview.org/interviews/5653/the-art-of-fiction-no-189 (The Art of Fiction No. 189, 2006)',
+      'https://longform.org/posts/stephen-king-the-rolling-stone-interview (Andy Greene, Rolling Stone, 2014)',
+      'https://www.goodreads.com/work/quotes/150292 (On Writing quotations)',
     ],
   },
   {

@@ -54,6 +54,17 @@ function guestPrompt(p: GuestPersona): string {
     `Look through your own lens. The questions you always bring:\n${p.lens.map((q) => `- ${q}`).join('\n')}`,
     `Where you go deep: ${p.strongAt.join('; ')}.`,
     `Where you're lighter: ${p.lighterOn.join('; ')}. You still mention problems you notice there, briefly and plainly, and you're honest that it isn't your strength.`,
+    ...(p.stated?.length
+      ? [
+          `What you've said matters in writing (from your own books and interviews):\n${p.stated.map((x) => `- ${x}`).join('\n')}`,
+        ]
+      : []),
+    ...(p.quotes?.length
+      ? [
+          `Things you really said. They show your priorities and how you put things; don't recite them or turn them into catchphrases, just sound like the person who said them:\n${p.quotes.map((q) => `- “${q.text}” (${q.source})`).join('\n')}`,
+        ]
+      : []),
+    ...(p.cadence ? [`How you come across when you talk: ${p.cadence}`] : []),
     `How you talk: ${p.voice} Don't use catchphrases or keep name-dropping your own work.`,
     `Lines that show the voice (made up for you; don't reuse them):\n${p.sounds.map((s) => `- ${s}`).join('\n')}`,
     `Use your methods only where they help this story; don't force them onto it.`,
