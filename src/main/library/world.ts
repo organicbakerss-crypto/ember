@@ -34,6 +34,8 @@ import {
   type Template,
   type TemplateField,
   type WorldEntryFile,
+  aiCharacterFileSchema,
+  type AiCharacterFile,
   type WorldFile,
 } from '@shared/schema'
 import { newId } from '@shared/ids'
@@ -773,6 +775,105 @@ export class WorldStore {
     })
     this.host.changed({ kind: 'world', worldId })
     return removed
+  }
+
+  /* ---------- AI characters from the story ---------- */
+
+  /** The world's AI characters (unreadable files are skipped, never touched). */
+  async listCharacters(worldId: string): Promise<AiCharacterFile[]> {
+    let names: string[] = []
+    try {
+      names = await fs.promises.readdir(join(this.dir(worldId), 'ai-characters'))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    }
+    const out: AiCharacterFile[] = []
+    for (const name of names.filter((n) => n.endsWith('.json') && !isTempFileName(n)).sort()) {
+      try {
+        out.push(
+          await readJsonFile(join(this.dir(worldId), 'ai-characters', name), aiCharacterFileSchema),
+        )
+      } catch (err) {
+        if (!(err instanceof AppError)) throw err
+      }
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  /** Creates or updates an AI character (its learned notes are kept unless given). */
+  async saveCharacter(
+    worldId: string,
+    input: {
+      id?: string
+      entryId: string | null
+      name: string
+      card: string
+      learned?: AiCharacterFile['learned']
+    },
+  ): Promise<AiCharacterFile> {
+    await this.host.getWorld(worldId)
+    const time = this.host.timestamp()
+    const id = input.id ?? newId('character')
+    const saved = await this.host.lock.run(`world:${worldId}`, async () => {
+      let existing: AiCharacterFile | null = null
+      try {
+        existing = await readJsonFile(
+          join(this.dir(worldId), unitPaths.aiCharacter(id)),
+          aiCharacterFileSchema,
+        )
+      } catch (err) {
+        if (!(err instanceof AppError) || err.code !== 'not-found') throw err
+      }
+      const next: AiCharacterFile = {
+        ...existing,
+        formatVersion: FORMAT_VERSION,
+        id,
+        worldId,
+        entryId: input.entryId,
+        name: input.name.trim(),
+        card: input.card,
+        learned: input.learned ?? existing?.learned ?? [],
+        createdAt: existing?.createdAt ?? time,
+        updatedAt: time,
+      }
+      await fs.promises.mkdir(join(this.dir(worldId), 'ai-characters'), { recursive: true })
+      await this.host.writeFile(worldId, unitPaths.aiCharacter(id), next)
+      return next
+    })
+    this.host.changed({ kind: 'world', worldId })
+    return saved
+  }
+
+  /** Deletes an AI character; returns it as it was (saving it again undoes the delete). */
+  async deleteCharacter(worldId: string, characterId: string): Promise<AiCharacterFile> {
+    const removed = await this.host.lock.run(`world:${worldId}`, async () => {
+      const rel = unitPaths.aiCharacter(characterId)
+      const file = await readJsonFile(join(this.dir(worldId), rel), aiCharacterFileSchema)
+      await this.host.removeFile(worldId, rel)
+      return file
+    })
+    this.host.changed({ kind: 'world', worldId })
+    return removed
+  }
+
+  /** Adds what a character picked up from a chapter (replacing what it had from that chapter). */
+  async learnForCharacter(
+    worldId: string,
+    characterId: string,
+    chapterId: string,
+    notes: string[],
+  ): Promise<void> {
+    await this.host.lock.run(`world:${worldId}`, async () => {
+      const rel = unitPaths.aiCharacter(characterId)
+      const file = await readJsonFile(join(this.dir(worldId), rel), aiCharacterFileSchema)
+      const at = this.host.timestamp()
+      const learned = [
+        ...file.learned.filter((n) => n.chapterId !== chapterId),
+        ...notes.map((text) => ({ text, chapterId, at })),
+      ].slice(-300)
+      await this.host.writeFile(worldId, rel, { ...file, learned, updatedAt: at })
+    })
+    this.host.changed({ kind: 'world', worldId })
   }
 
   /** Changes (or deletes, with null) every relationship; returns the changed ones as they were. */

@@ -35,6 +35,7 @@ import {
 import { Portrait } from './Portrait'
 import { EntryGallery } from './EntryGallery'
 import { EntryTags } from './EntryTags'
+import { AiCharacterSection } from './AiCharacterSection'
 import { mapOfPlace } from './map/mapModel'
 import { RelationshipEditor } from './board/RelationshipEditor'
 import { useRelationships } from './board/useRelationships'
@@ -836,6 +837,10 @@ function EntryView(
           onOpen={(a) => props.onOpenAppearance(a, entry.name)}
         />
       </section>
+
+      {settings.ai.enabled && template.lens === 'who' && (
+        <AiCharacterSection worldId={worldId} entryId={entry.id} name={entry.name} />
+      )}
 
       {picker === 'merge' && summary && (
         <div className="modal-backdrop" onMouseDown={() => setPicker(null)}>

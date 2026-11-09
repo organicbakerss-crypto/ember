@@ -5142,3 +5142,15 @@ kbd {
 .learned-list li span {
   flex: 1;
 }
+.ai-character-card {
+  font: inherit;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  margin: 0;
+  width: 100%;
+}
+.ai-character-learned {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+}

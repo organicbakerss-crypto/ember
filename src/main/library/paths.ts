@@ -73,6 +73,7 @@ export const unitPaths = {
   answer: (answerId: string) => `answers/${answerId}.json`,
   summary: (chapterId: string) => `summaries/${chapterId}.json`,
   speakers: (chapterId: string) => `speakers/${chapterId}.json`,
+  aiCharacter: (characterId: string) => `ai-characters/${characterId}.json`,
   /** The old single inbox file, moved to `inbox/` when the inbox next changes. */
   oldInbox: 'inbox.json',
   manifest: 'manifest.json',

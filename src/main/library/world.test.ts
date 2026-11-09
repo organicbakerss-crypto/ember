@@ -807,3 +807,58 @@ describe('time', () => {
     ).rejects.toThrow('itself a version')
   })
 })
+
+describe('AI characters', () => {
+  it('saves, lists, learns per chapter and deletes', async () => {
+    const worldId = await world()
+    const made = await lib.world.saveCharacter(worldId, {
+      entryId: null,
+      name: ' Sara ',
+      card: 'Name: Sara',
+    })
+    const one = newId('chapter')
+    const two = newId('chapter')
+    expect(made.id.startsWith('chr_')).toBe(true)
+    expect(made.name).toBe('Sara')
+    await lib.world.learnForCharacter(worldId, made.id, one, ['She lied to Josh.'])
+    await lib.world.learnForCharacter(worldId, made.id, one, ['She told Josh the truth.'])
+    await lib.world.learnForCharacter(worldId, made.id, two, ['She quit.'])
+    // Learned notes survive a card edit that doesn't send them.
+    await lib.world.saveCharacter(worldId, {
+      id: made.id,
+      entryId: null,
+      name: 'Sara',
+      card: 'Name: Sara\nWhat they want: out',
+    })
+    const [listed] = await lib.world.listCharacters(worldId)
+    expect(listed!.card).toContain('out')
+    expect(listed!.learned.map((n) => n.text)).toEqual(['She told Josh the truth.', 'She quit.'])
+    // A damaged note is dropped alone.
+    const path = join(root, 'worlds', worldId, 'ai-characters', `${made.id}.json`)
+    const raw = JSON.parse(await fs.promises.readFile(path, 'utf8'))
+    raw.learned.push({ text: '', chapterId: 'nope' })
+    await fs.promises.writeFile(path, JSON.stringify(raw))
+    expect((await lib.world.listCharacters(worldId))[0]!.learned).toHaveLength(2)
+    const gone = await lib.world.deleteCharacter(worldId, made.id)
+    expect(gone.card).toContain('out') // the UI can undo with it
+    expect(await lib.world.listCharacters(worldId)).toEqual([])
+  })
+
+  it('skips an unreadable file when listing and never overwrites it', async () => {
+    const worldId = await world()
+    const good = await lib.world.saveCharacter(worldId, { entryId: null, name: 'A', card: 'x' })
+    const bad = await lib.world.saveCharacter(worldId, { entryId: null, name: 'B', card: 'y' })
+    const dir = join(root, 'worlds', worldId, 'ai-characters')
+    const badPath = join(dir, `${bad.id}.json`)
+    expect(fs.existsSync(badPath)).toBe(true)
+    await fs.promises.writeFile(badPath, '{ not json')
+    expect((await lib.world.listCharacters(worldId)).map((c) => c.id)).toEqual([good.id])
+    await expect(
+      lib.world.saveCharacter(worldId, { id: bad.id, entryId: null, name: 'B', card: 'z' }),
+    ).rejects.toThrow()
+    await expect(
+      lib.world.learnForCharacter(worldId, bad.id, newId('chapter'), ['n']),
+    ).rejects.toThrow()
+    expect(await fs.promises.readFile(badPath, 'utf8')).toBe('{ not json')
+  })
+})

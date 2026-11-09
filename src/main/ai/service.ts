@@ -14,6 +14,12 @@ import { roundtableRole } from '@shared/ai/roundtableCast'
 import { WRITER_LEARNERS, persona, slopGuidance } from '@shared/ai/personas'
 import { MAX_LEARNED, learnMessages, parseLearned } from './learn'
 import {
+  CHARACTER_TEMPLATE,
+  storyCharacterInstructions,
+  templateName,
+} from '@shared/ai/storyCharacters'
+import type { AiCharacterFile } from '@shared/schema'
+import {
   finalPosition,
   finalPositionsReady,
   nextParticipant,
@@ -77,6 +83,8 @@ export interface AskInput {
   seriesId?: string
   /** Files the writer attached to the conversation, as text. */
   attachments?: { name: string; text: string }[]
+  /** The chapter the writer has open: a story character knows nothing after it. */
+  cutoffChapterId?: string | null
   mode: AiMode
   messages: { role: 'user' | 'assistant'; content: string }[]
   scope: {
@@ -103,6 +111,12 @@ interface Provider {
 }
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length
+/** Chapters up to and including the open one (all of them when there's none). */
+function cutAt<T extends { id: string }>(chapters: T[], cutoffChapterId?: string | null): T[] {
+  if (!cutoffChapterId) return chapters
+  const at = chapters.findIndex((c) => c.id === cutoffChapterId)
+  return at < 0 ? chapters : chapters.slice(0, at + 1)
+}
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 const clipWords = (s: string, n: number) => {
   const all = s.split(/(\s+)/)
@@ -292,11 +306,38 @@ export class AiService {
     const provider = await this.client()
     return this.track(input.requestId, async (signal) => {
       const lookedAt: string[] = []
-      const context = await this.context(input, provider, signal, onProgress, lookedAt)
       const settings = await this.options.settings()
-      context.characterId = input.characterId ?? settings.characterId
-      const id = persona(context.characterId).id
-      if (settings.adaptive && persona(id).adaptive) context.learned = settings.learned[id] ?? []
+      const characterId = input.characterId ?? settings.characterId
+      // One of the writer's own story characters: only the story up to the open chapter.
+      const storyCharacter = characterId.startsWith('chr_')
+        ? await this.storyCharacter(input.seriesId ?? input.scope?.seriesId, characterId)
+        : null
+      const context = await this.context(
+        { ...input, cutoffChapterId: storyCharacter ? (input.cutoffChapterId ?? null) : null },
+        provider,
+        signal,
+        onProgress,
+        lookedAt,
+      )
+      context.characterId = characterId
+      if (storyCharacter) {
+        const order = await this.chapterOrder(storyCharacter.seriesId)
+        const cut = input.cutoffChapterId ? order.indexOf(input.cutoffChapterId) : -1
+        const learned = storyCharacter.file.learned
+          .filter((n) => cut < 0 || !n.chapterId || order.indexOf(n.chapterId) <= cut)
+          .map((n) => n.text)
+        context.storyCharacter = {
+          name: storyCharacter.file.name,
+          instructions: storyCharacterInstructions(
+            storyCharacter.file.name,
+            storyCharacter.file.card,
+            settings.adaptive ? learned : [],
+          ),
+        }
+      } else {
+        const id = persona(context.characterId).id
+        if (settings.adaptive && persona(id).adaptive) context.learned = settings.learned[id] ?? []
+      }
       onProgress('')
       const text = await provider.chat({
         messages: chatMessages(context, input.messages),
@@ -740,6 +781,113 @@ export class AiService {
     }
   }
 
+  /** A story character's file, found through the story's world. */
+  private async storyCharacter(
+    seriesId: string | undefined,
+    characterId: string,
+  ): Promise<{ seriesId: string; file: AiCharacterFile } | null> {
+    if (!seriesId) return null
+    const library = this.options.host.current
+    const series = await library.getSeries(seriesId)
+    if (!series.worldId) return null
+    const file = (await library.world.listCharacters(series.worldId)).find(
+      (c) => c.id === characterId,
+    )
+    return file ? { seriesId, file } : null
+  }
+
+  /** Chapter ids of a story in reading order. */
+  private async chapterOrder(seriesId: string): Promise<string[]> {
+    return (await this.options.host.current.storySummaries(seriesId)).map((s) => s.chapter.id)
+  }
+
+  /**
+   * Fills the character template for one of the writer's characters, from
+   * their world entry and the passages they appear in. Nothing is saved:
+   * the writer reviews it first.
+   */
+  async makeCharacter(input: {
+    requestId: string
+    worldId: string
+    entryId: string
+  }): Promise<{ name: string; card: string }> {
+    const library = this.options.host.current
+    const worldId = input.worldId
+    const view = await library.world.view(worldId)
+    const entry = view.entries.find((e) => e.id === input.entryId)
+    if (!entry) throw new AppError('not-found', 'That entry no longer exists.')
+    const notes = await library.world.entryText(worldId, entry.id).catch(() => '')
+    // The story of every series this world belongs to.
+    const all: (LookupChapter & { id: string })[] = []
+    for (const s of (await library.snapshot()).series.filter((s) => s.worldId === worldId)) {
+      all.push(...(await this.lookupChapters(s.id)))
+    }
+    const terms = [entry.name, ...(entry.aliases ?? [])].map((t) => t.toLowerCase())
+    const provider = await this.client()
+    const passages = findPassages(all, terms, provider.kind === 'chatgpt' ? 40 : 14, 900)
+    return this.track(input.requestId, async (signal) => {
+      const reply = await provider.chat({
+        messages: [
+          {
+            role: 'system',
+            content: `Fill in this template for ${entry.name}, a character from the writer's own story, so an AI can speak as them. Use only what the notes and passages show; where they say nothing, keep the answer short or write "not clear yet" rather than inventing. For "Lines in their voice", copy real lines of their dialogue from the passages. Reply with the filled template only, keeping every label exactly as it is.\n\n${CHARACTER_TEMPLATE}`,
+          },
+          {
+            role: 'user',
+            content: `World notes on ${entry.name}:\n${notes.slice(0, 6000) || '(none)'}\n\nPassages they appear in:\n${passages.join('\n\n') || '(none found)'}`,
+          },
+        ],
+        temperature: 0.3,
+        signal,
+      })
+      const card = reply.trim()
+      return { name: templateName(card) ?? entry.name, card }
+    })
+  }
+
+  /**
+   * Adaptive story characters: after a chapter is read for the world, each
+   * character who appears in it picks up what happened to them there (what
+   * they did, learned or decided, how they changed). Off unless Settings →
+   * AI → Adaptive characters is on.
+   */
+  async learnFromChapter(input: {
+    seriesId: string
+    volumeId: string
+    chapterId: string
+  }): Promise<void> {
+    const settings = await this.options.settings()
+    if (!settings.adaptive) return
+    const library = this.options.host.current
+    const series = await library.getSeries(input.seriesId)
+    if (!series.worldId) return
+    const characters = await library.world.listCharacters(series.worldId)
+    if (!characters.length) return
+    const chapter = await library.readChapter(input.seriesId, input.volumeId, input.chapterId)
+    const text = docParagraphs(chapter.content).join('\n\n')
+    const provider = await this.client()
+    for (const c of characters) {
+      if (!text.toLowerCase().includes(c.name.toLowerCase())) continue
+      const reply = await provider.chat({
+        messages: [
+          {
+            role: 'system',
+            content: `From this chapter of the writer's story, note what happened to ${c.name}: what they did, learned or decided, and how they or their relationships changed. One to three short lines in the third person, only what this chapter shows. If they barely appear, reply exactly NONE.`,
+          },
+          {
+            role: 'user',
+            content: `Chapter “${chapter.title || 'Untitled'}”:\n\n${text.slice(0, provider.kind === 'chatgpt' ? 60000 : 12000)}`,
+          },
+        ],
+        temperature: 0.2,
+      })
+      const notes = parseLearned(reply, [])
+      if (notes.length) {
+        await library.world.learnForCharacter(series.worldId, c.id, input.chapterId, notes)
+      }
+    }
+  }
+
   /** The story's chapters in order, with their summaries, for looking things up. */
   private async lookupChapters(seriesId: string): Promise<(LookupChapter & { id: string })[]> {
     const all = await this.options.host.current.storySummaries(seriesId)
@@ -782,10 +930,11 @@ export class AiService {
     const question = [...input.messages].reverse().find((m) => m.role === 'user')?.content ?? ''
     let text = scope?.text ?? ''
     let chapters: (LookupChapter & { id: string })[] | null = null
-    const story = async () => (chapters ??= await this.lookupChapters(seriesId))
+    const story = async () =>
+      (chapters ??= cutAt(await this.lookupChapters(seriesId), input.cutoffChapterId))
 
     if (scope?.kind === 'story') {
-      text = await this.storyText(seriesId, provider, signal, onProgress)
+      text = await this.storyText(seriesId, provider, signal, onProgress, input.cutoffChapterId)
       context.scope = { kind: 'story', text, chapterTitle: series.name }
       lookedAt.push('every chapter’s summary')
     } else if (scope?.kind === 'full') {
@@ -890,9 +1039,13 @@ export class AiService {
     provider: Provider,
     signal: AbortSignal,
     onProgress: (text: string) => void,
+    cutoffChapterId?: string | null,
   ): Promise<string> {
     const library = this.options.host.current
-    const all = await library.storySummaries(seriesId)
+    const all = cutAt(
+      (await library.storySummaries(seriesId)).map((x) => ({ ...x, id: x.chapter.id })),
+      cutoffChapterId,
+    )
     const missing = all.filter((s) => !s.current && s.paragraphs.some((p) => p.trim()))
     const volumes = new Set(all.map((s) => s.chapter.volumeId)).size
     const lines: string[] = []

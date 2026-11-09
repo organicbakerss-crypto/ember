@@ -30,6 +30,7 @@ export const ID_KINDS = {
   conflict: 'cfl',
   answer: 'ans',
   attachment: 'att',
+  character: 'chr',
 } as const
 
 export type IdKind = keyof typeof ID_KINDS

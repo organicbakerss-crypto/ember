@@ -640,6 +640,41 @@ export const conversationFileSchema = z.looseObject({
 })
 export type ConversationFile = z.infer<typeof conversationFileSchema>
 
+/* ---------- AI characters from the story (one file each, in the world) ---------- */
+
+/** One thing an adaptive story character picked up from a chapter. */
+export const learnedNoteSchema = z.looseObject({
+  text: z.string().trim().min(1).max(600),
+  /** The chapter it came from: only used when the reader is at or past it. */
+  chapterId: id('chapter').nullable(),
+  at: timestamp,
+})
+
+export const aiCharacterFileSchema = z.looseObject({
+  formatVersion,
+  id: id('character'),
+  worldId: id('world'),
+  /** The world entry this character is (Sara's entry), if any. */
+  entryId: id('entry').nullable().catch(null).default(null),
+  name: z.string().trim().min(1).max(200),
+  /** The filled-in template, as plain labelled text the writer can edit. */
+  card: z.string().max(20000),
+  // One bad note is dropped on its own, never the whole list.
+  learned: z
+    .array(z.unknown())
+    .catch([])
+    .default([])
+    .transform((notes) =>
+      notes
+        .map((n) => learnedNoteSchema.safeParse(n))
+        .flatMap((r) => (r.success ? [r.data] : []))
+        .slice(-300),
+    ),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+})
+export type AiCharacterFile = z.infer<typeof aiCharacterFileSchema>
+
 /* ---------- manifest (per sync unit: a volume or a world) ---------- */
 
 export const manifestFileEntrySchema = z.looseObject({

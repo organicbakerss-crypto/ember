@@ -68,6 +68,7 @@ import {
   type VolumeFile,
   type WorldEntryFile,
   type WorldFile,
+  type AiCharacterFile,
 } from './schema'
 
 /* ---------- shared result types ---------- */
@@ -850,6 +851,8 @@ export const ipcInputs = {
     scope: aiScope,
     /** Files attached to the conversation (read on this computer). */
     attachmentIds: z.array(z.string().max(40)).max(20).optional(),
+    /** The chapter open in the writing view (a story character knows nothing after it). */
+    cutoffChapterId: id('chapter').nullable().optional(),
   }),
   /** Start/resume an autonomous Roundtable, checkpointing after each contribution. */
   'ai:roundtableRun': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
@@ -883,6 +886,37 @@ export const ipcInputs = {
     scope: aiScope,
     conversationId: id('conversation').nullable(),
     attachmentIds: z.array(z.string().max(40)).max(20).optional(),
+    cutoffChapterId: id('chapter').nullable().optional(),
+  }),
+  /** The world's AI characters (made from the writer's own story characters). */
+  'character:list': z.object({ worldId: id('world') }),
+  /** Creates or updates one. */
+  'character:save': z.object({
+    worldId: id('world'),
+    character: z.object({
+      id: id('character').optional(),
+      entryId: id('entry').nullable(),
+      name: z.string().trim().min(1).max(200),
+      card: z.string().max(20000),
+      learned: z
+        .array(
+          z.object({
+            text: z.string().trim().min(1).max(600),
+            chapterId: id('chapter').nullable(),
+            at: z.string(),
+          }),
+        )
+        .max(300)
+        .optional(),
+    }),
+  }),
+  /** Deletes one; returns it as it was (saving it again undoes the delete). */
+  'character:delete': z.object({ worldId: id('world'), characterId: id('character') }),
+  /** Fills the template for a world entry with the AI (nothing is saved). */
+  'character:make': z.object({
+    requestId: z.string().min(1).max(80),
+    worldId: id('world'),
+    entryId: id('entry'),
   }),
   /** Attaches a file to an AI conversation: kept as text on this computer only. */
   'ai:attach': z.object({
@@ -1210,6 +1244,10 @@ export interface IpcResults {
   'ai:status': AiStatus
   'ai:ask': { text: string; lookedAt: string[] }
   'ai:secondOpinion': { text: string }
+  'character:list': AiCharacterFile[]
+  'character:save': AiCharacterFile
+  'character:delete': AiCharacterFile
+  'character:make': { name: string; card: string }
   'ai:roundtableTurn': { text: string; ranking: string[] | null }
   'ai:roundtablePrivate': { text: string }
   'ai:roundtableRun': RoundtableRunStatus

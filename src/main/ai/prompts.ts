@@ -7,6 +7,7 @@
 import type { ChatMessage } from './ollama'
 import { personaInstructions, personaReminder } from '@shared/ai/personas'
 import { QUESTIONS_GUIDE } from '@shared/ai/questions'
+import { storyCharacterReminder } from '@shared/ai/storyCharacters'
 
 export type AiMode = 'chat' | 'brainstorm' | 'ask'
 export type ScopeKind = 'selection' | 'screen' | 'chapter' | 'story' | 'full'
@@ -35,6 +36,8 @@ export interface PromptContext {
   characterId?: string
   /** What this (adaptive) character has learned from the writer. */
   learned?: string[]
+  /** One of the writer's own story characters (instead of a built-in character). */
+  storyCharacter?: { name: string; instructions: string }
   mode: AiMode
   scope: { kind: ScopeKind; text: string; chapterTitle: string } | null
   /** Text forms of the world entries named in the scope. */
@@ -56,7 +59,9 @@ const GROUNDED = `What you know about the writer's story comes only from what is
 /** The system message: role, rules, and what's being read. */
 export function systemPrompt(context: PromptContext): string {
   const parts = [
-    personaInstructions(context.characterId, context.learned),
+    context.storyCharacter
+      ? context.storyCharacter.instructions
+      : personaInstructions(context.characterId, context.learned),
     BASE,
     MODES[context.mode],
     QUESTIONS_GUIDE,
@@ -102,7 +107,11 @@ export function systemPrompt(context: PromptContext): string {
     parts.push(`World notes for names in that text:\n\n${context.entries.join('\n\n---\n\n')}`)
   }
   if (context.digest) parts.push(`The whole world, briefly:\n\n${context.digest}`)
-  parts.push(personaReminder(context.characterId))
+  parts.push(
+    context.storyCharacter
+      ? storyCharacterReminder(context.storyCharacter.name)
+      : personaReminder(context.characterId),
+  )
   return parts.join('\n\n')
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AiJobInfo, ConversationSummary } from '@shared/ipc'
 import type { PaneRoute } from '@shared/panes'
-import type { ConversationFile, ConversationMessage } from '@shared/schema'
+import type { AiCharacterFile, ConversationFile, ConversationMessage } from '@shared/schema'
 import { newId } from '@shared/ids'
 import {
   DEFAULT_PERSONA_ID,
@@ -131,10 +131,10 @@ const shown = (m: Message) =>
   m.role === 'user' ? m.content.replace(ANSWERS_INSTRUCTION_RE, '').trimEnd() : m.content
 
 /** Messages as the model reads them: second opinions are marked as someone else's. */
-const forModel = (msgs: Message[]) =>
+const forModel = (msgs: Message[], nameOf: (id: string) => string) =>
   msgs.map((m) => ({
     role: m.role,
-    content: by(m) ? `(A second opinion from ${persona(by(m)).name}:)\n${m.content}` : m.content,
+    content: by(m) ? `(A second opinion from ${nameOf(by(m)!)}:)\n${m.content}` : m.content,
   }))
 
 const empty = (characterId = DEFAULT_PERSONA_ID): Thread => ({
@@ -192,6 +192,23 @@ export function AiView(props: {
     null,
   )
   const [worldId, setWorldId] = useState<string | null>(null)
+  // The writer's own story characters (World → a person → AI character); null until loaded.
+  const [cast, setCast] = useState<AiCharacterFile[] | null>(null)
+  const [worldChecked, setWorldChecked] = useState(false)
+  /**
+   * Who an id names: a story character (`chr_…`) or a built-in personality.
+   * A story character that no longer exists falls back to the default.
+   */
+  const who = (id: string | null | undefined): { id: string; name: string } => {
+    if (id?.startsWith('chr_')) {
+      const c = cast?.find((x) => x.id === id)
+      if (c) return { id: c.id, name: c.name }
+      // Not loaded yet: keep it (a story without a world has none).
+      if (cast === null && (!worldChecked || worldId)) return { id, name: 'Your character' }
+    }
+    return persona(id)
+  }
+  const nameOf = (id: string) => who(id).name
   const [busy, setBusy] = useState<{ id: string; mode: Mode; edit?: boolean } | null>(null)
   /** Edit chapter: the AI may change the open chapter, as asked. */
   const [editMode, setEditMode] = useState(false)
@@ -235,7 +252,7 @@ export function AiView(props: {
   // Settings can change from another window. Never reuse messages across personalities.
   // Hold any active request until it finishes; its identity was captured on submission.
   // (Adjusted while rendering, not in an effect.)
-  const selectedCharacter = persona(settings.ai.characterId).id
+  const selectedCharacter = who(settings.ai.characterId).id
   if (
     !busy &&
     Object.values(threads).some(
@@ -258,11 +275,22 @@ export function AiView(props: {
   // The story's world, if it has one (Update the world needs it).
   const loadWorld = () => {
     api.invoke('library:snapshot').then(
-      (snap) => setWorldId(snap.series.find((s) => s.id === seriesId)?.worldId ?? null),
+      (snap) => {
+        setWorldId(snap.series.find((s) => s.id === seriesId)?.worldId ?? null)
+        setWorldChecked(true)
+      },
       () => {},
     )
   }
   useEffect(loadWorld, [seriesId])
+  const loadCast = () => {
+    if (!worldId) return
+    api.invoke('character:list', { worldId }).then(setCast, () => setCast([]))
+  }
+  useEffect(loadCast, [worldId])
+  useIpcEvent('library:changed', (c) => {
+    if (c.kind === 'world' && c.worldId === worldId) loadCast()
+  })
   useIpcEvent('library:changed', (c) => {
     if (c.kind === 'library' || (c.kind === 'series' && c.seriesId === seriesId)) loadWorld()
   })
@@ -338,15 +366,15 @@ export function AiView(props: {
       const c = await api.invoke('ai:conversation', { seriesId, conversationId: id })
       setMode(c.mode)
       // Opening a saved chat restores its original character, not the current global choice.
-      update(({ ai }) => ({ ai: { ...ai, characterId: persona(c.characterId).id } }))
+      update(({ ai }) => ({ ai: { ...ai, characterId: who(c.characterId).id } }))
       setThreads({
-        chat: empty(persona(c.characterId).id),
-        brainstorm: empty(persona(c.characterId).id),
-        ask: empty(persona(c.characterId).id),
+        chat: empty(who(c.characterId).id),
+        brainstorm: empty(who(c.characterId).id),
+        ask: empty(who(c.characterId).id),
         [c.mode]: {
           id: c.id,
           createdAt: c.createdAt,
-          characterId: persona(c.characterId).id,
+          characterId: who(c.characterId).id,
           messages: c.messages,
           attachments: attachedOf(c),
         },
@@ -411,7 +439,7 @@ export function AiView(props: {
   const threadOf = (c: ConversationFile): Thread => ({
     id: c.id,
     createdAt: c.createdAt,
-    characterId: persona(c.characterId).id,
+    characterId: who(c.characterId).id,
     messages: c.messages,
     attachments: attachedOf(c),
   })
@@ -713,7 +741,8 @@ export function AiView(props: {
         seriesId,
         conversation,
         mode: into,
-        messages: forModel(history.slice(-CONTEXT_MESSAGES)),
+        messages: forModel(history.slice(-CONTEXT_MESSAGES), nameOf),
+        cutoffChapterId: scope?.chapterId ?? null,
         attachmentIds: (current.attachments ?? []).map((a) => a.id),
         scope:
           kind === 'story' || kind === 'full'
@@ -881,7 +910,19 @@ export function AiView(props: {
 
   /** Switches character. A guest star first says what you trade for their lens (once each). */
   const pickCharacter = async (characterId: string) => {
-    if (characterId === persona(settings.ai.characterId).id) return
+    if (characterId === who(settings.ai.characterId).id) return
+    if (characterId.startsWith('chr_')) {
+      setThreads({
+        chat: empty(characterId),
+        brainstorm: empty(characterId),
+        ask: empty(characterId),
+      })
+      setMissing(new Set())
+      setQuote(null)
+      setListOpen(false)
+      update(({ ai }) => ({ ai: { ...ai, characterId } }))
+      return
+    }
     const next = persona(characterId)
     if (isGuest(next)) {
       const seen = (loadLocal('ai.guestsSeen') ?? '').split(',').filter(Boolean)
@@ -928,7 +969,7 @@ export function AiView(props: {
       kind === 'selection' ? scope!.selection! : kind === 'screen' ? (scope?.screen ?? '') : ''
     const requestId = newRequestId()
     setBusy({ id: requestId, mode: into })
-    setProgress(`Asking ${persona(characterId).name}…`)
+    setProgress(`Asking ${nameOf(characterId)}…`)
     setError(null)
     try {
       const answer = await api.invoke('ai:secondOpinion', {
@@ -936,7 +977,8 @@ export function AiView(props: {
         seriesId,
         characterId,
         mode: into,
-        messages: forModel(upTo.slice(-CONTEXT_MESSAGES)),
+        messages: forModel(upTo.slice(-CONTEXT_MESSAGES), nameOf),
+        cutoffChapterId: scope?.chapterId ?? null,
         conversationId: current.id,
         attachmentIds: (current.attachments ?? []).map((a) => a.id),
         scope:
@@ -1120,7 +1162,7 @@ export function AiView(props: {
                 ? guestNotice(persona(settings.ai.characterId) as Parameters<typeof guestNotice>[0])
                 : 'Who answers'
             }
-            value={persona(settings.ai.characterId).id}
+            value={who(settings.ai.characterId).id}
             disabled={!!busy}
             onChange={(e) => void pickCharacter(e.target.value)}
           >
@@ -1138,6 +1180,15 @@ export function AiView(props: {
                 </option>
               ))}
             </optgroup>
+            {!!cast?.length && (
+              <optgroup label="Your characters">
+                {cast.map((c) => (
+                  <option key={c.id} value={c.id} title="From your story">
+                    {c.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
           <button
             className="icon ai-more"
@@ -1189,7 +1240,7 @@ export function AiView(props: {
             {messages.map((m, i) => (
               <div key={i} className={`ai-message ${m.role}`}>
                 {by(m) && (
-                  <div className="ai-by muted small">Second opinion from {persona(by(m)).name}</div>
+                  <div className="ai-by muted small">Second opinion from {nameOf(by(m)!)}</div>
                 )}
                 {m.content ? (
                   <div className="ai-text">
@@ -1239,13 +1290,18 @@ export function AiView(props: {
                         className="link"
                         title="Ask another character the same question"
                         onClick={(e) =>
-                          openMenu(
-                            e,
-                            PERSONAS.filter((p) => p.id !== thread.characterId).map((p) => ({
+                          openMenu(e, [
+                            ...PERSONAS.filter((p) => p.id !== thread.characterId).map((p) => ({
                               label: `${p.name}${isGuest(p) ? ' (guest star)' : p.kind === 'specialist' ? ' (specialist)' : ''}`,
                               onSelect: () => void secondOpinion(i, p.id),
                             })),
-                          )
+                            ...(cast ?? [])
+                              .filter((c) => c.id !== thread.characterId)
+                              .map((c) => ({
+                                label: `${c.name} (your character)`,
+                                onSelect: () => void secondOpinion(i, c.id),
+                              })),
+                          ])
                         }
                       >
                         Second opinion

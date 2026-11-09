@@ -106,7 +106,12 @@ export function registerIpc(
         origin,
         auto,
       },
-      (_onToken, onProgress) => ai.updateWorld(input, onProgress),
+      async (_onToken, onProgress) => {
+        const result = await ai.updateWorld(input, onProgress)
+        // Adaptive story characters pick up what happened to them in this chapter.
+        void ai.learnFromChapter(input).catch(() => {})
+        return result
+      },
     )
   // Keeping the world up to date by itself, when that's switched on.
   const auto = new AutoWorld({
@@ -174,6 +179,11 @@ export function registerIpc(
         (text) => broadcast('ai:progress', { requestId: input.requestId, text }),
       ),
     'ai:attach': (input) => attachments.add(input.conversationId, input.name, input.data),
+    'character:list': (input) => host.current.world.listCharacters(input.worldId),
+    'character:save': (input) => host.current.world.saveCharacter(input.worldId, input.character),
+    'character:delete': (input) =>
+      host.current.world.deleteCharacter(input.worldId, input.characterId),
+    'character:make': (input) => ai.makeCharacter(input),
     'ai:attachmentsHere': (input) => attachments.here(input.conversationId, input.ids),
     'ai:ask': async (input, event) => {
       // Saved now, so the question is kept whatever happens; again with the answer.
