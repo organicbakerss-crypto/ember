@@ -1212,7 +1212,7 @@ export function AiView(props: {
                           openMenu(
                             e,
                             PERSONAS.filter((p) => p.id !== thread.characterId).map((p) => ({
-                              label: `${p.name}${isGuest(p) ? ' (guest star)' : ''}`,
+                              label: `${p.name}${isGuest(p) ? ' (guest star)' : p.kind === 'specialist' ? ' (specialist)' : ''}`,
                               onSelect: () => void secondOpinion(i, p.id),
                             })),
                           )

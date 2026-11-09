@@ -63,4 +63,18 @@ export interface GuestPersona extends PersonaBase {
   sources?: readonly string[]
 }
 
-export type Persona = RegularPersona | GuestPersona
+/**
+ * A specialist: an expert in one area (a genre, or a craft like pacing),
+ * called in at the Roundtable or for a second opinion, never the main AI.
+ */
+export interface SpecialistPersona extends PersonaBase {
+  kind: 'specialist'
+  /** What they look at, in a few words. */
+  focus: string
+  /** The questions they bring. */
+  lens: readonly string[]
+  /** A whole answer to "Does this scene work?" about another story, in their voice. */
+  example: string
+}
+
+export type Persona = RegularPersona | GuestPersona | SpecialistPersona

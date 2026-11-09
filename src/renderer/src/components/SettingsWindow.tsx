@@ -947,7 +947,7 @@ function AiSettingsSection() {
                 {p.knownFor}. {guestNotice(p)} An AI portrayal, not the real person.
               </p>
             ) : (
-              <p className="muted small">{p.summary}</p>
+              <p className="muted small">{p.kind === 'regular' ? p.summary : p.focus}</p>
             )
           })()}
           <h3>Adaptive characters</h3>

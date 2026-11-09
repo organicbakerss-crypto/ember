@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ROUNDTABLE_CAST, roundtableRole, SPECIALIST_PROFILES } from './roundtableCast'
-import { GUESTS } from './personas'
+import { ROUNDTABLE_CAST, roundtableRole } from './roundtableCast'
+import { GUESTS, SPECIALISTS } from './personas'
 import { conversationFileSchema } from '../schema'
 import {
   advancePhase,
@@ -45,7 +45,7 @@ const initial = (): RoundtableSession => ({
 describe('Roundtable phase engine', () => {
   it('seats the brainstorming partners, the specialists and the guest stars', () => {
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(11)
-    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(5)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(10)
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(11)
     expect(roundtableRole('nora', 'regular').instructions).toContain('You are Nora')
     for (const guest of GUESTS) {
@@ -62,27 +62,26 @@ describe('Roundtable phase engine', () => {
     expect(() => roundtableRole('specialist-unknown', 'specialist')).toThrow()
   })
 
-  it('registers five distinct specialist methods, identities and conversational voices', () => {
-    expect(SPECIALIST_PROFILES.map((p) => p.name)).toEqual([
+  it('seats ten specialists, five genres and five crafts, each kept to its own area', () => {
+    expect(SPECIALISTS.map((p) => p.name)).toEqual([
       'Fantasy',
       'Science Fiction',
       'Horror',
       'Mystery',
       'Comedy',
+      'Interpersonal',
+      'Inner Monologue',
+      'Pacing',
+      'Tension',
+      'Hooks & Endings',
     ])
-    expect(new Set(SPECIALIST_PROFILES.map((p) => p.method)).size).toBe(5)
-    expect(new Set(SPECIALIST_PROFILES.map((p) => p.voice)).size).toBe(5)
-    for (const profile of SPECIALIST_PROFILES) {
-      const role = roundtableRole(profile.id, 'specialist')
-      expect(role.instructions).toContain(`You are the ${profile.name} specialist`)
-      expect(role.instructions).toContain(profile.personality)
-      expect(role.instructions).toContain(profile.method)
-      expect(role.instructions).toContain(profile.voice)
-      expect(role.instructions).toContain(profile.bias)
+    for (const p of SPECIALISTS) {
+      const role = roundtableRole(p.id, 'specialist')
+      expect(role.instructions).toContain(`You are the ${p.name} specialist`)
+      expect(role.instructions).toContain(p.focus)
       expect(role.instructions).toContain('That third one is sneaky.')
-      expect(role.instructions).toContain('answer yes')
-      for (const other of SPECIALIST_PROFILES) {
-        if (other.id !== profile.id) expect(role.instructions).not.toContain(other.method)
+      for (const other of SPECIALISTS) {
+        if (other.id !== p.id) expect(role.instructions).not.toContain(other.example)
       }
     }
     expect(() => roundtableRole('specialist-romance', 'specialist')).toThrow()
