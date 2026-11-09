@@ -20,6 +20,7 @@ import { ExportStyleFields } from '../io/ExportDialog'
 import { MOD } from './commands'
 import { useOverlays } from './overlays'
 import { syncLabel, useSyncStatus } from '../useSync'
+import { StoryCharactersSettings } from './StoryCharactersSettings'
 
 interface Category {
   id: string
@@ -921,7 +922,9 @@ function AiSettingsSection() {
           <label>
             Character
             <select
-              value={persona(ai.characterId).id}
+              value={
+                ai.characterId.startsWith('chr_') ? ai.characterId : persona(ai.characterId).id
+              }
               onChange={(e) =>
                 set({
                   characterId: e.target.value,
@@ -945,18 +948,30 @@ function AiSettingsSection() {
                   </option>
                 ))}
               </optgroup>
+              {ai.characterId.startsWith('chr_') && (
+                <option value={ai.characterId}>One of your story characters</option>
+              )}
             </select>
           </label>
-          {(() => {
-            const p = persona(ai.characterId)
-            return p.kind === 'guest' ? (
-              <p className="muted small">
-                {p.knownFor}. {guestNotice(p)} An AI portrayal, not the real person.
-              </p>
-            ) : (
-              <p className="muted small">{p.kind === 'regular' ? p.summary : p.focus}</p>
-            )
-          })()}
+          {!ai.characterId.startsWith('chr_') &&
+            (() => {
+              const p = persona(ai.characterId)
+              return p.kind === 'guest' ? (
+                <p className="muted small">
+                  {p.knownFor}. {guestNotice(p)} An AI portrayal, not the real person.
+                </p>
+              ) : (
+                <p className="muted small">{p.kind === 'regular' ? p.summary : p.focus}</p>
+              )
+            })()}
+          <h3>Your story characters</h3>
+          <p className="muted small">
+            Talk to the people in your story as themselves, or ask them about it. Pick one, then
+            make their card with AI from the world and the chapters, or copy the blank template,
+            fill it in with any AI and paste it back. They show under “Your characters” in the AI
+            panel and only know the story up to the chapter you have open.
+          </p>
+          <StoryCharactersSettings />
           <h3>Adaptive characters</h3>
           <label className="check">
             <input

@@ -13,7 +13,13 @@ const COPY_TEXT = `Fill in this template for a character from my story, using on
  * A person entry's AI character: a filled template the AI speaks as, in the
  * AI panel's picker. Shown only while AI is on.
  */
-export function AiCharacterSection(props: { worldId: string; entryId: string; name: string }) {
+export function AiCharacterSection(props: {
+  worldId: string
+  entryId: string
+  name: string
+  /** Shown under its own heading (on the entry page); false where the page already has one. */
+  heading?: boolean
+}) {
   const { worldId, entryId } = props
   const { toast } = useOverlays()
   const [character, setCharacter] = useState<AiCharacterFile | null | undefined>(undefined)
@@ -32,7 +38,10 @@ export function AiCharacterSection(props: { worldId: string; entryId: string; na
   })
 
   const save = async (card: string, learned = character?.learned) => {
-    const name = templateName(card) ?? props.name
+    // The entry's own spelling unless the card names them differently (a nickname).
+    const fromCard = templateName(card)
+    const name =
+      fromCard && fromCard.toLowerCase() !== props.name.toLowerCase() ? fromCard : props.name
     try {
       const saved = await api.invoke('character:save', {
         worldId,
@@ -100,8 +109,11 @@ export function AiCharacterSection(props: { worldId: string; entryId: string; na
       : null
 
   return (
-    <section className="entry-section" aria-label="AI character">
-      <h3>AI character</h3>
+    <section
+      className={props.heading === false ? 'ai-character-section' : 'entry-section'}
+      aria-label="AI character"
+    >
+      {props.heading !== false && <h3>AI character</h3>}
       {draft !== null ? (
         <div className="stack">
           <p className="muted small">

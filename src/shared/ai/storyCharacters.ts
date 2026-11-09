@@ -15,23 +15,55 @@ What they believe that might be wrong:
 How they see the other characters:
 What they'd never do:`
 
-/** The name on a filled template (the "Name:" line), or null. */
+/** The template's labels, lower-case, without their brackets: "who they are", "name", … */
+const LABELS = CHARACTER_TEMPLATE.split('\n').map((l) => simplify(l.split(':')[0]!))
+
+/** A label as compared: lower-case letters and spaces only, brackets dropped. */
+function simplify(text: string): string {
+  return text
+    .replace(/\([^)]*\)/g, ' ')
+    .toLowerCase()
+    .replace(/[^a-z' ]+/g, ' ')
+    .replace(/['’]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * The answers on a filled template, by label. An answer can sit after the
+ * colon or on the lines under the label (as most AIs write it), and labels
+ * may come in bold, as headings or as list items.
+ */
+export function templateAnswers(card: string): Map<string, string> {
+  const answers = new Map<string, string>()
+  const labels = new Set(LABELS.map((l) => l.replace(/'/g, '')))
+  let current: string | null = null
+  for (const raw of card.split(/\r?\n/)) {
+    const line = raw.replace(/^[ \t]*(?:#+|[-*•]|\d+[.)])?[ \t]*/, '').replace(/\*\*|__/g, '')
+    const colon = line.indexOf(':')
+    const label = colon > 0 ? simplify(line.slice(0, colon)) : null
+    if (label !== null && labels.has(label)) {
+      current = label
+      answers.set(current, line.slice(colon + 1).trim())
+    } else if (current !== null && line.trim()) {
+      const before = answers.get(current)!
+      answers.set(current, before ? `${before}\n${line.trim()}` : line.trim())
+    }
+  }
+  return answers
+}
+
+/** The name on a filled template (the "Name:" answer's first line), or null. */
 export function templateName(card: string): string | null {
-  const m = /^[ \t]*name[ \t]*:[ \t]*(\S.*)$/im.exec(card)
-  const name = m?.[1]?.trim()
+  const name = templateAnswers(card).get('name')?.split('\n')[0]?.trim()
   return name ? name.slice(0, 200) : null
 }
 
 /** Whether a pasted card looks like a filled template (a name and at least a few answers). */
 export function looksFilled(card: string): boolean {
-  const answered = CHARACTER_TEMPLATE.split('\n').filter((line) => {
-    const label = line.split(':')[0]!.trim().toLowerCase()
-    const m = new RegExp(`^[ \\t]*${label.replace(/[()–—'’]/g, '.')}[ \\t]*:[ \\t]*\\S`, 'im').exec(
-      card,
-    )
-    return !!m
-  }).length
-  return !!templateName(card) && answered >= 3
+  const answers = templateAnswers(card)
+  const answered = [...answers.values()].filter((a) => a.trim()).length
+  return !!templateName(card) && answered >= 4 // the name and three more
 }
 
 /** What the AI is told when it speaks as one of the writer's characters. */

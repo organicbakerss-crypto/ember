@@ -30,3 +30,39 @@ describe('story characters', () => {
     expect(prompt).toContain('That third one is sneaky.')
   })
 })
+
+describe('filled templates in the shapes AIs write them', () => {
+  it('reads answers on the lines under each label', () => {
+    const card = `Name:sara
+Sara
+
+Who they are (one or two lines):
+A competitive, confident member of Josh's team.
+
+How they talk (a few lines):
+Blunt, casual, and sarcastic.
+She complains openly.
+
+What they want:
+To be seen.`
+    expect(templateName(card)).toBe('sara')
+    expect(looksFilled(card)).toBe(true)
+  })
+
+  it('reads bold labels, headings and list items', () => {
+    const card = `**Name:** Sara
+## What they want:
+A real desk.
+- What they're afraid of: Staying.
+**What they'd never do:**
+Cry at work.`
+    expect(templateName(card)).toBe('Sara')
+    expect(looksFilled(card)).toBe(true)
+  })
+
+  it('still refuses text that is not a filled template', () => {
+    expect(looksFilled('just some text')).toBe(false)
+    expect(looksFilled('Name: Sara')).toBe(false)
+    expect(looksFilled(CHARACTER_TEMPLATE)).toBe(false)
+  })
+})
