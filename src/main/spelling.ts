@@ -6,6 +6,12 @@
 import { app, Menu, type BrowserWindow, type ContextMenuParams, type Session } from 'electron'
 import { IPC_EVENT_PREFIX, type AppSettings } from '@shared/ipc'
 import type { AppSettingsStore } from './appSettings'
+import {
+  MAX_WORD_SELECTION_WORDS,
+  SELECTION_ACTIONS,
+  SELECTION_LABELS,
+  type SelectionAction,
+} from '@shared/ai/selection'
 
 const MAX_SUGGESTIONS = 5
 
@@ -45,6 +51,9 @@ export function attachTextMenu(
   extraItems: (params: ContextMenuParams) => Electron.MenuItemConstructorOptions[] = () => [],
 ): void {
   window.webContents.on('context-menu', (_event, params: ContextMenuParams) => {
+    void settings.read().then((current) => showMenu(params, current.ai.enabled))
+  })
+  const showMenu = (params: ContextMenuParams, aiOn: boolean) => {
     const items: Electron.MenuItemConstructorOptions[] = []
     const word = params.misspelledWord
     if (word) {
@@ -77,6 +86,21 @@ export function attachTextMenu(
         {
           label: `Add “${selected}” to the world…`,
           click: () => window.webContents.send(`${IPC_EVENT_PREFIX}text:quickAdd`, selected),
+        },
+        { type: 'separator' },
+      )
+    }
+    // AI on the selection: only in the page's text (not in input boxes), with the AI on.
+    if (aiOn && params.isEditable && selected && params.formControlType === 'none') {
+      const words = selected.split(/\s+/).length
+      const send = (action: SelectionAction) => () =>
+        window.webContents.send(`${IPC_EVENT_PREFIX}text:ai`, action)
+      items.push(
+        {
+          label: 'AI',
+          submenu: SELECTION_ACTIONS.filter(
+            (a) => a !== 'word' || words <= MAX_WORD_SELECTION_WORDS,
+          ).map((a) => ({ label: SELECTION_LABELS[a], click: send(a) })),
         },
         { type: 'separator' },
       )
@@ -117,7 +141,7 @@ export function attachTextMenu(
       items.push({ role: 'copy' })
     }
     if (items.length) Menu.buildFromTemplate(items).popup({ window })
-  })
+  }
 }
 
 /** A short selection that could be a name ("Mara Voss", "the Iron Guild"), not a sentence. */

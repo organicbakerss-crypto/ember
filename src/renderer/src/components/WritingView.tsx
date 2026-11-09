@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { SelectionAiBox, type AiSelection } from '../ai/SelectionAiBox'
+import type { SelectionAction } from '@shared/ai/selection'
 import { isBook, worldLinkMenu } from './worldLink'
 import { offerScope, requestEdit, requestPrompt, useScopeAnswers } from '../ai/scope'
 import { STORY_PROMPTS } from '../ai/storyPrompts'
@@ -408,6 +410,17 @@ export function WritingView(props: {
   }
   useIpcEvent('text:comment', () => {
     if (pane.active) addComment()
+  })
+
+  // Right-click → AI on selected text: a box of options by the selection.
+  const [selectionAi, setSelectionAi] = useState<{
+    action: SelectionAction
+    selection: AiSelection
+  } | null>(null)
+  useIpcEvent('text:ai', (action) => {
+    if (!pane.active || !aiOn) return
+    const selection = editor.current?.aiSelection()
+    if (selection) setSelectionAi({ action, selection })
   })
 
   const togglePanel = (which: Panel) => openPanel(panel === which ? null : which)
@@ -1521,6 +1534,23 @@ export function WritingView(props: {
               ),
             ]}
             onClose={() => setSpeakersOpen(false)}
+          />
+        )}
+        {selectionAi && (
+          <SelectionAiBox
+            key={`${selectionAi.selection.from}-${selectionAi.action}`}
+            action={selectionAi.action}
+            selection={selectionAi.selection}
+            worldId={series.worldId}
+            onUse={(text) =>
+              editor.current?.replaceRange(
+                selectionAi.selection.from,
+                selectionAi.selection.to,
+                selectionAi.selection.text,
+                text,
+              ) ?? false
+            }
+            onClose={() => setSelectionAi(null)}
           />
         )}
         {castOpen && (

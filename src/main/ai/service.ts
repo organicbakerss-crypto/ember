@@ -9,6 +9,12 @@
  * (and its summary beside the chapter). Only the writer's own accept changes
  * anything.
  */
+import {
+  parseSelectionAnswer,
+  selectionPrompt,
+  type SelectionAction,
+  type SelectionAnswer,
+} from '@shared/ai/selection'
 import { docParagraphs } from '@shared/analysis/doc'
 import { roundtableRole } from '@shared/ai/roundtableCast'
 import { WRITER_LEARNERS, persona, slopGuidance } from '@shared/ai/personas'
@@ -842,6 +848,40 @@ export class AiService {
       })
       const card = reply.trim()
       return { name: templateName(card) ?? entry.name, card }
+    })
+  }
+
+  /** AI on selected text: a few options (or a note) for the writer to pick from. */
+  async selection(input: {
+    requestId: string
+    action: SelectionAction
+    text: string
+    before: string
+    after: string
+    character?: { worldId: string; characterId: string }
+  }): Promise<SelectionAnswer> {
+    let character: { name: string; card: string } | undefined
+    if (input.character) {
+      const file = (
+        await this.options.host.current.world.listCharacters(input.character.worldId)
+      ).find((c) => c.id === input.character!.characterId)
+      if (!file) throw new AppError('not-found', 'That character no longer exists.')
+      character = { name: file.name, card: file.card }
+    }
+    const req = { ...input, character }
+    const { system, user } = selectionPrompt(req)
+    const provider = await this.client()
+    return this.track(input.requestId, async (signal) => {
+      const reply = await provider.chat({
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        json: true,
+        temperature: input.action === 'fix' ? 0.1 : 0.7,
+        signal,
+      })
+      return parseSelectionAnswer(reply, req)
     })
   }
 

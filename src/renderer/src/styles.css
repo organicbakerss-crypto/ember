@@ -5158,3 +5158,46 @@ kbd {
   display: grid;
   gap: 0.4rem;
 }
+.selection-ai {
+  position: fixed;
+  z-index: 60;
+  width: min(440px, calc(100vw - 16px));
+  max-height: min(60vh, 520px);
+  overflow: auto;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
+}
+.selection-ai p {
+  margin: 0;
+}
+.selection-ai-option {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: start;
+  border-top: 1px solid var(--border);
+  padding-top: 0.45rem;
+  white-space: pre-wrap;
+}
+.selection-ai-words,
+.selection-ai-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.selection-ai-note {
+  color: var(--muted, inherit);
+  font-style: italic;
+}
+.selection-ai del {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.selection-ai ins {
+  text-decoration: none;
+  background: color-mix(in srgb, var(--accent, #c55) 22%, transparent);
+  border-radius: 2px;
+}

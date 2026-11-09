@@ -4,6 +4,12 @@
  * The main process owns all disk access. Renderers call these requests and
  * listen for change broadcasts so every open window stays live.
  */
+import {
+  MAX_SELECTION_CHARS,
+  SELECTION_ACTIONS,
+  type SelectionAction,
+  type SelectionAnswer,
+} from './ai/selection'
 import { z } from 'zod'
 import { roundtableSessionSchema } from './ai/roundtable'
 
@@ -888,6 +894,16 @@ export const ipcInputs = {
     attachmentIds: z.array(z.string().max(40)).max(20).optional(),
     cutoffChapterId: id('chapter').nullable().optional(),
   }),
+  /** AI on selected text (right-click → AI): options to pick from; nothing is changed. */
+  'ai:selection': z.object({
+    requestId: z.string().min(1).max(80),
+    action: z.enum(SELECTION_ACTIONS),
+    text: z.string().trim().min(1).max(MAX_SELECTION_CHARS),
+    before: z.string().max(4000),
+    after: z.string().max(4000),
+    /** For "in a character's voice": one of the world's AI characters. */
+    character: z.object({ worldId: id('world'), characterId: id('character') }).optional(),
+  }),
   /** The world's AI characters (made from the writer's own story characters). */
   'character:list': z.object({ worldId: id('world') }),
   /** Creates or updates one. */
@@ -1248,6 +1264,7 @@ export interface IpcResults {
   'character:save': AiCharacterFile
   'character:delete': AiCharacterFile
   'character:make': { name: string; card: string }
+  'ai:selection': SelectionAnswer
   'ai:roundtableTurn': { text: string; ranking: string[] | null }
   'ai:roundtablePrivate': { text: string }
   'ai:roundtableRun': RoundtableRunStatus
@@ -1350,6 +1367,8 @@ export interface IpcEvents {
   'text:split': null
   /** "Move to a test scene" was chosen on selected text (from the right-click menu). */
   'text:toTest': null
+  /** An AI action was chosen on selected text (from the right-click menu). */
+  'text:ai': SelectionAction
   /** The window went full screen (true) or back (false). */
   'window:fullScreen': boolean
   /** Something was captured from the right-click menu (a short confirmation to show). */

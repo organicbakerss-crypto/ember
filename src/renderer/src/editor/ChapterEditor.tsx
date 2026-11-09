@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { EditorContent, useEditor, type JSONContent } from '@tiptap/react'
-import type { Node as PMNode } from '@tiptap/pm/model'
+import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model'
+import { TextSelection } from '@tiptap/pm/state'
 import type { ChapterFile, ChapterType } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
 import { ReadOnlyNote } from '../panes/ReadOnlyNote'
@@ -48,6 +49,23 @@ export interface EditorHandle {
   selectedText: () => string
   /** The text just before the selection, in the same paragraph (to guess what a name is). */
   textBeforeSelection: () => string
+  /**
+   * The selected text (paragraphs split by a blank line) with some text either
+   * side and where it is on screen, for AI on a selection; null: nothing selected.
+   */
+  aiSelection: () => {
+    from: number
+    to: number
+    text: string
+    before: string
+    after: string
+    rect: { left: number; top: number; bottom: number }
+  } | null
+  /**
+   * Puts `text` in place of from..to (one undoable step) if that range still
+   * reads `expected`; the new text ends up selected. Returns whether it did.
+   */
+  replaceRange: (from: number, to: number, expected: string, text: string) => boolean
   /** The paragraphs (and headings) visible on screen, as text. */
   visibleText: () => string
   /** The chapter as it is on the page, or null when it can't be edited here. */
@@ -572,6 +590,50 @@ function EditorPage(
     replaceDoc(doc: JSONContent) {
       if (readOnly || contentError) return false
       editor.chain().setContent(doc, { emitUpdate: true }).run()
+      return true
+    },
+    aiSelection() {
+      if (readOnly || contentError) return null
+      const { from, to, empty } = editor.state.selection
+      if (empty) return null
+      const doc = editor.state.doc
+      const text = doc.textBetween(from, to, '\n\n')
+      if (!text.trim()) return null
+      const before = doc.textBetween(Math.max(0, from - 1500), from, '\n\n').slice(-1000)
+      const after = doc
+        .textBetween(to, Math.min(doc.content.size, to + 1500), '\n\n')
+        .slice(0, 1000)
+      const start = editor.view.coordsAtPos(from)
+      const end = editor.view.coordsAtPos(to)
+      return {
+        from,
+        to,
+        text,
+        before,
+        after,
+        rect: { left: start.left, top: start.top, bottom: Math.max(start.bottom, end.bottom) },
+      }
+    },
+    replaceRange(from: number, to: number, expected: string, text: string) {
+      if (readOnly || contentError) return false
+      const { state } = editor
+      if (to > state.doc.content.size || state.doc.textBetween(from, to, '\n\n') !== expected)
+        return false
+      // Paragraphs joined onto the text either side (an open slice), keeping the marks at the start.
+      const marks = state.doc.resolve(from).marks()
+      const paragraphs = text
+        .split(/\n{2,}/)
+        .map((p) =>
+          state.schema.nodes.paragraph!.create(
+            null,
+            p ? state.schema.text(p.replace(/\n/g, ' '), marks) : null,
+          ),
+        )
+      const tr = state.tr.replace(from, to, new Slice(Fragment.from(paragraphs), 1, 1))
+      const end = tr.mapping.map(to)
+      tr.setSelection(TextSelection.create(tr.doc, from, Math.max(from, end))).scrollIntoView()
+      editor.view.dispatch(tr)
+      editor.commands.focus()
       return true
     },
     textBeforeSelection() {
