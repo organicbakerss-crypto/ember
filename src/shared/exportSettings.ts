@@ -17,6 +17,7 @@ export const aiSettingsSchema = z.object({
   model: z.string().trim().max(200),
   chatgptModel: z.string().trim().max(200).catch('').default(''),
   characterId: z.string().trim().max(100).catch('nora').default('nora'),
+  lastPartnerId: z.string().trim().max(100).catch('nora').default('nora'),
   worldChanges: z.enum(['apply', 'suggest']).catch('apply').default('apply'),
   autoWorld: z.boolean().catch(false).default(false),
   prompts: z.array(z.string().trim().min(1).max(1000)).max(20).catch([]).default([]),

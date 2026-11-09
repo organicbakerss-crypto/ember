@@ -922,7 +922,14 @@ function AiSettingsSection() {
             Character
             <select
               value={persona(ai.characterId).id}
-              onChange={(e) => set({ characterId: e.target.value })}
+              onChange={(e) =>
+                set({
+                  characterId: e.target.value,
+                  ...(persona(e.target.value).kind === 'regular'
+                    ? { lastPartnerId: e.target.value }
+                    : {}),
+                })
+              }
             >
               <optgroup label="Brainstorming partners">
                 {REGULARS.map((p) => (

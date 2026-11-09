@@ -69,3 +69,12 @@ describe('John AI', () => {
     expect(prompt).toContain('That third one is sneaky.')
   })
 })
+
+describe('your partner at the Roundtable', () => {
+  it('is the main AI when that is a partner, else the partner used last', async () => {
+    const { yourPartner } = await import('.')
+    expect(yourPartner({ characterId: 'max', lastPartnerId: 'nora' }).id).toBe('max')
+    expect(yourPartner({ characterId: 'guest-dan-harmon', lastPartnerId: 'iris' }).id).toBe('iris')
+    expect(yourPartner({ characterId: 'guest-dan-harmon' }).id).toBe(DEFAULT_PERSONA_ID)
+  })
+})

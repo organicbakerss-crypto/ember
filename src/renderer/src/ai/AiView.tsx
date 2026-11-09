@@ -885,7 +885,13 @@ export function AiView(props: {
     setMissing(new Set())
     setQuote(null)
     setListOpen(false)
-    update(({ ai }) => ({ ai: { ...ai, characterId: next.id } }))
+    update(({ ai }) => ({
+      ai: {
+        ...ai,
+        characterId: next.id,
+        lastPartnerId: next.kind === 'regular' ? next.id : ai.lastPartnerId,
+      },
+    }))
   }
 
   /** Asks another character the question that led to answer `i`; their reply goes under it. */

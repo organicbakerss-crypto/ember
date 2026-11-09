@@ -23,6 +23,14 @@ export function persona(id: string | null | undefined): Persona {
 
 export const isGuest = (p: Persona): p is GuestPersona => p.kind === 'guest'
 
+/** The partner who represents you: the main AI if it's a partner, else the one used last. */
+export function yourPartner(settings: { characterId?: string; lastPartnerId?: string }): Persona {
+  const main = persona(settings.characterId)
+  if (main.kind === 'regular') return main
+  const last = persona(settings.lastPartnerId)
+  return last.kind === 'regular' ? last : persona(DEFAULT_PERSONA_ID)
+}
+
 /** Characters that learn from the writer's own messages. */
 export const WRITER_LEARNERS = (): Persona[] => PERSONAS.filter((p) => p.adaptive === 'writer')
 

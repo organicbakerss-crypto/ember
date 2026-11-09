@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ROUNDTABLE_CAST } from '@shared/ai/roundtableCast'
-import { persona } from '@shared/ai/personas'
+import { yourPartner } from '@shared/ai/personas'
 import { useSettings } from '../useTheme'
 import { newId } from '@shared/ids'
 import type { ConversationFile } from '@shared/schema'
@@ -28,8 +28,11 @@ const id = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack: () => void }) {
   const { settings } = useSettings()
-  const currentCharacter = persona(settings.ai.characterId)
-  const available = ROUNDTABLE_CAST.map(({ id, name, kind }) => ({ id, name, kind }))
+  // Partners all look for the same things, so only yours takes a seat.
+  const currentCharacter = yourPartner(settings.ai)
+  const available = ROUNDTABLE_CAST.filter(
+    (role) => role.kind !== 'regular' || role.id === currentCharacter.id,
+  ).map(({ id, name, kind }) => ({ id, name, kind }))
   const [topic, setTopic] = useState('')
   const [selected, setSelected] = useState<string[]>([currentCharacter.id, 'specialist-fantasy'])
   const [file, setFile] = useState<ConversationFile | null>(null)
@@ -391,8 +394,8 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
               ))}
             </div>
             <p className="muted small">
-              Pick 2 to 12: brainstorming partners, genre specialists and guest stars. Older
-              sessions keep their original cast.
+              Pick 2 to 12: your partner, specialists and guest stars. Older sessions keep their
+              original cast.
             </p>
           </div>
           <button

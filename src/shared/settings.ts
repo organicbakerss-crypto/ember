@@ -137,6 +137,8 @@ export interface AiSettings {
   chatgptModel: string
   /** The AI character (a regular partner or a guest star); independent of the model. */
   characterId: string
+  /** The partner last chosen (the Roundtable seats them even while a guest star is the main AI). */
+  lastPartnerId: string
   /**
    * Reading a chapter for the world: make the changes itself (each listed in
    * the inbox, with Undo), or only suggest them.
@@ -159,6 +161,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   model: '',
   chatgptModel: '',
   characterId: 'nora',
+  lastPartnerId: 'nora',
   worldChanges: 'apply',
   autoWorld: false,
   prompts: [],
