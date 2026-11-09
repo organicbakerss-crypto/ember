@@ -44,7 +44,7 @@ const initial = (): RoundtableSession => ({
 
 describe('Roundtable phase engine', () => {
   it('seats the brainstorming partners, the specialists and the guest stars', () => {
-    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(10)
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(11)
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(5)
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(11)
     expect(roundtableRole('nora', 'regular').instructions).toContain('You are Nora')
@@ -58,7 +58,7 @@ describe('Roundtable phase engine', () => {
   })
 
   it('still opens an old session whose character was retired', () => {
-    expect(roundtableRole('john-ai', 'regular').instructions).toContain('You are Nora')
+    expect(roundtableRole('retired-character', 'regular').instructions).toContain('You are Nora')
     expect(() => roundtableRole('specialist-unknown', 'specialist')).toThrow()
   })
 

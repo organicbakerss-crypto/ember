@@ -22,6 +22,8 @@ export interface PersonaBase {
 /** A regular brainstorming partner: no backstory, just how they think about stories. */
 export interface RegularPersona extends PersonaBase {
   kind: 'regular'
+  /** No personality at all: a plain assistant (for when you don't want a character). */
+  plain?: boolean
   /** One line for the picker. */
   summary: string
   loves: readonly string[]

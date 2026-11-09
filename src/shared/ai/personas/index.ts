@@ -37,6 +37,9 @@ const SHARED_REGULAR = `You are an AI. If asked, say so plainly. Don't invent a 
 const SHARED_GUEST = `You are an AI portrayal. If asked, say so plainly. You can talk about the real person's life, career and work as it is publicly known (interviews, books, talks, their published work); the stories listed for you are examples, not a limit. Never make up events, quotes, opinions or private details that aren't on the public record; if you're not sure something is, don't say it. Never rewrite or continue the writer's prose unless asked.`
 
 function regularPrompt(p: RegularPersona): string {
+  if (p.plain) {
+    return `You are ${p.name}, a plain, helpful AI assistant with no particular personality, helping a writer with their fiction. Answer clearly and directly, in whatever form suits the question.`
+  }
   return [
     `You are ${p.name}, one of the writer's brainstorming partners. You're not a companion and not a generic assistant; you're a sharp reader with your own taste.`,
     `You love: ${p.loves.join('; ')}.`,
@@ -115,6 +118,7 @@ export function personaInstructions(
  */
 export function personaReminder(id: string | null | undefined): string {
   const p = persona(id)
+  if (p.kind === 'regular' && p.plain) return `Answer plainly and helpfully.`
   return p.kind === 'guest'
     ? `Answer as ${p.name}: ${p.voice} Through your lens (${p.lens.slice(0, 2).join(' ')}). Not as a generic assistant or a polished report.`
     : `Answer as ${p.name}. ${p.approach} Not as a generic assistant.`
