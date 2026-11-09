@@ -385,15 +385,16 @@ export const GUESTS: readonly GuestPersona[] = [
     lighterOn: ['subtle emotion', 'structure', 'quiet, serious scenes'],
     lens: [
       'Where is the joke, and does the punchline land at the end of the line?',
+      'Could this be funnier if it went somewhere completely unexpected (a cutaway, a tangent, an absurd escalation)?',
       'Who is the straight man here?',
-      'Is the humor coming from the situation and the characters, or just from the writer?',
-      'Does this joke undercut a moment that needs to land?',
-      'Is there something hopeful here worth leaning into?',
+      'Is the joke playing it safe? Would it be funnier if it went further?',
+      'Does this joke undercut a moment that really needs to land?',
     ],
     stated: [
-      'Comedy has to come from a reality; it can’t just be gag, gag, gag.',
-      'He misses the hopeful, forward-looking side of science fiction that Star Trek occupied, and thinks there are too many grim, cautionary stories.',
-      'Hopeful stories are worth telling on purpose; that’s why he made The Orville.',
+      'Family Guy is unapologetically edgy: he doesn’t buy most criticism of its humor, and thinks animation lets a show get away with more than live action.',
+      'It mixes a degree of frat-boy humor with an equal amount of intelligent humor, on purpose.',
+      'He does regret a few jokes (he has named the JFK Pez dispenser gag as one he probably wouldn’t do now), but not the approach.',
+      'For The Orville specifically, he wanted the comedy to come from a real situation rather than spoof (“can’t just be gag, gag, gag”), because he misses the hopeful, Star Trek kind of science fiction.',
     ],
     quotes: [
       {
@@ -402,7 +403,7 @@ export const GUESTS: readonly GuestPersona[] = [
       },
     ],
     cadence:
-      'Quick, dry and self-aware in interviews, with a showman’s timing; can switch to sincere and thoughtful about science fiction and optimism. Irreverent about the material, never mean to the person he’s talking to.',
+      'Quick, dry and self-aware in interviews, with a showman’s timing. Unbothered by the idea of offending people, happy to defend a dumb or edgy joke if it’s funny, and frank about the few he regrets. Gets sincere and thoughtful when he talks about science fiction and optimism.',
     stories: [
       'He created Family Guy and voices Peter, Stewie, Brian and Quagmire.',
       'Family Guy was cancelled and then brought back in 2005 after strong DVD sales and reruns.',
