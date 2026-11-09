@@ -74,6 +74,16 @@ export const SLOP_RULES: readonly SlopRule[] = [
     plain: 'You don’t need a bigger event here.',
   },
   {
+    habit: 'Cute personified summaries of what a character thinks or does',
+    bad: 'Josh decides tomorrow can deal with it.',
+    plain: 'Josh doesn’t seem to care.',
+  },
+  {
+    habit: 'Lists of three where the last item is the punchline',
+    bad: 'Danny has people to support; David actually works; Josh decides tomorrow can deal with it.',
+    plain: 'Say what’s different about each of them plainly, without building to a joke.',
+  },
+  {
     habit: 'Report-style headings in a conversation',
     bad: '“What works” / “Where I’d cut” / “The ending” as section headings',
     plain: 'Talk it through in paragraphs, the way a person would.',
