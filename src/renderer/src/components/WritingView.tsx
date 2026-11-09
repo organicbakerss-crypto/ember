@@ -1446,6 +1446,7 @@ export function WritingView(props: {
           )}
           {panel === 'search' && (
             <SearchPanel
+              aiOn={aiOn}
               seriesId={series.id}
               volumeId={volume.id}
               multiVolume={series.volumes.length > 1}

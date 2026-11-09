@@ -162,6 +162,16 @@ export interface SearchHit {
   after: string
 }
 
+/** A scene found by describing it (AI): its chapter, why, and where it is (null: the chapter's top). */
+export interface SceneHit {
+  volumeId: string
+  chapterId: string
+  chapterName: string
+  why: string
+  excerpt: string
+  hit: SearchHit | null
+}
+
 export interface SearchResult {
   hits: SearchHit[]
   /** Chapter titles for the hits, keyed by id, in reading order. */
@@ -895,6 +905,12 @@ export const ipcInputs = {
     attachmentIds: z.array(z.string().max(40)).max(20).optional(),
     cutoffChapterId: id('chapter').nullable().optional(),
   }),
+  /** Finds a scene from a description of it (AI), across the whole story. */
+  'ai:findScene': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    description: z.string().trim().min(3).max(500),
+  }),
   /** AI notes on the open chapter (its text as it is now); they become comments. */
   'ai:pageNotes': z.object({
     requestId: z.string().min(1).max(80),
@@ -1275,6 +1291,8 @@ export interface IpcResults {
   'character:make': { name: string; card: string }
   'ai:selection': SelectionAnswer
   'ai:pageNotes': { notes: PageNote[] }
+  /** `unread`: chapters without a summary yet (found only by their words). */
+  'ai:findScene': { hits: SceneHit[]; unread: number }
   'ai:roundtableTurn': { text: string; ranking: string[] | null }
   'ai:roundtablePrivate': { text: string }
   'ai:roundtableRun': RoundtableRunStatus

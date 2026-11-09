@@ -5217,3 +5217,11 @@ kbd {
   color: rgba(70, 130, 220, 0.95);
   font-weight: 600;
 }
+.scene-hit {
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+}
+.scene-excerpt {
+  font-style: italic;
+}

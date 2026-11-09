@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { SearchHit, SearchResult } from '@shared/ipc'
+import type { SceneHit, SearchHit, SearchResult } from '@shared/ipc'
 import { api, describeError, useIpcEvent } from '../api'
 import { flushAll } from '../saving'
 import { useOverlays } from './overlays'
@@ -14,6 +14,8 @@ interface SearchState {
 }
 /** The last search per story: kept when a match in another volume opens that volume. */
 const lastSearch = new Map<string, SearchState>()
+/** Words or Describe it, per story. */
+const lastMode = new Map<string, 'words' | 'describe'>()
 
 /** Find (and replace) across every chapter of the volume, or of the whole story. */
 export function SearchPanel(props: {
@@ -29,6 +31,8 @@ export function SearchPanel(props: {
   /** Replaces the current selection in the editor if it matches; returns whether it did. */
   onReplaceSelection: (replacement: string, query: string, matchCase: boolean) => boolean
   onReplacedAll: () => void
+  /** The AI is on: offer "Describe it" (find a scene by describing it). */
+  aiOn?: boolean
 }) {
   const { seriesId, volumeId } = props
   const [initial] = useState(() => lastSearch.get(seriesId))
@@ -53,6 +57,8 @@ export function SearchPanel(props: {
   const [version, setVersion] = useState(0)
   const findField = useRef<HTMLInputElement>(null)
   const { toast, choose } = useOverlays()
+  const [describing, setDescribing] = useState(() => lastMode.get(seriesId) === 'describe')
+  const describe = describing && !!props.aiOn
 
   useEffect(() => {
     findField.current?.focus()
@@ -132,9 +138,39 @@ export function SearchPanel(props: {
   )
   let lastChapter: string | null = null
 
+  const modes = props.aiOn && (
+    <div className="segmented small" role="radiogroup" aria-label="How to find">
+      {(['words', 'describe'] as const).map((m) => (
+        <button
+          key={m}
+          role="radio"
+          aria-checked={(m === 'describe') === describe}
+          className={(m === 'describe') === describe ? 'active' : ''}
+          onClick={() => {
+            setDescribing(m === 'describe')
+            lastMode.set(seriesId, m)
+          }}
+        >
+          {m === 'words' ? 'Words' : 'Describe it'}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (describe) {
+    return (
+      <div className="search-panel">
+        <h2>Find</h2>
+        {modes}
+        <SceneSearch seriesId={seriesId} focusToken={props.focusToken} onOpen={open} />
+      </div>
+    )
+  }
+
   return (
     <div className="search-panel">
       <h2>Find</h2>
+      {modes}
       {props.multiVolume && (
         <div className="segmented small" role="radiogroup" aria-label="Where to search">
           <button
@@ -250,5 +286,122 @@ export function SearchPanel(props: {
         })}
       </ol>
     </div>
+  )
+}
+
+const newRequestId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
+/** The last description and what it found, per story (kept while switching chapters). */
+const lastScene = new Map<string, { text: string; hits: SceneHit[] | null; unread: number }>()
+
+/** Find a scene by describing it: the AI picks the chapters, then the paragraph. */
+function SceneSearch(props: {
+  seriesId: string
+  focusToken: number
+  onOpen: (hit: SearchHit) => void
+}) {
+  const { seriesId } = props
+  const [initial] = useState(() => lastScene.get(seriesId))
+  const [text, setText] = useState(initial?.text ?? '')
+  const [hits, setHits] = useState<SceneHit[] | null>(initial?.hits ?? null)
+  const [unread, setUnread] = useState(initial?.unread ?? 0)
+  const [busy, setBusy] = useState<{ id: string; progress: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const field = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    field.current?.focus()
+  }, [props.focusToken])
+  useEffect(() => {
+    lastScene.set(seriesId, { text, hits, unread })
+  }, [seriesId, text, hits, unread])
+  useIpcEvent('ai:progress', ({ requestId, text: progress }) => {
+    if (requestId === busy?.id) setBusy({ id: requestId, progress })
+  })
+
+  const find = async () => {
+    const description = text.trim()
+    if (description.length < 3 || busy) return
+    const id = newRequestId()
+    setBusy({ id, progress: 'Looking…' })
+    setError(null)
+    try {
+      const found = await api.invoke('ai:findScene', { requestId: id, seriesId, description })
+      setHits(found.hits)
+      setUnread(found.unread)
+    } catch (err) {
+      const e = describeError(err)
+      if (e.code !== 'cancelled') setError(e.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+  const open = (h: SceneHit) =>
+    props.onOpen(
+      h.hit ?? {
+        volumeId: h.volumeId,
+        chapterId: h.chapterId,
+        node: 0,
+        start: 0,
+        end: 0,
+        before: '',
+        match: '',
+        after: '',
+      },
+    )
+
+  return (
+    <>
+      <textarea
+        ref={field}
+        aria-label="Describe the scene"
+        rows={3}
+        placeholder="Describe the scene, e.g. “where Josh lies to Sara about the van”"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            void find()
+          }
+        }}
+      />
+      {busy ? (
+        <div className="row small">
+          <span className="muted">{busy.progress}</span>
+          <span className="status-spacer" />
+          <button
+            className="link"
+            onClick={() => void api.invoke('ai:cancel', { requestId: busy.id })}
+          >
+            Stop
+          </button>
+        </div>
+      ) : (
+        <div className="row small">
+          <button disabled={text.trim().length < 3} onClick={() => void find()}>
+            Find it
+          </button>
+        </div>
+      )}
+      {error && <p className="error small">{error}</p>}
+      {hits && !busy && (
+        <p className="muted small" role="status">
+          {hits.length ? 'Most likely first.' : 'Nothing found that fits.'}
+          {unread > 0 &&
+            ` ${unread} ${unread === 1 ? 'chapter hasn’t' : 'chapters haven’t'} been read for the world yet, so ${unread === 1 ? 'it’s' : 'they’re'} only found by their words.`}
+        </p>
+      )}
+      <ol className="search-results">
+        {!busy &&
+          hits?.map((h) => (
+            <li key={`${h.chapterId}-${h.hit?.node ?? 0}`}>
+              <div className="search-chapter small">{h.chapterName}</div>
+              <button className="search-hit small scene-hit" onClick={() => open(h)}>
+                {h.excerpt && <span className="scene-excerpt">“{h.excerpt}”</span>}
+                {h.why && <span className="muted">{h.why}</span>}
+              </button>
+            </li>
+          ))}
+      </ol>
+    </>
   )
 }

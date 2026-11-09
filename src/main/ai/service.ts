@@ -9,6 +9,14 @@
  * (and its summary beside the chapter). Only the writer's own accept changes
  * anything.
  */
+import {
+  findParagraphPrompt,
+  paragraphProbe,
+  parseChapterMatches,
+  parseParagraph,
+  pickChaptersPrompt,
+} from '@shared/ai/findScene'
+import type { SceneHit, SearchHit } from '@shared/ipc'
 import { notesParts, pageNotesPrompt, parsePageNotes, type PageNote } from '@shared/ai/pageNotes'
 import {
   parseSelectionAnswer,
@@ -919,6 +927,127 @@ export class AiService {
         notes.push(...parsePageNotes(reply, part))
       }
       return { notes }
+    })
+  }
+
+  /**
+   * Finds a scene the writer describes: the likely chapters (from summaries
+   * and passages with the same words), then the paragraph in each, located
+   * on the page with Find so it can be opened there.
+   */
+  async findScene(
+    input: { requestId: string; seriesId: string; description: string },
+    onProgress: (text: string) => void,
+  ): Promise<{ hits: SceneHit[]; unread: number }> {
+    const library = this.options.host.current
+    const series = await library.getSeries(input.seriesId)
+    const all = await library.storySummaries(input.seriesId)
+    const volumes = new Set(all.map((s) => s.chapter.volumeId)).size
+    const chapters = all.map((s, i) => ({
+      ref: `C${i + 1}`,
+      id: s.chapter.id,
+      volumeId: s.chapter.volumeId,
+      label: `${volumes > 1 ? `${s.chapter.volumeName} › ` : ''}${s.chapter.label}`,
+      title: s.chapter.title,
+      paragraphs: s.paragraphs,
+      summary: s.current ? s.summary : null,
+    }))
+    const names = series.worldId
+      ? (await library.world.view(series.worldId)).entries.flatMap((e) => [e.name, ...e.aliases])
+      : []
+    const terms = searchTerms(input.description, names)
+    const scored = chapters.map((c, i) => {
+      const passages = terms.length
+        ? findPassages([{ ...c, summary: null }], terms, 2, 300).map((p) =>
+            p.replace(/^\([^)]*\)\s*/, ''),
+          )
+        : []
+      const t = `${c.title} ${c.summary ?? ''}`.toLowerCase()
+      const score = terms.filter((w) => t.includes(w)).length + passages.length
+      return { c, i, passages, score }
+    })
+    // Every chapter when there aren't many; else the 40 that share the most words.
+    const picked = (
+      scored.length <= 60
+        ? scored
+        : [...scored]
+            .sort((a, b) => b.score - a.score || a.i - b.i)
+            .slice(0, 40)
+            .sort((a, b) => a.i - b.i)
+    ).filter((x) => x.c.summary || x.passages.length || scored.length <= 60)
+    const unread = chapters.filter((c) => !c.summary).length
+    const provider = await this.client()
+    return this.track(input.requestId, async (signal) => {
+      onProgress('Looking through the chapters…')
+      const pick = pickChaptersPrompt(
+        input.description,
+        picked.map(({ c, passages }) => ({
+          ref: c.ref,
+          label: c.label,
+          title: c.title,
+          summary: c.summary,
+          passages,
+        })),
+      )
+      const reply = await provider.chat({
+        messages: [
+          { role: 'system', content: pick.system },
+          { role: 'user', content: pick.user },
+        ],
+        json: true,
+        temperature: 0.1,
+        signal,
+      })
+      const matches = parseChapterMatches(reply, new Set(picked.map((x) => x.c.ref)))
+      const hits: SceneHit[] = []
+      for (const [n, m] of matches.entries()) {
+        const c = chapters.find((x) => x.ref === m.ref)!
+        onProgress(`Reading ${c.label} (${n + 1} of ${matches.length})…`)
+        const find = findParagraphPrompt(
+          input.description,
+          `${c.label} “${c.title || 'Untitled'}”`,
+          c.paragraphs,
+        )
+        const answer = parseParagraph(
+          await provider.chat({
+            messages: [
+              { role: 'system', content: find.system },
+              { role: 'user', content: find.user },
+            ],
+            json: true,
+            temperature: 0.1,
+            signal,
+          }),
+          find.shown,
+        )
+        let hit: SearchHit | null = null
+        let excerpt = ''
+        if (answer) {
+          const paragraph = c.paragraphs[answer.paragraph] ?? ''
+          excerpt = paragraph.length > 220 ? `${paragraph.slice(0, 219)}…` : paragraph
+          for (const words of [6, 3]) {
+            const probe = paragraphProbe(paragraph, words)
+            if (!probe) break
+            const found = await library
+              .searchVolume(input.seriesId, c.volumeId, probe, {
+                matchCase: true,
+                wholeWord: false,
+              })
+              .catch(() => null)
+            hit = found?.hits.find((h) => h.chapterId === c.id) ?? null
+            if (hit) break
+          }
+        }
+        hits.push({
+          volumeId: c.volumeId,
+          chapterId: c.id,
+          chapterName: `${c.label} “${c.title || 'Untitled'}”`,
+          why: answer?.why || m.why,
+          excerpt,
+          hit,
+        })
+      }
+      return { hits, unread }
     })
   }
 
