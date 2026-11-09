@@ -9,6 +9,7 @@
  * (and its summary beside the chapter). Only the writer's own accept changes
  * anything.
  */
+import { notesParts, pageNotesPrompt, parsePageNotes, type PageNote } from '@shared/ai/pageNotes'
 import {
   parseSelectionAnswer,
   selectionPrompt,
@@ -848,6 +849,76 @@ export class AiService {
       })
       const card = reply.trim()
       return { name: templateName(card) ?? entry.name, card }
+    })
+  }
+
+  /**
+   * AI notes on a chapter: read in parts with what the world says about who's
+   * named and the earlier chapters' summaries; notes quote the exact words.
+   */
+  async pageNotes(
+    input: {
+      requestId: string
+      seriesId: string
+      chapterId: string
+      title: string
+      paragraphs: string[]
+    },
+    onProgress: (text: string) => void,
+  ): Promise<{ notes: PageNote[] }> {
+    const library = this.options.host.current
+    const series = await library.getSeries(input.seriesId)
+    const text = input.paragraphs.join('\n').toLowerCase()
+    let world = ''
+    if (series.worldId) {
+      const view = await library.world.view(series.worldId)
+      const named = view.entries
+        .filter((e) =>
+          [e.name, ...(e.aliases ?? [])].some(
+            (n) => n.length > 1 && text.includes(n.toLowerCase()),
+          ),
+        )
+        .slice(0, 12)
+      const parts: string[] = []
+      for (const e of named) {
+        const notes = await library.world.entryText(series.worldId, e.id).catch(() => e.snippet)
+        parts.push(`${e.name}: ${notes.replace(/\s+/g, ' ').slice(0, 700)}`)
+      }
+      world = parts.join('\n')
+    }
+    const chapters = await this.lookupChapters(input.seriesId)
+    const at = chapters.findIndex((c) => c.id === input.chapterId)
+    const earlier = (at >= 0 ? chapters.slice(0, at) : [])
+      .filter((c) => c.summary)
+      .slice(-20)
+      .map((c) => `${c.label}: ${c.summary}`)
+      .join('\n')
+    const parts = notesParts(input.paragraphs)
+    const provider = await this.client()
+    return this.track(input.requestId, async (signal) => {
+      const notes: PageNote[] = []
+      for (const [i, part] of parts.entries()) {
+        onProgress(parts.length > 1 ? `Reading part ${i + 1} of ${parts.length}…` : 'Reading…')
+        const { system, user } = pageNotesPrompt({
+          part,
+          partNumber: i + 1,
+          parts: parts.length,
+          chapterTitle: input.title,
+          world,
+          earlier,
+        })
+        const reply = await provider.chat({
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          json: true,
+          temperature: 0.2,
+          signal,
+        })
+        notes.push(...parsePageNotes(reply, part))
+      }
+      return { notes }
     })
   }
 

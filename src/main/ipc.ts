@@ -185,6 +185,8 @@ export function registerIpc(
       host.current.world.deleteCharacter(input.worldId, input.characterId),
     'character:make': (input) => ai.makeCharacter(input),
     'ai:selection': (input) => ai.selection(input),
+    'ai:pageNotes': (input) =>
+      ai.pageNotes(input, (text) => broadcast('ai:progress', { requestId: input.requestId, text })),
     'ai:attachmentsHere': (input) => attachments.here(input.conversationId, input.ids),
     'ai:ask': async (input, event) => {
       // Saved now, so the question is kept whatever happens; again with the answer.

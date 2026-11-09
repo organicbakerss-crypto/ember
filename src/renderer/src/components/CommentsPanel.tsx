@@ -13,6 +13,13 @@ export function CommentsPanel(props: {
   /** A comment just made: its note box is focused. */
   focusId: string | null
   readOnly: boolean
+  /** AI notes (only while the AI is on): read the chapter, stop, take them all off. */
+  ai?: {
+    busy: string | null
+    onRead: () => void
+    onStop: () => void
+    onClear: () => void
+  } | null
   onAdd: () => void
   onNote: (id: string, note: string) => void
   onRemove: (id: string) => void
@@ -29,6 +36,34 @@ export function CommentsPanel(props: {
         <button className="small" onClick={props.onAdd}>
           Comment on the selected text
         </button>
+      )}
+      {props.ai && !props.readOnly && (
+        <div className="comments-ai">
+          {props.ai.busy ? (
+            <div className="row">
+              <span className="muted small">{props.ai.busy}</span>
+              <span className="status-spacer" />
+              <button className="link small" onClick={props.ai.onStop}>
+                Stop
+              </button>
+            </div>
+          ) : (
+            <div className="row">
+              <button
+                className="small"
+                onClick={props.ai.onRead}
+                title="The AI reads the chapter and notes continuity slips, unclear bits and accidental repeats. Nothing in the text changes."
+              >
+                AI notes on this chapter
+              </button>
+              {props.comments.some((c) => c.by === 'ai') && (
+                <button className="link small" onClick={props.ai.onClear}>
+                  Clear AI notes
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
       {props.comments.length === 0 ? (
         <p className="muted small">No comments in this chapter.</p>
@@ -80,7 +115,11 @@ function CommentCard(props: {
   }
   const passage = comment.text.length > 160 ? `${comment.text.slice(0, 157)}…` : comment.text
   return (
-    <li ref={card} className={`comment-card ${props.active ? 'active' : ''}`}>
+    <li
+      ref={card}
+      className={`comment-card ${props.active ? 'active' : ''} ${comment.by === 'ai' ? 'ai-note' : ''}`}
+    >
+      {comment.by === 'ai' && <span className="comment-by small">AI note</span>}
       <button className="comment-passage" title="Show it on the page" onClick={props.onShow}>
         “{passage}”
       </button>
@@ -110,7 +149,7 @@ function CommentCard(props: {
           onClick={props.onRemove}
           title="Remove the comment (the text stays)"
         >
-          Resolve
+          {comment.by === 'ai' ? 'Dismiss' : 'Resolve'}
         </button>
       )}
     </li>

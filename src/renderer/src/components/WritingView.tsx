@@ -92,6 +92,9 @@ export interface ChapterTarget {
 }
 
 /** Write mode: top bar, icon rail, side panel (binder), the page, and the status bar. */
+/** An id for one AI request. */
+const newRequestId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
 export function WritingView(props: {
   series: SeriesSummary
   volume: VolumeSummary
@@ -411,6 +414,43 @@ export function WritingView(props: {
   useIpcEvent('text:comment', () => {
     if (pane.active) addComment()
   })
+
+  // AI notes on the chapter: a first reader's notes, left as comments marked as the AI's.
+  const [aiNotes, setAiNotes] = useState<{ id: string; progress: string } | null>(null)
+  useIpcEvent('ai:progress', ({ requestId, text }) => {
+    if (requestId === aiNotes?.id) setAiNotes({ id: requestId, progress: text })
+  })
+  const readForNotes = async () => {
+    if (!selectedId || aiNotes || !editor.current) return
+    const paragraphs = editor.current.paragraphs()
+    if (!paragraphs.some((p) => p.trim())) {
+      actions.toast('This chapter is empty.')
+      return
+    }
+    const id = newRequestId()
+    setAiNotes({ id, progress: 'Reading…' })
+    openPanel('comments')
+    try {
+      const { notes } = await api.invoke('ai:pageNotes', {
+        requestId: id,
+        seriesId: series.id,
+        chapterId: selectedId,
+        title: chapterTitle,
+        paragraphs,
+      })
+      const placed = editor.current?.addAiNotes(notes) ?? 0
+      actions.toast(
+        placed
+          ? `The AI left ${placed} note${placed === 1 ? '' : 's'} in this chapter.`
+          : 'The AI found nothing to note in this chapter.',
+      )
+    } catch (err) {
+      const e = describeError(err)
+      if (e.code !== 'cancelled') actions.toast(e.message)
+    } finally {
+      setAiNotes(null)
+    }
+  }
 
   // Right-click → AI on selected text: a box of options by the selection.
   const [selectionAi, setSelectionAi] = useState<{
@@ -988,6 +1028,11 @@ export function WritingView(props: {
           ...(selectedId
             ? [
                 {
+                  id: 'ai-notes',
+                  title: 'AI notes on this chapter (continuity, unclear bits, slips)',
+                  run: () => void readForNotes(),
+                },
+                {
                   id: 'ai-edit',
                   title: 'Edit this chapter with AI (fix spelling and grammar, add a scene…)',
                   run: () => editWithAi('Fix the spelling, grammar and punctuation.'),
@@ -1048,7 +1093,7 @@ export function WritingView(props: {
 
   return (
     <div
-      className={`writing-view ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''} ${settings.typewriter ? 'typewriter' : ''}`}
+      className={`writing-view ${aiOn ? '' : 'ai-off'} ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''} ${settings.typewriter ? 'typewriter' : ''}`}
     >
       {focusMode && (
         <button className="focus-exit small" onClick={leaveFocus}>
@@ -1135,6 +1180,11 @@ export function WritingView(props: {
                     {
                       label: 'AI',
                       submenu: [
+                        {
+                          label: 'AI notes on this chapter',
+                          disabled: !selectedId || !!aiNotes,
+                          onSelect: () => void readForNotes(),
+                        },
                         {
                           label: 'Edit with AI (spelling, grammar…)…',
                           disabled: !selectedId,
@@ -1442,7 +1492,18 @@ export function WritingView(props: {
           )}
           {panel === 'comments' && (
             <CommentsPanel
-              comments={comments}
+              comments={aiOn ? comments : comments.filter((c) => c.by !== 'ai')}
+              ai={
+                aiOn && selectedId
+                  ? {
+                      busy: aiNotes?.progress ?? null,
+                      onRead: () => void readForNotes(),
+                      onStop: () =>
+                        aiNotes && void api.invoke('ai:cancel', { requestId: aiNotes.id }),
+                      onClear: () => editor.current?.clearAiNotes(),
+                    }
+                  : null
+              }
               activeId={activeComment}
               focusId={newComment}
               readOnly={false}

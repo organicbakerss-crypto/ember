@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
 import { chapterExtensions } from './extensions'
-import { addCommentTr, listComments, removeCommentTr, setNoteTr } from './comments'
+import {
+  addCommentTr,
+  aiNotesTr,
+  clearAiNotes,
+  listComments,
+  removeCommentTr,
+  setNoteTr,
+} from './comments'
 
 const make = (text = 'Mara walked to the harbour. The wind was cold.') =>
   new Editor({
@@ -62,5 +69,40 @@ describe('comments', () => {
     e.view.dispatch(tr)
     const again = new Editor({ extensions: chapterExtensions(), content: e.getJSON() })
     expect(listComments(again.state.doc)).toMatchObject([{ id, note: 'note', text: 'Mara' }])
+  })
+})
+
+describe('AI notes', () => {
+  it('go on the words they quote (curly quotes or not), across formatting, without changing the text', () => {
+    const e = make('“Fine,” Mara said. She sat down. She sat down.')
+    select(e, 2, 6) // italic inside the quote: the words are in pieces
+    e.commands.toggleItalic()
+    const { tr, placed } = aiNotesTr(e.state, [
+      { quote: '"Fine," Mara said.', note: 'Who is she talking to?' },
+      { quote: 'She sat down.', note: 'first' },
+      { quote: 'She sat down.', note: 'She sat down twice.' },
+      { quote: 'not in the text', note: 'skipped' },
+    ])
+    e.view.dispatch(tr)
+    expect(placed).toBe(3)
+    const listed = listComments(e.state.doc)
+    expect(listed.map((c) => [c.text, c.by])).toEqual([
+      ['“Fine,” Mara said.', 'ai'],
+      ['She sat down.', 'ai'],
+      ['She sat down.', 'ai'],
+    ])
+    expect(listed[1]!.from).toBeLessThan(listed[2]!.from)
+    expect(e.state.doc.textContent).toBe('“Fine,” Mara said. She sat down. She sat down.')
+  })
+
+  it('a new read replaces the AI notes and leaves the writer’s own comments', () => {
+    const e = make()
+    select(e, 1, 5)
+    e.view.dispatch(addCommentTr(e.state, 'mine')!.tr)
+    e.view.dispatch(aiNotesTr(e.state, [{ quote: 'The wind', note: 'old' }]).tr)
+    e.view.dispatch(aiNotesTr(e.state, [{ quote: 'harbour', note: 'new' }]).tr)
+    expect(listComments(e.state.doc).map((c) => c.note)).toEqual(['mine', 'new'])
+    e.view.dispatch(clearAiNotes(e.state))
+    expect(listComments(e.state.doc).map((c) => c.note)).toEqual(['mine'])
   })
 })

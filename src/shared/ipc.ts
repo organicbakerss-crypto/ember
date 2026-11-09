@@ -4,6 +4,7 @@
  * The main process owns all disk access. Renderers call these requests and
  * listen for change broadcasts so every open window stays live.
  */
+import type { PageNote } from './ai/pageNotes'
 import {
   MAX_SELECTION_CHARS,
   SELECTION_ACTIONS,
@@ -894,6 +895,14 @@ export const ipcInputs = {
     attachmentIds: z.array(z.string().max(40)).max(20).optional(),
     cutoffChapterId: id('chapter').nullable().optional(),
   }),
+  /** AI notes on the open chapter (its text as it is now); they become comments. */
+  'ai:pageNotes': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    chapterId: id('chapter'),
+    title: z.string().max(500),
+    paragraphs: z.array(z.string().max(100000)).max(20000),
+  }),
   /** AI on selected text (right-click → AI): options to pick from; nothing is changed. */
   'ai:selection': z.object({
     requestId: z.string().min(1).max(80),
@@ -1265,6 +1274,7 @@ export interface IpcResults {
   'character:delete': AiCharacterFile
   'character:make': { name: string; card: string }
   'ai:selection': SelectionAnswer
+  'ai:pageNotes': { notes: PageNote[] }
   'ai:roundtableTurn': { text: string; ranking: string[] | null }
   'ai:roundtablePrivate': { text: string }
   'ai:roundtableRun': RoundtableRunStatus

@@ -15,6 +15,8 @@ import { docWords, findScenes, type Scene } from './scenes'
 import { Toolbar } from './Toolbar'
 import {
   addCommentTr,
+  aiNotesTr,
+  clearAiNotes,
   listComments,
   removeCommentTr,
   setNoteTr,
@@ -66,6 +68,12 @@ export interface EditorHandle {
    * reads `expected`; the new text ends up selected. Returns whether it did.
    */
   replaceRange: (from: number, to: number, expected: string, text: string) => boolean
+  /** The chapter's paragraphs as plain text (for AI notes). */
+  paragraphs: () => string[]
+  /** Puts AI notes on the words they quote, replacing earlier AI notes (one step); how many were placed. */
+  addAiNotes: (notes: readonly { quote: string; note: string }[]) => number
+  /** Takes every AI note off (one step). */
+  clearAiNotes: () => void
   /** The paragraphs (and headings) visible on screen, as text. */
   visibleText: () => string
   /** The chapter as it is on the page, or null when it can't be edited here. */
@@ -613,6 +621,27 @@ function EditorPage(
         after,
         rect: { left: start.left, top: start.top, bottom: Math.max(start.bottom, end.bottom) },
       }
+    },
+    paragraphs() {
+      const out: string[] = []
+      editor.state.doc.descendants((node) => {
+        if (!node.isTextblock) return true
+        out.push(node.textContent)
+        return false
+      })
+      return out
+    },
+    addAiNotes(notes) {
+      if (readOnly || contentError) return 0
+      const { tr, placed } = aiNotesTr(editor.state, notes)
+      editor.view.dispatch(tr)
+      props.onComments?.(listComments(editor.state.doc))
+      return placed
+    },
+    clearAiNotes() {
+      if (readOnly || contentError) return
+      editor.view.dispatch(clearAiNotes(editor.state))
+      props.onComments?.(listComments(editor.state.doc))
     },
     replaceRange(from: number, to: number, expected: string, text: string) {
       if (readOnly || contentError) return false

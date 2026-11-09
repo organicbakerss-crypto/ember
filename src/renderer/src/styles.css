@@ -5201,3 +5201,19 @@ kbd {
   background: color-mix(in srgb, var(--accent, #c55) 22%, transparent);
   border-radius: 2px;
 }
+/* AI notes: a cooler colour than the writer's own comments; gone entirely while the AI is off. */
+.comment-mark.ai-note {
+  background: rgba(90, 150, 230, 0.16);
+  border-bottom: 2px dotted rgba(70, 130, 220, 0.75);
+}
+.ai-off .comment-mark.ai-note {
+  background: none;
+  border-bottom: 0;
+}
+.comment-card.ai-note {
+  border-left: 3px solid rgba(70, 130, 220, 0.75);
+}
+.comment-by {
+  color: rgba(70, 130, 220, 0.95);
+  font-weight: 600;
+}
