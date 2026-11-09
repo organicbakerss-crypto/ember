@@ -881,13 +881,4 @@ Build in this order. Each milestone ends with a working app the user can actuall
 
 20. **Roundtable fixes** (Nov 2026): a time limit (when 70% is used, the rest of the debate is skipped so it still ends with final proposals and a vote; an estimate shows before starting); the Figurehead writes a neutral summary after the vote (agreements, splits and why, ideas worth keeping) beside everyone's own proposals; Save boxes on the summary and each final proposal start a normal chat with your partner holding the picks; open phases shuffle the speaking order; the phase instructions are rewritten plainly. The Figurehead's mid-debate interruptions are gone; the briefing, the private reconsideration, both discussions and up to 12 seats stay. Only your partner sits at the table, with the specialists and guest stars.
 
-## Open items
-
-None of these block milestone 1.
-
-- [ ] Confirm "Sign in with ChatGPT" can be used by a personal, unlisted app (check OpenAI's developer docs before milestone 10).
-- [ ] Capri walk animation: commission or make the frames.
-- [ ] Art for other companion characters.
-- [ ] Pick local voices for Capri and the butler.
-- [ ] Days-unopened threshold for Smart Storage.
-- [ ] Final app name (Ember for now; rename via `app.config.ts`).
+21. **Story characters** (Nov 2026): talk to your own characters. A person's world page (AI on only) has an "AI character" section: make the card with AI from the page and the chapters they appear in (shown to edit before it saves), copy the blank template to fill with any AI, or paste a filled one. The card is plain labelled text, one file per character in the world (`ai-characters/`), so it syncs with the world. They show under "Your characters" in the AI picker and in Second opinion. How they answer follows the question: about the work ("what do you think of this chapter") they answer as a reader of their own story; to them ("why did you…") they answer from inside it; unclear means the work. They know the story only up to the chapter you have open, for every reading scope and for what they've learned. With Adaptive characters on, each one named in a chapter picks up a few notes when the world is updated from it (listed on the page, each deletable). Not in the Roundtable yet.
