@@ -120,6 +120,9 @@ const QUICK: { label: string; mode: Mode; text: string }[] = [
 ]
 /** An id for one request to the AI. */
 const newRequestId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
+/** A conversation to open as soon as the AI panel shows (saved from the Roundtable). */
+const pendingOpen: { id: string | null } = { id: null }
+
 /** The other character who wrote a second opinion, if this message is one. */
 const by = (m: Message): string | null => (typeof m.by === 'string' ? m.by : null)
 
@@ -362,6 +365,18 @@ export function AiView(props: {
       setError(describeError(err).message)
     }
   }
+
+  useEffect(() => {
+    if (roundtableOpen || !pendingOpen.id) return
+    const timer = setTimeout(() => {
+      const id = pendingOpen.id
+      pendingOpen.id = null
+      if (id) void open(id)
+    }, 0)
+    return () => clearTimeout(timer)
+    // Only when the Roundtable closes (or this panel first shows).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roundtableOpen])
 
   const remove = async (id: string) => {
     await api
@@ -1054,7 +1069,16 @@ export function AiView(props: {
   if (roundtableOpen) {
     return (
       <div className="ai-view ai-roundtable-view">
-        <RoundtableView seriesId={seriesId} onBack={() => setRoundtableOpen(false)} />
+        <RoundtableView
+          seriesId={seriesId}
+          onBack={() => setRoundtableOpen(false)}
+          onOpenConversation={(id) => {
+            // The Roundtable can run in its own full-width copy of this panel: the panel
+            // that comes back when it closes opens the chat.
+            pendingOpen.id = id
+            setRoundtableOpen(false)
+          }}
+        />
       </div>
     )
   }

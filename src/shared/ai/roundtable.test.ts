@@ -7,6 +7,7 @@ import {
   finalPosition,
   finalPositionsReady,
   nextParticipant,
+  speakingOrder,
   phaseIsReady,
   roundtableResults,
   roundtableSessionSchema,
@@ -120,13 +121,14 @@ describe('Roundtable phase engine', () => {
 
   it('requires every participant to propose before discussion starts', () => {
     const state = initial()
-    expect(nextParticipant(state)?.id).toBe('john-ai')
+    const order = speakingOrder(state).map((p) => p.id)
+    expect(nextParticipant(state)?.id).toBe(order[0])
     expect(phaseIsReady(state)).toBe(false)
     expect(() => advancePhase(state)).toThrow()
-    state.posts.push(post('john-ai', 'proposals', 'open'))
-    state.posts.push(post('roman', 'proposals', 'open'))
-    expect(nextParticipant(state)?.id).toBe('bo')
-    state.posts.push(post('bo', 'proposals', 'open'))
+    state.posts.push(post(order[0]!, 'proposals', 'open'))
+    state.posts.push(post(order[1]!, 'proposals', 'open'))
+    expect(nextParticipant(state)?.id).toBe(order[2])
+    state.posts.push(post(order[2]!, 'proposals', 'open'))
     expect(advancePhase(state).phase).toBe('discussion1')
   })
 
@@ -134,7 +136,7 @@ describe('Roundtable phase engine', () => {
     const state = { ...initial(), phase: 'discussion1' as const }
     state.posts.push(post('roman', 'discussion1', 'direct'))
     state.posts.push(post('writer', 'discussion1', 'user'))
-    expect(nextParticipant(state)?.id).toBe('john-ai')
+    expect(nextParticipant(state)?.id).toBe(speakingOrder(state)[0]!.id)
   })
 
   it('runs exactly two discussions with private reconsideration before voting', () => {
@@ -217,5 +219,22 @@ describe('Roundtable phase engine', () => {
     expect(results[0]).toMatchObject({ id: 'roman', score: 4, votes: 2 })
     expect(results[1]).toMatchObject({ id: 'bo', score: 3, votes: 2 })
     expect(results[2]).toMatchObject({ id: 'john-ai', score: 2, votes: 2 })
+  })
+
+  it('shuffles the speaking order in open phases, the same way every time', async () => {
+    const { speakingOrder } = await import('./roundtable')
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      id: `p${i}`,
+      name: `P${i}`,
+      kind: 'guest' as const,
+    }))
+    const base = { ...initial(), participants: many }
+    const proposals = speakingOrder({ ...base, phase: 'proposals' }).map((p) => p.id)
+    const discussion = speakingOrder({ ...base, phase: 'discussion1' }).map((p) => p.id)
+    expect(proposals).toEqual(speakingOrder({ ...base, phase: 'proposals' }).map((p) => p.id))
+    expect(proposals).not.toEqual(discussion)
+    expect(speakingOrder({ ...base, phase: 'final' }).map((p) => p.id)).toEqual(
+      many.map((p) => p.id),
+    )
   })
 })

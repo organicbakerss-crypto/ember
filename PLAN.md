@@ -879,6 +879,8 @@ Build in this order. Each milestone ends with a working app the user can actuall
     - **George G. Baker**, the writer's own pen name, as an eleventh guest star: built from the writer's own creative profile, prose samples, real messages and two answers they wrote for it. Told to think independently, push back, and never act as the authority on the writer's work.
     - **Adaptive characters** (Settings → AI, off by default): a character marked adaptive learns as you talk. George learns the writer's lasting creative views from their own messages (one small extra request after a longer message; never story facts). Learned notes go into his instructions, are listed in Settings to delete, and sync between computers the same way as the dictionary. Later, the writer's own story characters can be marked adaptive too.
 
+20. **Roundtable fixes** (Nov 2026): a time limit (when 70% is used, the rest of the debate is skipped so it still ends with final proposals and a vote; an estimate shows before starting); the Figurehead writes a neutral summary after the vote (agreements, splits and why, ideas worth keeping) beside everyone's own proposals; Save boxes on the summary and each final proposal start a normal chat with your partner holding the picks; open phases shuffle the speaking order; the phase instructions are rewritten plainly. The Figurehead's mid-debate interruptions are gone; the briefing, the private reconsideration, both discussions and up to 12 seats stay. Only your partner sits at the table, with the specialists and guest stars.
+
 ## Open items
 
 None of these block milestone 1.

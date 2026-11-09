@@ -403,3 +403,23 @@
 .rt-body > *:last-child {
   margin-bottom: 0;
 }
+
+.rt-limit {
+  display: block;
+  margin-top: 0.8rem;
+}
+.rt-limit input[type='range'] {
+  width: 100%;
+  max-width: 24rem;
+  display: block;
+}
+.rt-pick {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+.rt-summary {
+  border-left: 3px solid var(--accent);
+}

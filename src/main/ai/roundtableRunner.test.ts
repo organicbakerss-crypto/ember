@@ -5,7 +5,7 @@ import type { AiService } from './service'
 import type { ConversationFile } from '@shared/schema'
 import type { RoundtableSession } from '@shared/ai/roundtable'
 
-function fixture() {
+function fixture(extra: Partial<RoundtableSession> = {}) {
   const now = '2026-11-06T12:00:00.000Z'
   const state: RoundtableSession = {
     topic: 'Choose the strongest story premise',
@@ -16,6 +16,7 @@ function fixture() {
     ],
     phase: 'proposals',
     posts: [],
+    ...extra,
   }
   let file: ConversationFile = {
     formatVersion: 1,
@@ -45,7 +46,7 @@ describe('autonomous Roundtable runner', () => {
         sources: ['Chapter 1'],
         preparedAt: '2026-11-06T12:00:00.000Z',
       })),
-      reviewRoundtable: vi.fn(async () => null),
+      summarizeRoundtable: vi.fn(async () => 'They agreed on X and split on Y.'),
       roundtableTurn: vi.fn(
         async ({ session, speakerId }: { session: RoundtableSession; speakerId: string }) => {
           const ranking =
@@ -78,9 +79,10 @@ describe('autonomous Roundtable runner', () => {
     expect(output.posts.filter((p) => p.channel === 'private')).toHaveLength(6)
     expect(output.posts.filter((p) => p.phase === 'final' && !!p.summary)).toHaveLength(3)
     expect(output.briefing?.sources).toEqual(['Chapter 1'])
-    expect(output.figureheadReviews).toEqual(['discussion1', 'discussion2'])
+    expect(output.figureheadReviews).toBeUndefined()
+    expect(output.summary?.text).toBe('They agreed on X and split on Y.')
     expect(output.posts.filter((p) => p.channel === 'ballot')).toHaveLength(3)
-    expect(fixtureData.saveConversation).toHaveBeenCalledTimes(33)
+    expect(fixtureData.saveConversation).toHaveBeenCalledTimes(32)
     expect((ai.roundtableTurn as ReturnType<typeof vi.fn>).mock.calls.length).toBe(24)
   })
 
@@ -96,7 +98,7 @@ describe('autonomous Roundtable runner', () => {
         sources: [],
         preparedAt: '2026-11-06T12:00:00.000Z',
       })),
-      reviewRoundtable: vi.fn(async () => null),
+      summarizeRoundtable: vi.fn(async () => 'They agreed on X and split on Y.'),
       roundtableTurn: vi.fn(() => deferred),
       cancel: vi.fn(),
     } as unknown as AiService
@@ -116,5 +118,43 @@ describe('autonomous Roundtable runner', () => {
     release({ text: 'Late reply', ranking: null })
     await paused
     expect(fixtureData.getFile().roundtable!.posts).toHaveLength(0)
+  })
+
+  it('skips the rest of the debate when time runs short, and still ends with finals and a vote', async () => {
+    const fixtureData = fixture({ timeLimitMinutes: 1, spentMs: 10 * 60_000 })
+    const ai = {
+      prepareRoundtable: vi.fn(async () => ({
+        text: 'Context',
+        sources: [],
+        preparedAt: '2026-11-06T12:00:00.000Z',
+      })),
+      summarizeRoundtable: vi.fn(async () => 'Summary.'),
+      roundtableTurn: vi.fn(
+        async ({ session, speakerId }: { session: RoundtableSession; speakerId: string }) => ({
+          text: 'Contribution',
+          ranking:
+            session.phase === 'vote'
+              ? session.participants.filter((p) => p.id !== speakerId).map((p) => p.id)
+              : null,
+          ...(session.phase === 'final' ? { summary: 'Final.' } : {}),
+        }),
+      ),
+      cancel: vi.fn(),
+    } as unknown as AiService
+    let done!: (status: RoundtableRunStatus) => void
+    const finished = new Promise<RoundtableRunStatus>((resolve) => (done = resolve))
+    const runner = new RoundtableRunner(fixtureData.host, ai, (status) => {
+      if (status.state === 'complete' || status.state === 'failed') done(status)
+    })
+    runner.start('ser_0123456789abcdef', 'cnv_0123456789abcdef')
+    expect((await finished).state).toBe('complete')
+    const output = fixtureData.getFile().roundtable!
+    expect(output.posts.filter((p) => p.phase === 'proposals')).toHaveLength(3)
+    expect(
+      output.posts.filter((p) => p.phase.startsWith('discussion') || p.phase === 'revision'),
+    ).toHaveLength(0)
+    expect(output.posts.filter((p) => p.phase === 'final' && !!p.summary)).toHaveLength(3)
+    expect(output.posts.filter((p) => p.channel === 'ballot')).toHaveLength(3)
+    expect(output.summary?.text).toBe('Summary.')
   })
 })

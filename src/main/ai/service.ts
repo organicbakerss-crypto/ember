@@ -14,6 +14,7 @@ import { roundtableRole } from '@shared/ai/roundtableCast'
 import { WRITER_LEARNERS, persona, slopGuidance } from '@shared/ai/personas'
 import { MAX_LEARNED, learnMessages, parseLearned } from './learn'
 import {
+  finalPosition,
   finalPositionsReady,
   nextParticipant,
   validBallot,
@@ -438,37 +439,45 @@ export class AiService {
     })
   }
 
-  /** Figurehead checks the debate at major boundaries, not after every model turn. */
-  async reviewRoundtable(session: RoundtableSession, requestId: string): Promise<string | null> {
-    if (!session.briefing?.text.trim()) return null
-    const debate = session.posts
-      .filter((p) => p.channel === 'open' || p.channel === 'direct')
-      .slice(-18)
-      .map((p) => `${p.speakerId}: ${p.text.slice(0, 1300)}`)
-      .join('\n\n')
-      .slice(-15000)
-    if (!debate.trim()) return null
+  /**
+   * The Figurehead's neutral summary after the vote: where the table agreed,
+   * where it split and why, and ideas worth keeping from proposals that
+   * didn't win. It never picks a winner.
+   */
+  async summarizeRoundtable(session: RoundtableSession, requestId: string): Promise<string> {
+    const finals = session.participants
+      .map((p) => {
+        const f = finalPosition(session, p.id)
+        return f ? `${p.name}:\nIn short: ${f.summary}\n${f.text.slice(0, 4000)}` : ''
+      })
+      .filter(Boolean)
+      .join('\n\n---\n\n')
     const provider = await this.client()
-    return this.track(requestId, async (signal) => {
-      const result = (
+    return this.track(requestId, async (signal) =>
+      (
         await provider.chat({
           messages: [
             {
               role: 'system',
-              content:
-                "You are the Figurehead, a neutral manuscript-grounding moderator. Compare the recent debate to the shared evidence. Intervene ONLY if there is an important factual contradiction with the supplied evidence or the debate has abandoned the writer's question. A proposal to CHANGE canon is not an error. If no substantive issue is demonstrable, respond with exactly NONE. Otherwise provide one short correction or a request to clarify, grounded in the briefing, with no creative judgment. Never invent manuscript facts.",
+              content: [
+                'You are the Figurehead, the neutral moderator of a Roundtable on a writer’s story. Everyone has locked in a final proposal. Write a short, plain summary for the writer:',
+                '- what most of them agreed on;',
+                '- where they really split, and why (name who stood where);',
+                '- good ideas from proposals that probably won’t win, worth keeping anyway.',
+                'Don’t pick a winner and don’t add ideas of your own. Plain paragraphs, no headings. Name participants as they’re named below.',
+                slopGuidance(),
+              ].join('\n'),
             },
             {
               role: 'user',
-              content: `Original question: ${session.topic}\n\nEvidence briefing: ${session.briefing!.text.slice(0, 12000)}\n\nRecent discussion:\n${debate}`,
+              content: `The writer’s question: ${session.topic}\n\nFinal proposals:\n\n${finals.slice(0, 40000)}`,
             },
           ],
+          temperature: 0.3,
           signal,
-          temperature: 0.1,
         })
-      ).trim()
-      return !result || /^NONE[.!]?$/i.test(result) ? null : result.slice(0, 2500)
-    })
+      ).trim(),
+    )
   }
 
   /** A single Roundtable contribution. The renderer controls phase transitions and saves history. */
@@ -552,18 +561,18 @@ export class AiService {
       .filter(Boolean)
       .join('\n\n')
     const role = direct
-      ? `Address ${session.participants.find((p) => p.id === targetId)!.name} directly, building on a concrete disagreement or question. Respond to the merits of their criticism instead of automatically accepting it. If your approach remains stronger, explain why, including a specific tradeoff. This is a message-board reply, not a new opening proposal.`
+      ? `Reply directly to ${session.participants.find((p) => p.id === targetId)!.name}, about one real disagreement or question between you. Take their point seriously; if your idea still holds up, say why and what it costs. A short reply, not a new pitch.`
       : session.phase === 'proposals'
-        ? 'Put forward your own specific proposal and state the criteria you would use to judge competing proposals. Make it substantive but concise.'
+        ? 'Make your own proposal for the writer’s question: specific, in a few paragraphs at most. Then say briefly what you think a good answer has to do, so others can be judged against it.'
         : session.phase === 'discussion1'
-          ? 'Respond to a specific argument or objection. Defend the strongest rationale for your own proposal when it still holds, and explain why a rival approach may be weaker for this particular story. Acknowledging a valid criticism does not require abandoning the rest of your idea. Revise only when the evidence or reasoning actually warrants it; avoid agreement for the sake of harmony.'
+          ? 'Respond to something specific another participant said. If your idea still holds up, defend it and say why theirs fits this story less well. If they made a fair point, say so; that doesn’t mean dropping your whole idea. Change your mind only for a good reason, not to agree.'
           : session.phase === 'revision'
-            ? 'Privately evaluate the strongest objections to your original proposal. State explicitly which core parts remain worth defending, what (if anything) should change, and why. Preserve the strongest distinctive benefits of your idea rather than drifting toward consensus. If the objections genuinely defeat it, change your mind without hesitation. This is private working thought, not a message to the others.'
+            ? 'Privately, for yourself only: what were the best objections to your proposal? Which parts of it still stand, what would you change, and why? Keep what’s distinctive about your idea unless the objections really beat it.'
             : session.phase === 'discussion2'
-              ? 'Continue the open discussion from your own revised position. Address a specific serious objection and defend what remains compelling about your approach, including a tradeoff or weakness you accept. Challenge another proposal where warranted. Do not mechanically repeat your pitch, abandon it merely because someone disagrees, or manufacture conflict where none exists.'
+              ? 'Continue the discussion from where you now stand. Take on one serious objection, say what still works about your idea and what weakness you accept, and push back on another proposal if it deserves it. Don’t just repeat your pitch, and don’t invent a disagreement.'
               : session.phase === 'final'
-                ? 'Enter your private booth. Evaluate the strongest remaining case for your own proposal against the alternatives. Do not surrender a distinct and viable idea merely because more participants favored another one, but do change course if the evidence really supports it. Based on both debates and your own earlier views, lock in the proposal you would actually recommend. Return ONLY a JSON object with two strings: {"summary":"One or two straightforward sentences describing the proposed direction","proposal":"Complete final proposal, including reasoning, consequences and any important caveats"}. Your summary and proposal must be consistent. No other participant sees this until all have submitted.'
-                : `Every participant has now locked in a final proposal. Rank the OTHER participants using ONLY the final proposals, not earlier drafts. Never rank yourself. Return ONLY JSON of this form: {"ranking":["id1","id2"]}, including every other participant ID exactly once. Eligible IDs: ${session.participants
+                ? 'Privately lock in the proposal you would actually recommend now, after both discussions. Don’t give up a good idea just because others preferred another one; do change it if the arguments really showed it was wrong. Reply ONLY with JSON: {"summary":"one or two plain sentences: the direction you propose","proposal":"your full final proposal, with reasons, consequences and caveats"}. Nobody sees it until everyone has locked theirs.'
+                : `Everyone has locked in a final proposal. Rank the OTHER participants’ final proposals, best first, judging only the final versions. Never rank yourself. Reply ONLY with JSON: {"ranking":["id1","id2"]}, listing every other participant once. Their ids: ${session.participants
                     .filter((p) => p.id !== speakerId)
                     .map((p) => p.id)
                     .join(', ')}.`
@@ -576,17 +585,12 @@ export class AiService {
             content: [
               roleInstructions,
               ...(session.phase === 'vote' || session.phase === 'final' ? [] : [slopGuidance()]),
-              'You are participating as one distinct voice in the Roundtable. Other participants are independent speakers. Only speak for yourself. Do not fabricate quotes or results. Keep your full reasoning ability and literary standards.',
-              'Be intellectually independent rather than socially agreeable. Treat criticism as something to examine, not an instruction to concede. Defend substantive strengths, name tradeoffs, and update only for good reasons. Do not become combative or stubborn: the aim is to preserve worthy competing ideas until the final vote, not to win arguments.',
+              'You’re one voice at a Roundtable about the writer’s story. The others are separate people; speak only for yourself, and don’t invent quotes or results.',
+              'Think for yourself rather than going along with the room. Take criticism seriously but don’t give in to it automatically; defend what’s good about your idea and admit what it costs. Not stubborn, not combative: the point is to keep good competing ideas alive until the end.',
               ...(positionMemory ? [positionMemory] : []),
               `Roundtable participants: ${participants}.`,
               `Topic from the writer: ${session.topic}`,
-              `Figurehead's manuscript briefing (grounded context; proposals can intentionally change canon): ${session.briefing?.text || 'No project briefing is available; do not assume manuscript facts.'}`,
-              ...(session.interventions?.length
-                ? [
-                    `Figurehead context corrections: ${session.interventions.map((x) => x.text).join('\n')}`,
-                  ]
-                : []),
+              `What the story actually says, gathered by the Figurehead (proposals may deliberately change it): ${session.briefing?.text || 'No briefing is available; don’t assume facts about the story.'}`,
               `Current phase: ${session.phase}.`,
               role,
             ].join('\n\n'),

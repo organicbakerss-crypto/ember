@@ -3,6 +3,7 @@ import {
   advancePhase,
   nextParticipant,
   phaseIsReady,
+  shouldSkipToFinal,
   type RoundtableSession,
   type RoundtablePost,
 } from '@shared/ai/roundtable'
@@ -90,12 +91,35 @@ export class RoundtableRunner {
 
   private async run(seriesId: string, conversationId: string, control: Control): Promise<void> {
     try {
-      // A complete session with twelve members uses up to 96 participant turns, plus bounded Figurehead checks.
+      // A complete session with twelve members uses up to 96 participant turns, plus the briefing and summary.
       // Each completed turn is saved immediately, so an interrupted run can resume.
       while (!control.paused) {
         const file = await this.host.current.readConversation(seriesId, conversationId)
         const session = file.roundtable
         if (!session) throw new Error('This conversation is not a Roundtable.')
+        if (session.phase === 'complete' && !session.summary) {
+          // The Figurehead's neutral summary, beside everyone's own final proposals.
+          const requestId = `figurehead-summary-${conversationId}-${Date.now()}`
+          control.requestId = requestId
+          this.publish({
+            seriesId,
+            conversationId,
+            state: 'running',
+            speakerId: 'figurehead',
+            targetId: null,
+            error: null,
+          })
+          const started = Date.now()
+          const text = await this.ai.summarizeRoundtable(session, requestId)
+          control.requestId = null
+          if (control.paused) break
+          await this.save(seriesId, file, {
+            ...session,
+            spentMs: (session.spentMs ?? 0) + (Date.now() - started),
+            summary: { text, at: new Date().toISOString() },
+          })
+          continue
+        }
         if (session.phase === 'complete') {
           this.publish({
             seriesId,
@@ -119,10 +143,21 @@ export class RoundtableRunner {
             targetId: null,
             error: null,
           })
+          const started = Date.now()
           const briefing = await this.ai.prepareRoundtable(seriesId, session, requestId)
           control.requestId = null
           if (control.paused) break
-          await this.save(seriesId, file, { ...session, briefing })
+          await this.save(seriesId, file, {
+            ...session,
+            briefing,
+            spentMs: (session.spentMs ?? 0) + (Date.now() - started),
+          })
+          continue
+        }
+
+        // Running out of time: skip the rest of the debate so there's still an ending.
+        if (shouldSkipToFinal(session)) {
+          await this.save(seriesId, file, { ...session, phase: 'final' })
           continue
         }
 
@@ -145,38 +180,6 @@ export class RoundtableRunner {
             : null
         if (!speaker && !directSpeaker) {
           if (!phaseIsReady(session)) throw new Error('The current phase cannot advance.')
-          // Review the two open debates. The Figurehead intervenes only if canon is
-          // demonstrably contradicted or discussion has lost the writer's question.
-          if (discussion && !session.figureheadReviews?.includes(session.phase)) {
-            const requestId = `figurehead-review-${conversationId}-${Date.now()}`
-            control.requestId = requestId
-            this.publish({
-              seriesId,
-              conversationId,
-              state: 'running',
-              speakerId: 'figurehead',
-              targetId: null,
-              error: null,
-            })
-            const note = await this.ai.reviewRoundtable(session, requestId)
-            control.requestId = null
-            if (control.paused) break
-            await this.save(seriesId, file, {
-              ...session,
-              figureheadReviews: [...(session.figureheadReviews ?? []), session.phase],
-              interventions: note
-                ? [
-                    ...(session.interventions ?? []),
-                    {
-                      at: new Date().toISOString(),
-                      phase: session.phase,
-                      text: note,
-                    },
-                  ]
-                : session.interventions,
-            })
-            continue
-          }
           const advanced = advancePhase(session)
           if (control.paused) break
           await this.save(seriesId, file, advanced)
@@ -198,6 +201,7 @@ export class RoundtableRunner {
           targetId,
           error: null,
         })
+        const started = Date.now()
         const outcome = await this.ai.roundtableTurn({
           requestId,
           session,
@@ -226,7 +230,11 @@ export class RoundtableRunner {
           ...(outcome.ranking ? { ranking: outcome.ranking } : {}),
           ...(outcome.summary ? { summary: outcome.summary } : {}),
         }
-        await this.save(seriesId, file, { ...session, posts: [...session.posts, post] })
+        await this.save(seriesId, file, {
+          ...session,
+          posts: [...session.posts, post],
+          spentMs: (session.spentMs ?? 0) + (Date.now() - started),
+        })
       }
       this.publish({
         seriesId,

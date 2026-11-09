@@ -9,6 +9,7 @@ import {
   nextParticipant,
   PHASE_NAMES,
   roundtableResults,
+  estimatedCalls,
   type RoundtableSession,
   type RoundtablePost,
 } from '@shared/ai/roundtable'
@@ -26,7 +27,16 @@ const TABS: { id: Tab; title: string }[] = [
 ]
 const id = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack: () => void }) {
+export function RoundtableView({
+  seriesId,
+  onBack,
+  onOpenConversation,
+}: {
+  seriesId: string
+  onBack: () => void
+  /** Opens a normal conversation (after saving picks from the results). */
+  onOpenConversation?: (conversationId: string) => void
+}) {
   const { settings } = useSettings()
   // Partners all look for the same things, so only yours takes a seat.
   const currentCharacter = yourPartner(settings.ai)
@@ -34,6 +44,10 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     (role) => role.kind !== 'regular' || role.id === currentCharacter.id,
   ).map(({ id, name, kind }) => ({ id, name, kind }))
   const [topic, setTopic] = useState('')
+  /** Most minutes the session may take (0: no limit). */
+  const [limit, setLimit] = useState(0)
+  /** What the writer picked to keep from the results ('summary' or a participant id). */
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
   const [selected, setSelected] = useState<string[]>([currentCharacter.id, 'specialist-fantasy'])
   const [file, setFile] = useState<ConversationFile | null>(null)
   const [saved, setSaved] = useState<ConversationSummary[]>([])
@@ -126,6 +140,60 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
     refresh()
   }
 
+  // A rough idea of how long a full session takes, before starting.
+  const calls = estimatedCalls(selected.length)
+  const perCall = settings.ai.provider === 'chatgpt' ? 15 : 40
+  const estimate = Math.max(1, Math.round((calls * perCall) / 60))
+
+  /** Saves what the writer picked as a new chat with their partner, and opens it. */
+  const togglePick = (id: string, on: boolean) =>
+    setPicked((p) => {
+      const next = new Set(p)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  const savePicks = async () => {
+    if (!session || !file || !picked.size) return
+    const parts: string[] = []
+    if (picked.has('summary') && session.summary) {
+      parts.push(`## The Figurehead's summary\n\n${session.summary.text}`)
+    }
+    for (const m of session.participants) {
+      if (!picked.has(m.id)) continue
+      const final = session.posts.find(
+        (p) => p.phase === 'final' && p.channel === 'private' && p.speakerId === m.id,
+      )
+      if (final) parts.push(`## ${m.name}'s final proposal\n\n${final.text}`)
+    }
+    if (!parts.length) return
+    const now = new Date().toISOString()
+    const conversation: ConversationFile = {
+      formatVersion: 1,
+      id: newId('conversation'),
+      mode: 'chat',
+      characterId: currentCharacter.id,
+      title: `From the Roundtable: ${session.topic.slice(0, 100)}`,
+      createdAt: now,
+      updatedAt: now,
+      messages: [
+        {
+          role: 'user',
+          content: `Here's what came out of a Roundtable on “${session.topic}”. Let's talk it through.\n\n${parts.join('\n\n')}`,
+          at: now,
+          read: null,
+        },
+      ],
+    }
+    try {
+      await api.invoke('ai:saveConversation', { seriesId, conversation })
+      setPicked(new Set())
+      onOpenConversation?.(conversation.id)
+    } catch (err) {
+      setError(describeError(err).message)
+    }
+  }
+
   const start = async () => {
     if (!topic.trim() || selected.length < 2 || selected.length > 12) return
     const now = new Date().toISOString()
@@ -135,6 +203,8 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
       participants,
       phase: 'proposals',
       posts: [],
+      timeLimitMinutes: limit || null,
+      spentMs: 0,
     }
     const base: ConversationFile = {
       formatVersion: 1,
@@ -398,6 +468,26 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
               original cast.
             </p>
           </div>
+          <label className="rt-limit">
+            Time limit: {limit ? `${limit} minutes` : 'none'}
+            <input
+              type="range"
+              min={0}
+              max={120}
+              step={5}
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+            />
+          </label>
+          <p className="muted small">
+            About {calls} AI requests with {selected.length} seats, roughly {estimate} minutes on{' '}
+            {settings.ai.provider === 'chatgpt' ? 'ChatGPT' : 'Ollama'}.{' '}
+            {limit > 0 && limit < estimate
+              ? `With ${limit} minutes, the debate gets shortened when time runs low, so it still ends with final proposals and a vote.`
+              : limit > 0
+                ? 'If it runs long, the debate gets shortened so it still ends with final proposals and a vote.'
+                : ''}
+          </p>
           <button
             className="primary"
             disabled={!topic.trim() || selected.length < 2 || selected.length > 12}
@@ -562,6 +652,27 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
                   Final proposals remain sealed until everyone has locked in their position.
                 </p>
               )}
+              {session.summary && (
+                <article className="rt-post rt-summary">
+                  <div className="rt-result-line">
+                    <strong>The Figurehead’s summary</strong>
+                    <label className="rt-pick small">
+                      <input
+                        type="checkbox"
+                        checked={picked.has('summary')}
+                        onChange={(e) => togglePick('summary', e.target.checked)}
+                      />
+                      Save
+                    </label>
+                  </div>
+                  <div className="rt-body">
+                    <Blocks blocks={parse(session.summary.text)} />
+                  </div>
+                </article>
+              )}
+              {session.phase === 'complete' && !session.summary && (
+                <p className="muted">The Figurehead is writing a summary…</p>
+              )}
               {resultsReady &&
                 visibleRanking.map((result, i) => {
                   const proposal = sealed.find((p) => p.speakerId === result.id)
@@ -578,6 +689,14 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
                             {result.score} points · {result.votes} ballots
                           </span>
                         )}
+                        <label className="rt-pick small">
+                          <input
+                            type="checkbox"
+                            checked={picked.has(result.id)}
+                            onChange={(e) => togglePick(result.id, e.target.checked)}
+                          />
+                          Save
+                        </label>
                       </div>
                       <p className="rt-result-summary">
                         {proposal?.summary || 'No final summary was recorded for this participant.'}
@@ -593,6 +712,19 @@ export function RoundtableView({ seriesId, onBack }: { seriesId: string; onBack:
                     </article>
                   )
                 })}
+              {resultsReady && (
+                <div className="row">
+                  <button
+                    className="primary"
+                    disabled={!picked.size}
+                    title="Starts a normal chat with your partner, with what you picked already in it"
+                    onClick={() => void savePicks()}
+                  >
+                    Save {picked.size ? `${picked.size} ` : ''}to a chat with{' '}
+                    {currentCharacter.name}
+                  </button>
+                </div>
+              )}
               <p className="muted small">
                 Only locked final proposals are ranked. Participants cannot vote for themselves.
               </p>

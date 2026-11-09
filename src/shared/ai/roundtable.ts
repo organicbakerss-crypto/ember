@@ -59,6 +59,12 @@ export const roundtableSessionSchema = z.object({
     .optional(),
   phase: roundtablePhaseSchema,
   posts: z.array(roundtablePostSchema).max(250),
+  /** Most time the session may take, in minutes (none: no limit). */
+  timeLimitMinutes: z.number().int().min(1).max(600).nullable().optional(),
+  /** Time spent on AI calls so far (pauses don't count). */
+  spentMs: z.number().nonnegative().optional(),
+  /** The Figurehead's neutral summary, written after the vote. */
+  summary: z.object({ text: z.string().max(20000), at: z.iso.datetime() }).optional(),
 })
 export type RoundtableSession = z.infer<typeof roundtableSessionSchema>
 
@@ -82,6 +88,51 @@ export const PHASE_NAMES: Record<RoundtablePhase, string> = {
   complete: 'Results',
 }
 
+/** Phases where everyone hears everyone, so who goes first matters. */
+const OPEN_PHASES: readonly RoundtablePhase[] = ['proposals', 'discussion1', 'discussion2']
+
+/**
+ * The speaking order for a phase. Open phases are shuffled (the same way
+ * every time for a given session and phase, so the window and the runner
+ * agree), so nobody always sets the frame for the others.
+ */
+export function speakingOrder(session: RoundtableSession): RoundtableParticipant[] {
+  if (!OPEN_PHASES.includes(session.phase)) return [...session.participants]
+  const seed = `${session.topic}|${session.phase}`
+  const score = (id: string) => {
+    let h = 2166136261
+    for (const c of `${seed}|${id}`) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0
+    // Mix the bits so ids that differ only at the end still land far apart.
+    h ^= h >>> 16
+    h = Math.imul(h, 0x85ebca6b)
+    h ^= h >>> 13
+    h = Math.imul(h, 0xc2b2ae35)
+    h ^= h >>> 16
+    return h >>> 0
+  }
+  return [...session.participants].sort((a, b) => score(a.id) - score(b.id))
+}
+
+/** Share of the time limit after which the remaining discussion is skipped. */
+export const SKIP_AT = 0.7
+
+/**
+ * Out of time for discussion: the rest of the debate is skipped so the
+ * session still ends with final proposals and a vote. Proposals always
+ * finish first.
+ */
+export function shouldSkipToFinal(session: RoundtableSession): boolean {
+  if (!session.timeLimitMinutes) return false
+  if (!['discussion1', 'revision', 'discussion2'].includes(session.phase)) return false
+  return (session.spentMs ?? 0) >= session.timeLimitMinutes * 60_000 * SKIP_AT
+}
+
+/** About how many AI calls a full session takes (for the estimate before starting). */
+export function estimatedCalls(seats: number): number {
+  // Proposals, two discussions each with a direct reply, reconsideration, final, vote; plus briefing and summary.
+  return seats * 8 + 2
+}
+
 export function nextParticipant(session: RoundtableSession): RoundtableParticipant | null {
   if (session.phase === 'complete') return null
   const channel =
@@ -95,7 +146,7 @@ export function nextParticipant(session: RoundtableSession): RoundtableParticipa
       .filter((post) => post.phase === session.phase && post.channel === channel)
       .map((post) => post.speakerId),
   )
-  return session.participants.find((p) => !heard.has(p.id)) ?? null
+  return speakingOrder(session).find((p) => !heard.has(p.id)) ?? null
 }
 
 export function phaseIsReady(session: RoundtableSession): boolean {
