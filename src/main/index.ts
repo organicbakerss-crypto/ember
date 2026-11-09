@@ -49,6 +49,8 @@ function createWindow(
       spellcheck: true,
     },
   })
+  // No menu bar strip on Windows and Linux; the menu's shortcuts (copy, paste, zoom) still work.
+  window.setMenuBarVisibility(false)
   window.once('ready-to-show', () => window.show())
   window.on('focus', () => sync?.focused())
   // The window's page died (out of memory, a crash): load it again rather than leave it black.
