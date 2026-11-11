@@ -1,4 +1,5 @@
 /** Map helpers for the views: which map is which, who is where, territory colours. */
+import { isIndividual } from '@shared/world/templates'
 import type { EntrySummary } from '@shared/ipc'
 import type { MapFile } from '@shared/schema'
 import {
@@ -51,10 +52,7 @@ export function parentMapOf(world: WorldData, placeId: string): MapFile | undefi
 }
 
 export function isPerson(world: WorldData, e: EntrySummary): boolean {
-  return (
-    lensOf(world, e) === 'who' &&
-    (e.template === 'person' || !['faction', 'family'].includes(e.template))
-  )
+  return isIndividual(world.view.templates, e.template)
 }
 
 /** People whose location is this place at a moment (the world's, unless given). */

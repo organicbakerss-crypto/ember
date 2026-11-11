@@ -60,7 +60,7 @@ import { catchNames } from '@shared/world/nameCatcher'
 import { chapterPovs } from '@shared/world/povs'
 import { entryText, worldDigest } from '@shared/world/digest'
 import { type StoryChapter, type WorldIndex } from '@shared/world/story'
-import { isBuiltIn, worldTemplates } from '@shared/world/templates'
+import { isBuiltIn, isIndividual, worldTemplates } from '@shared/world/templates'
 import { baseMaps, mapsNow, nearbyPlaces } from '@shared/world/maps'
 import { anchorPosition, type ChapterPositions } from '@shared/world/facts'
 import { buildTimeline, timelinePositions } from '@shared/world/timeline'
@@ -1480,7 +1480,8 @@ export class WorldStore {
     ])
     const matcher = nameMatcher(entryTerms(entries))
     const owner = ownerOf(entries)
-    const people = entries.filter((e) => e.template === 'person')
+    const templates = worldTemplates(await this.customTemplates(worldId))
+    const people = entries.filter((e) => isIndividual(templates, e.template))
     const mentions: WorldIndex['mentions'] = {}
     const get = (id: string) => (mentions[id] ??= { chapters: [], counts: [], pov: [] })
     story.forEach((text, position) => {
@@ -1517,7 +1518,8 @@ export class WorldStore {
       this.cachedStory(worldId),
       this.readAll(worldId),
     ])
-    const people = entries.filter((e) => e.template === 'person')
+    const templates = worldTemplates(await this.customTemplates(worldId))
+    const people = entries.filter((e) => isIndividual(templates, e.template))
     const matcher = nameMatcher(entryTerms([entry]))
     const ids = new Set([entryId, ...entry.mergedFrom])
     const out: Appearance[] = []

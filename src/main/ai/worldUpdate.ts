@@ -24,6 +24,10 @@ export const NEW_KINDS: Record<string, { template: string; label: string }> = {
   system: { template: 'magic', label: 'system' },
 }
 
+/** What each kind means, so organisations aren't filed as people. */
+const KIND_GUIDE =
+  'person: one individual; faction: any group or organisation, such as a company, shop, band, team, gang, church, school, radio or TV station, agency, club or family; place: a location or building; creature: an animal or non-human being'
+
 const LIMITS = { suggestions: 30, continuity: 10, questions: 3 }
 
 /* ---------- what the AI is asked ---------- */
@@ -45,7 +49,7 @@ export function findingsMessages(input: {
   const system = `You read one chapter of a novel and note what it tells about the story's world, so the writer's world notes stay up to date. Use only what the chapter says. Reply with JSON only, exactly this shape:
 {"summary":"","new":[{"name":"","kind":"","about":"","quote":""}],"facts":[{"entry":"","field":"","value":"","quote":""}],"relationships":[{"from":"","to":"","type":"","words":"","quote":""}],"continuity":[{"entry":"","problem":"","quote":""}],"questions":[{"question":"","quote":""}]}
 - summary: at most 6 sentences: who is there, what happens, what changes. Keep names exactly.
-- new: people, places, groups, creatures, events or systems (magic, laws) the chapter names that are not in the world notes or the list of other names. kind is one of: ${Object.keys(NEW_KINDS).join(', ')}. about: one short line.
+- new: people, places, groups, creatures, events or systems (magic, laws) the chapter names that are not in the world notes or the list of other names. kind is one of: ${Object.keys(NEW_KINDS).join(', ')} (${KIND_GUIDE}). about: one short line.
 - facts: what the chapter shows about an entry in the notes that its notes don't say yet, or that has changed (where someone is now, a new role, someone dies). entry: its exact name. field: one of the fields listed for that entry. value: a few words; for a field marked "a name", the exact name of another entry.
 - relationships: two entries named in the chapter who are connected in it, if the notes don't already say so. type is one of: ${types}. words: optional, like "sister of".
 - continuity: anything in the chapter that contradicts the world notes or what the writer told you (an eye colour that changed, someone in two places at once, the dead acting). problem: what doesn't fit, in one line.
@@ -354,7 +358,7 @@ export function sortNamesMessages(names: { name: string; quote: string }[]): Cha
     {
       role: 'system',
       content: `These capitalised words keep coming up in a novel. For each, say what it is in the story's world, from the sentence it's in. Reply with JSON only: {"names":[{"name":"","kind":"","about":""}]}
-kind is one of: ${Object.keys(NEW_KINDS).join(', ')}, or none.
+kind is one of: ${Object.keys(NEW_KINDS).join(', ')}, or none (${KIND_GUIDE}).
 Use none for anything that isn't something in the world: real holidays and festivals (like Halloween or Christmas), days, months, seasons, languages, titles or forms of address on their own, exclamations, ordinary words at the start of a sentence. A holiday or festival made up for the story is an event.
 about: one short line from the sentence (leave it empty for none). Keep each name exactly as given.`,
     },

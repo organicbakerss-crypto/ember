@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isIndividual } from '@shared/world/templates'
 import type { WorldView } from '@shared/ipc'
 import type { AiCharacterFile } from '@shared/schema'
 import { api, useIpcEvent } from '../api'
@@ -44,10 +45,9 @@ export function StoryCharactersSettings() {
       </p>
     )
   }
-  const lensOf = new Map(view?.templates.map((t) => [t.id, t.lens]) ?? [])
   const withCard = new Set(cast.map((c) => c.entryId))
   const people = (view?.entries ?? [])
-    .filter((e) => lensOf.get(e.template) === 'who')
+    .filter((e) => isIndividual(view?.templates ?? [], e.template))
     .sort((a, b) => a.name.localeCompare(b.name))
   const chosen = people.find((e) => e.id === entryId) ?? null
 

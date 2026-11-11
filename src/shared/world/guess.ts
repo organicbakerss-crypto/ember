@@ -4,6 +4,11 @@
  * default for the Add dialog; the writer always picks.
  */
 const BY_WORD: [RegExp, string][] = [
+  // Modern organisations first, so "Harbor Radio" isn't taken for a harbour.
+  [
+    /\b(radio|fm|tv|news|records|studios?|inc|ltd|llc|corp|corporation|agency|bank|network|media|foundation|band|team|gang|crew|union|society|institute|club|party)\b\.?/i,
+    'faction',
+  ],
   [/\b(kingdom|empire|realm|republic|duchy|province|dominion)\b/i, 'kingdom'],
   [/\b(continent|land of)\b/i, 'continent'],
   [/\b(district|quarter|ward|market|docks)\b/i, 'district'],

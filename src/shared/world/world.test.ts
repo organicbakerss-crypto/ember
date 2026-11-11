@@ -166,3 +166,25 @@ describe('text forms', () => {
     expect(text).toContain('Mentioned in: Ch 1 (3)')
   })
 })
+
+describe('someone or a group', () => {
+  it('people and creatures are someone; factions, families, places and group-like kinds are not', async () => {
+    const { isIndividual, isIndividualTemplate } = await import('./templates')
+    const all = worldTemplates([
+      { id: 'radio', name: 'Radio station', lens: 'who', fields: [] },
+      { id: 'robot', name: 'Robot', lens: 'who', fields: [] },
+      { id: 'company', name: 'Company', lens: 'who', fields: [] },
+    ])
+    expect(isIndividual(all, 'person')).toBe(true)
+    expect(isIndividual(all, 'creature')).toBe(true)
+    expect(isIndividual(all, 'robot')).toBe(true)
+    expect(isIndividual(all, 'faction')).toBe(false)
+    expect(isIndividual(all, 'family')).toBe(false)
+    expect(isIndividual(all, 'radio')).toBe(false)
+    expect(isIndividual(all, 'company')).toBe(false)
+    expect(isIndividual(all, 'city')).toBe(false)
+    expect(isIndividual(all, 'nope')).toBe(false)
+    // A skin renaming "Person" doesn't change what it is.
+    expect(isIndividualTemplate({ id: 'person', name: 'Band member', lens: 'who' })).toBe(true)
+  })
+})

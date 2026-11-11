@@ -225,3 +225,27 @@ export const DEFAULT_TEMPLATE: Record<Lens, string> = {
 
 /** A status that means the entry has left the story. */
 export const LEFT_STATUS = /\b(dead|deceased|died|killed|departed|left|gone|destroyed|fallen)\b/i
+
+/* ---------- someone, or a group ---------- */
+
+/** Built-in kinds in Who that are groups, not someone. */
+const GROUP_TEMPLATES = new Set(['faction', 'family'])
+/** A kind the writer made counts as a group when its name says so ("Company", "Band", "Radio station"). */
+const GROUP_WORDS =
+  /\b(groups?|factions?|famil(y|ies)|clans?|houses?|guilds?|orders?|compan(y|ies)|business(es)?|organi[sz]ations?|bands?|teams?|crews?|gangs?|churche?s?|cults?|tribes?|nations?|armies|army|corps?|corporations?|agenc(y|ies)|stations?|networks?|parties|party|councils?|clubs?|unions?|schools?|firms?|shops?|stores?|institutions?|societ(y|ies)|brands?|labels?|studios?|channels?)\b/i
+
+/**
+ * Whether a kind of entry is someone (a person, or a creature or custom kind
+ * of character) rather than a group, place or anything else. Only someone can
+ * be a point of view, an AI story character or a voice.
+ */
+export function isIndividualTemplate(t: Pick<Template, 'id' | 'name' | 'lens'>): boolean {
+  if (t.lens !== 'who' || GROUP_TEMPLATES.has(t.id)) return false
+  return isBuiltIn(t.id) || !GROUP_WORDS.test(t.name)
+}
+
+/** Whether an entry of this kind is someone (see `isIndividualTemplate`). */
+export function isIndividual(templates: readonly Template[], templateId: string): boolean {
+  const t = templates.find((x) => x.id === templateId)
+  return !!t && isIndividualTemplate(t)
+}

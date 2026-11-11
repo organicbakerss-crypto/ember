@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isIndividualTemplate } from '@shared/world/templates'
 import { SelectionAiBox, type AiSelection } from '../ai/SelectionAiBox'
 import type { SelectionAction } from '@shared/ai/selection'
 import { isBook, worldLinkMenu } from './worldLink'
@@ -758,10 +759,10 @@ export function WritingView(props: {
     [],
   )
 
-  // POV choices: names from the world first, then tags already used in this volume.
+  // POV choices: the world's people (not groups) first, then names already used in this volume.
   const povOptions = useMemo(() => {
     const fromWorld = (world?.view.entries ?? [])
-      .filter((e) => world && templateOf(world, e).lens === 'who')
+      .filter((e) => world && isIndividualTemplate(templateOf(world, e)))
       .map((e) => e.name)
     const used = view
       ? Object.keys(view.chapters).flatMap((id) => {
@@ -775,7 +776,7 @@ export function WritingView(props: {
   const povPeople = useMemo(
     () =>
       (world?.view.entries ?? [])
-        .filter((e) => world && templateOf(world, e).lens === 'who')
+        .filter((e) => world && isIndividualTemplate(templateOf(world, e)))
         .map((e) => ({ id: e.id, name: e.name, aliases: e.aliases ?? [] })),
     [world],
   )
@@ -1591,7 +1592,7 @@ export function WritingView(props: {
             names={[
               ...new Set(
                 (world?.view.entries ?? [])
-                  .filter((e) => e.template === 'person')
+                  .filter((e) => !!world && isIndividualTemplate(templateOf(world, e)))
                   .map((e) => e.name),
               ),
             ]}
@@ -1621,7 +1622,7 @@ export function WritingView(props: {
             characters={[
               ...new Set(
                 (world?.view.entries ?? [])
-                  .filter((e) => e.template === 'person')
+                  .filter((e) => !!world && isIndividualTemplate(templateOf(world, e)))
                   .map((e) => e.name),
               ),
             ].sort()}

@@ -9,6 +9,7 @@
  * (and its summary beside the chapter). Only the writer's own accept changes
  * anything.
  */
+import { isIndividual } from '@shared/world/templates'
 import {
   findParagraphPrompt,
   paragraphProbe,
@@ -1669,7 +1670,7 @@ export class AiService {
     const library = this.options.host.current
     const series = await library.getSeries(input.seriesId)
     const view = series.worldId ? await library.world.view(series.worldId) : null
-    const entries = view?.entries ?? []
+    const entries = view ? view.entries.filter((e) => isIndividual(view.templates, e.template)) : []
     const all = (await library.storySummaries(input.seriesId)).filter(
       (s) =>
         (!input.chapterId || s.chapter.id === input.chapterId) &&
@@ -1758,7 +1759,9 @@ export class AiService {
   ): Promise<{ narrator: string | null; lines: Record<string, string> }> {
     const library = this.options.host.current
     const series = await library.getSeries(input.seriesId)
-    const entries = series.worldId ? (await library.world.view(series.worldId)).entries : []
+    // Only someone can speak or narrate (not a group, a place or a thing).
+    const view = series.worldId ? await library.world.view(series.worldId) : null
+    const entries = view ? view.entries.filter((e) => isIndividual(view.templates, e.template)) : []
     const summary = (await library.storySummaries(input.seriesId)).find(
       (x) => x.chapter.id === input.chapterId,
     )

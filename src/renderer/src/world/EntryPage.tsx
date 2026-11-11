@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { isIndividualTemplate } from '@shared/world/templates'
 import type { Appearance, EntrySummary, IpcInput } from '@shared/ipc'
 import type {
   FactValue,
@@ -838,7 +839,7 @@ function EntryView(
         />
       </section>
 
-      {settings.ai.enabled && template.lens === 'who' && (
+      {settings.ai.enabled && isIndividualTemplate(template) && (
         <AiCharacterSection worldId={worldId} entryId={entry.id} name={entry.name} />
       )}
 

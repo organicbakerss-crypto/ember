@@ -20,3 +20,14 @@ describe('guessTemplate', () => {
     expect(guessTemplate('Mara', 'Then ')).toBeNull()
   })
 })
+
+describe('modern organisations', () => {
+  it('are groups, even when named after a place', async () => {
+    const { guessTemplate } = await import('./guess')
+    expect(guessTemplate('Harbor Radio')).toBe('faction')
+    expect(guessTemplate('KXLR FM')).toBe('faction')
+    expect(guessTemplate('Dunmore Records')).toBe('faction')
+    expect(guessTemplate('Acme Inc.')).toBe('faction')
+    expect(guessTemplate('Port Gull')).toBe('city')
+  })
+})
