@@ -50,6 +50,8 @@ export interface AppSettings {
   paperSize: PaperSize
   /** Keep the line being typed in the middle of the screen. */
   typewriter: boolean
+  /** The app's layout: the original one, or the newer, calmer one (a preview, switchable). */
+  look: 'classic' | 'modern'
   spellcheck: boolean
   /** Spellcheck languages (e.g. `en-GB`). Empty means the system language. Ignored on macOS. */
   spellLanguages: string[]
@@ -256,6 +258,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   pageView: 'pages',
   paperSize: 'a4',
   typewriter: false,
+  look: 'classic',
   spellcheck: true,
   spellLanguages: [],
   dictionary: [],

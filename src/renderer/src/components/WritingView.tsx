@@ -83,6 +83,20 @@ type Panel =
   | 'world'
   | 'ai'
 
+/** New look: the two groups of panels, and their tab names. */
+const CHAPTERS_GROUP: Panel[] = ['binder', 'search']
+const PANEL_TABS: Record<Panel, string> = {
+  binder: 'Chapters',
+  search: 'Find',
+  notes: 'Notes',
+  comments: 'Comments',
+  history: 'History',
+  diagnostics: 'Stats',
+  world: "Who's here",
+  publishing: 'Publishing',
+  ai: 'AI',
+}
+
 /** A chapter to open, optionally showing the first use of a name. */
 export interface ChapterTarget {
   chapterId: string
@@ -115,6 +129,9 @@ export function WritingView(props: {
   aiBeside?: boolean
   /** Beside the world already: no Write/World switch. */
   hideModeSwitch?: boolean
+  /** New look: what's beside the page, and a switch that puts the world there (or takes it away). */
+  beside?: 'world' | 'ai' | null
+  onToggleWorldBeside?: () => void
   onOpenSeries: () => void
   /** Opens another volume of this story at a chapter (a match from a whole-story search). */
   onOpenVolumeAt?: (volumeId: string, target: ChapterTarget) => void
@@ -436,7 +453,7 @@ export function WritingView(props: {
         requestId: id,
         seriesId: series.id,
         chapterId: selectedId,
-        title: chapterTitle,
+        title: (liveMeta[selectedId] ?? view?.chapters[selectedId])?.title ?? '',
         paragraphs,
       })
       const placed = editor.current?.addAiNotes(notes) ?? 0
@@ -465,6 +482,43 @@ export function WritingView(props: {
   })
 
   const togglePanel = (which: Panel) => openPanel(panel === which ? null : which)
+
+  // New look: the panels in two groups, each one button with tabs inside.
+  const modern = settings.look === 'modern'
+  const chapterGroup: Panel[] = [
+    'notes',
+    'comments',
+    'history',
+    'diagnostics',
+    ...(world ? (['world'] as const) : []),
+    ...(series.modules?.publishing ? (['publishing'] as const) : []),
+  ]
+  const [lastInGroup, setLastInGroup] = useState<{ chapters: Panel; chapter: Panel }>({
+    chapters: 'binder',
+    chapter: 'notes',
+  })
+  const toggleGroup = (group: 'chapters' | 'chapter') => {
+    const members = group === 'chapters' ? CHAPTERS_GROUP : chapterGroup
+    if (panel && members.includes(panel)) openPanel(null)
+    else openPanel(members.includes(lastInGroup[group]) ? lastInGroup[group] : members[0]!)
+  }
+  const groupOf = (p: Panel | null) =>
+    p && CHAPTERS_GROUP.includes(p) ? 'chapters' : p && chapterGroup.includes(p) ? 'chapter' : null
+  const switchTab = (p: Panel) => {
+    const g = groupOf(p)
+    if (g) setLastInGroup((l) => ({ ...l, [g]: p }))
+    if (p === 'search') openSearch()
+    else openPanel(p)
+  }
+
+  // New look: the bars fade back while typing on the page, and come back when the mouse moves.
+  const [typing, setTyping] = useState(false)
+  useEffect(() => {
+    if (!modern) return
+    const onMove = () => setTyping(false)
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [modern])
 
   const renameOpenChapter = () => {
     if (!selectedId) return
@@ -1094,7 +1148,7 @@ export function WritingView(props: {
 
   return (
     <div
-      className={`writing-view ${aiOn ? '' : 'ai-off'} ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''} ${settings.typewriter ? 'typewriter' : ''}`}
+      className={`writing-view ${modern ? 'modern' : ''} ${modern && typing ? 'typing' : ''} ${aiOn ? '' : 'ai-off'} ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''} ${settings.typewriter ? 'typewriter' : ''}`}
     >
       {focusMode && (
         <button className="focus-exit small" onClick={leaveFocus}>
@@ -1268,141 +1322,261 @@ export function WritingView(props: {
         >
           ⋯
         </button>
-        {view && (
-          <button
-            className="small"
-            aria-pressed={manuscriptOpen}
-            title={`The whole ${book ? 'book' : 'volume'} as one manuscript, cover first`}
-            onClick={() => setManuscriptOpen((open) => !open)}
-          >
-            Manuscript
-          </button>
-        )}
-        {view && manuscriptIds.length > 0 && (
-          <button
-            className="small"
-            title="Read it as a printed book, two pages at a time (read-only)"
-            onClick={() => void flushAll().then(() => setBookOpen(true))}
-          >
-            Book
-          </button>
-        )}
-        {props.onOpenWorldBeside && (
-          <button
-            className="side-by-side small"
-            aria-label="Open the world beside"
-            title={`Open the world beside the page, split screen (${MOD}\\)`}
-            onClick={props.onOpenWorldBeside}
-          >
-            ◫ {word('world', 'World')} beside
-          </button>
-        )}
-        {props.onOpenWorld && !props.hideModeSwitch && (
-          <div className="segmented mode-switch" role="radiogroup" aria-label="Mode">
-            <button role="radio" aria-checked className="active">
-              Write
-            </button>
-            <button
-              role="radio"
-              aria-checked={false}
-              onClick={() => props.onOpenWorld?.()}
-              title="Open this series' world"
-            >
-              {word('world', 'World')}
-            </button>
-          </div>
+        {modern ? (
+          <>
+            <div className="segmented view-switch" role="radiogroup" aria-label="View">
+              <button
+                role="radio"
+                aria-checked={!manuscriptOpen}
+                className={manuscriptOpen ? '' : 'active'}
+                onClick={() => setManuscriptOpen(false)}
+              >
+                Write
+              </button>
+              {view && (
+                <button
+                  role="radio"
+                  aria-checked={manuscriptOpen}
+                  className={manuscriptOpen ? 'active' : ''}
+                  title={`The whole ${book ? 'book' : 'volume'} as one manuscript, cover first`}
+                  onClick={() => setManuscriptOpen(true)}
+                >
+                  Manuscript
+                </button>
+              )}
+              {view && manuscriptIds.length > 0 && (
+                <button
+                  role="radio"
+                  aria-checked={false}
+                  title="Read it as a printed book, two pages at a time (read-only)"
+                  onClick={() => void flushAll().then(() => setBookOpen(true))}
+                >
+                  Book
+                </button>
+              )}
+              {props.onOpenWorld && !props.hideModeSwitch && (
+                <button
+                  role="radio"
+                  aria-checked={false}
+                  title="Open this series' world"
+                  onClick={() => props.onOpenWorld?.()}
+                >
+                  {word('world', 'World')}
+                </button>
+              )}
+            </div>
+            {(props.onToggleWorldBeside || aiOn) && (
+              <div className="beside-switch" role="group" aria-label="Beside the page">
+                <span className="small muted">Beside</span>
+                {props.onToggleWorldBeside && (
+                  <button
+                    className={props.beside === 'world' ? 'active' : ''}
+                    aria-pressed={props.beside === 'world'}
+                    title={`The world beside the page (${MOD}\\)`}
+                    onClick={props.onToggleWorldBeside}
+                  >
+                    {word('world', 'World')}
+                  </button>
+                )}
+                {aiOn && (
+                  <button
+                    className={props.beside === 'ai' ? 'active' : ''}
+                    aria-pressed={props.beside === 'ai'}
+                    title="The AI beside the page"
+                    onClick={() => props.onToggleAi?.()}
+                  >
+                    AI
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {view && (
+              <button
+                className="small"
+                aria-pressed={manuscriptOpen}
+                title={`The whole ${book ? 'book' : 'volume'} as one manuscript, cover first`}
+                onClick={() => setManuscriptOpen((open) => !open)}
+              >
+                Manuscript
+              </button>
+            )}
+            {view && manuscriptIds.length > 0 && (
+              <button
+                className="small"
+                title="Read it as a printed book, two pages at a time (read-only)"
+                onClick={() => void flushAll().then(() => setBookOpen(true))}
+              >
+                Book
+              </button>
+            )}
+            {props.onOpenWorldBeside && (
+              <button
+                className="side-by-side small"
+                aria-label="Open the world beside"
+                title={`Open the world beside the page, split screen (${MOD}\\)`}
+                onClick={props.onOpenWorldBeside}
+              >
+                ◫ {word('world', 'World')} beside
+              </button>
+            )}
+            {props.onOpenWorld && !props.hideModeSwitch && (
+              <div className="segmented mode-switch" role="radiogroup" aria-label="Mode">
+                <button role="radio" aria-checked className="active">
+                  Write
+                </button>
+                <button
+                  role="radio"
+                  aria-checked={false}
+                  onClick={() => props.onOpenWorld?.()}
+                  title="Open this series' world"
+                >
+                  {word('world', 'World')}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </header>
 
-      <nav className="icon-rail" aria-label="Panels">
-        <RailButton
-          label="Binder"
-          active={panel === 'binder'}
-          onClick={() => togglePanel('binder')}
-        >
-          <path d="M5 5h14M5 10h14M8 15h11M8 20h11" />
-        </RailButton>
-        <RailButton
-          label={`Find in volume (${MOD}F)`}
-          active={panel === 'search'}
-          onClick={() => (panel === 'search' ? togglePanel('search') : openSearch())}
-        >
-          <circle cx="10.5" cy="10.5" r="6" />
-          <path d="M15 15l5.5 5.5" />
-        </RailButton>
-        <RailButton
-          label="Synopsis and notes"
-          active={panel === 'notes'}
-          onClick={() => togglePanel('notes')}
-        >
-          <path d="M6 3h9l4 4v14H6z" />
-          <path d="M9 10h7M9 14h7M9 18h4" />
-        </RailButton>
-        {publishingOn && (
+      {modern ? (
+        <nav className="icon-rail" aria-label="Panels">
           <RailButton
-            label="Publishing"
-            active={panel === 'publishing'}
-            onClick={() => togglePanel('publishing')}
+            label="Chapters"
+            shown="Chapters"
+            active={groupOf(panel) === 'chapters'}
+            onClick={() => toggleGroup('chapters')}
           >
-            <path d="M4 5h16v14H4z" />
-            <path d="M8 3v4M16 3v4M4 10h16M9 15l2 2 4-4" />
+            <path d="M5 5h14M5 10h14M8 15h11M8 20h11" />
           </RailButton>
-        )}
-        <RailButton
-          label="Comments"
-          active={panel === 'comments'}
-          onClick={() => togglePanel('comments')}
-        >
-          <path d="M4 5h16v11H9l-5 4z" />
-        </RailButton>
-        <RailButton
-          label="History"
-          active={panel === 'history'}
-          onClick={() => togglePanel('history')}
-        >
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M12 7.5V12l3 2" />
-        </RailButton>
-        <RailButton
-          label="Diagnostics: words, sentences, repeated words"
-          active={panel === 'diagnostics'}
-          onClick={() => togglePanel('diagnostics')}
-        >
-          <path d="M5 20V11M10 20V5M15 20v-7M20 20V8" />
-        </RailButton>
-        {aiOn && (
           <RailButton
-            label={props.aiBeside ? 'Close the AI' : 'AI beside the page'}
-            active={!!props.aiBeside}
-            onClick={() => props.onToggleAi?.()}
+            label="This chapter: notes, comments, history, stats"
+            shown="Chapter"
+            active={groupOf(panel) === 'chapter'}
+            onClick={() => toggleGroup('chapter')}
           >
-            <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" />
-            <path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" />
+            <path d="M6 3h9l4 4v14H6z" />
+            <path d="M9 10h7M9 14h7M9 18h4" />
           </RailButton>
-        )}
-        {world && (
+          <span className="rail-spacer" />
           <RailButton
-            label="Who and where in this chapter"
-            active={panel === 'world'}
-            onClick={() => togglePanel('world')}
+            label="Settings"
+            shown="Settings"
+            active={settingsOpen}
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+          </RailButton>
+        </nav>
+      ) : (
+        <nav className="icon-rail" aria-label="Panels">
+          <RailButton
+            label="Binder"
+            active={panel === 'binder'}
+            onClick={() => togglePanel('binder')}
+          >
+            <path d="M5 5h14M5 10h14M8 15h11M8 20h11" />
+          </RailButton>
+          <RailButton
+            label={`Find in volume (${MOD}F)`}
+            active={panel === 'search'}
+            onClick={() => (panel === 'search' ? togglePanel('search') : openSearch())}
+          >
+            <circle cx="10.5" cy="10.5" r="6" />
+            <path d="M15 15l5.5 5.5" />
+          </RailButton>
+          <RailButton
+            label="Synopsis and notes"
+            active={panel === 'notes'}
+            onClick={() => togglePanel('notes')}
+          >
+            <path d="M6 3h9l4 4v14H6z" />
+            <path d="M9 10h7M9 14h7M9 18h4" />
+          </RailButton>
+          {publishingOn && (
+            <RailButton
+              label="Publishing"
+              active={panel === 'publishing'}
+              onClick={() => togglePanel('publishing')}
+            >
+              <path d="M4 5h16v14H4z" />
+              <path d="M8 3v4M16 3v4M4 10h16M9 15l2 2 4-4" />
+            </RailButton>
+          )}
+          <RailButton
+            label="Comments"
+            active={panel === 'comments'}
+            onClick={() => togglePanel('comments')}
+          >
+            <path d="M4 5h16v11H9l-5 4z" />
+          </RailButton>
+          <RailButton
+            label="History"
+            active={panel === 'history'}
+            onClick={() => togglePanel('history')}
           >
             <circle cx="12" cy="12" r="8.5" />
-            <path d="M3.5 12h17M12 3.5c2.5 2.6 3.6 5.4 3.6 8.5s-1.1 5.9-3.6 8.5c-2.5-2.6-3.6-5.4-3.6-8.5s1.1-5.9 3.6-8.5z" />
+            <path d="M12 7.5V12l3 2" />
           </RailButton>
-        )}
-        <span className="rail-spacer" />
-        <RailButton
-          label="Settings"
-          active={settingsOpen}
-          onClick={() => setSettingsOpen((open) => !open)}
-        >
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
-        </RailButton>
-      </nav>
+          <RailButton
+            label="Diagnostics: words, sentences, repeated words"
+            active={panel === 'diagnostics'}
+            onClick={() => togglePanel('diagnostics')}
+          >
+            <path d="M5 20V11M10 20V5M15 20v-7M20 20V8" />
+          </RailButton>
+          {aiOn && (
+            <RailButton
+              label={props.aiBeside ? 'Close the AI' : 'AI beside the page'}
+              active={!!props.aiBeside}
+              onClick={() => props.onToggleAi?.()}
+            >
+              <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" />
+              <path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" />
+            </RailButton>
+          )}
+          {world && (
+            <RailButton
+              label="Who and where in this chapter"
+              active={panel === 'world'}
+              onClick={() => togglePanel('world')}
+            >
+              <circle cx="12" cy="12" r="8.5" />
+              <path d="M3.5 12h17M12 3.5c2.5 2.6 3.6 5.4 3.6 8.5s-1.1 5.9-3.6 8.5c-2.5-2.6-3.6-5.4-3.6-8.5s1.1-5.9 3.6-8.5z" />
+            </RailButton>
+          )}
+          <span className="rail-spacer" />
+          <RailButton
+            label="Settings"
+            active={settingsOpen}
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+          </RailButton>
+        </nav>
+      )}
 
       {panel && (
         <aside className="side-panel">
+          {modern && groupOf(panel) && (
+            <div className="panel-tabs" role="tablist">
+              {(groupOf(panel) === 'chapters' ? CHAPTERS_GROUP : chapterGroup).map((p) => (
+                <button
+                  key={p}
+                  role="tab"
+                  aria-selected={panel === p}
+                  className={panel === p ? 'active' : ''}
+                  onClick={() => switchTab(p)}
+                >
+                  {PANEL_TABS[p]}
+                </button>
+              ))}
+            </div>
+          )}
           {panel === 'binder' && view && (
             <Binder
               volumeName={volume.name}
@@ -1559,7 +1733,14 @@ export function WritingView(props: {
         </aside>
       )}
 
-      <main className="page-area">
+      <main
+        className="page-area"
+        onKeyDown={(e) => {
+          // New look: typing on the page fades the bars (not shortcuts, not arrows).
+          if (modern && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1)
+            setTyping(true)
+        }}
+      >
         {settingsOpen && <SettingsWindow onClose={() => setSettingsOpen(false)} />}
         {aiOn && !focusMode && <Recap seriesId={series.id} chapterId={selectedId} />}
         {reading &&
@@ -1759,6 +1940,8 @@ export function WritingView(props: {
 
 function RailButton(props: {
   label: string
+  /** A short name shown under the icon (new look). */
+  shown?: string
   active: boolean
   onClick: () => void
   children: React.ReactNode
@@ -1782,6 +1965,7 @@ function RailButton(props: {
       >
         {props.children}
       </svg>
+      {props.shown && <span className="rail-label">{props.shown}</span>}
     </button>
   )
 }

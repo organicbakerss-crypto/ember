@@ -5225,3 +5225,263 @@ kbd {
 .scene-excerpt {
   font-style: italic;
 }
+
+/* ===================== New look (Settings → Appearance → Layout) =====================
+   Style B: calm, rounded, floating panels, one accent. Built only on the theme's own
+   colours, so every theme and world skin carries over. Classic is untouched. */
+
+:root[data-look='modern'] {
+  --m-radius: 12px;
+  --m-shadow:
+    0 1px 2px color-mix(in srgb, var(--text) 8%, transparent),
+    0 6px 20px color-mix(in srgb, var(--text) 7%, transparent);
+  --m-line: color-mix(in srgb, var(--border) 70%, transparent);
+}
+:root[data-look='modern'] button {
+  border-radius: 8px;
+  border-color: var(--m-line);
+  transition:
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+:root[data-look='modern'] button:not(.link, .icon, .primary, .rail-button):hover {
+  background: var(--surface-2);
+}
+:root[data-look='modern'] input,
+:root[data-look='modern'] select,
+:root[data-look='modern'] textarea {
+  border-radius: 8px;
+}
+:root[data-look='modern'] .card {
+  border-radius: var(--m-radius);
+  box-shadow: var(--m-shadow);
+  border-color: var(--m-line);
+}
+/* Segmented switches: a soft track with the chosen one raised, not a block of colour. */
+:root[data-look='modern'] .segmented {
+  border: none;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-radius: 9px;
+  padding: 2px;
+  gap: 2px;
+}
+:root[data-look='modern'] .segmented button {
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.28rem 0.7rem;
+}
+:root[data-look='modern'] .segmented button + button {
+  border-left: none;
+}
+:root[data-look='modern'] .segmented button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 15%, transparent);
+}
+
+/* The writing screen: the desk everywhere, the bars and panels float on it. */
+.writing-view.modern {
+  background: var(--desk);
+  column-gap: 0;
+  container-type: inline-size;
+}
+.writing-view.modern.panel-open {
+  grid-template-columns: auto 18rem 1fr;
+}
+.writing-view.modern .top-bar {
+  background: transparent;
+  border-bottom: none;
+  padding: 0.55rem 1rem 0.35rem;
+  gap: 0.9rem;
+}
+.writing-view.modern .breadcrumb {
+  color: var(--muted);
+}
+.writing-view.modern .view-switch {
+  margin-left: auto;
+}
+.writing-view.modern .beside-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-left: 0.4rem;
+  border-left: 1px solid var(--m-line);
+}
+.writing-view.modern .beside-switch .muted {
+  margin-right: 0.2rem;
+}
+.writing-view.modern .beside-switch button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.28rem 0.6rem;
+  font-size: 0.82rem;
+}
+.writing-view.modern .beside-switch button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.writing-view.modern .icon-rail {
+  margin: 0.25rem 0 0.75rem 0.75rem;
+  padding: 0.45rem 0.3rem;
+  gap: 0.35rem;
+  border: none;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--m-shadow);
+}
+.writing-view.modern .rail-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.5rem 0.4rem 0.4rem;
+  border-radius: 10px;
+}
+.writing-view.modern .rail-label {
+  font-size: 0.68rem;
+  line-height: 1;
+}
+.writing-view.modern .side-panel {
+  margin: 0.25rem 0 0.75rem 0.6rem;
+  border: none;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--m-shadow);
+  padding: 0.75rem;
+}
+.writing-view.modern .panel-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  margin-bottom: 0.75rem;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.writing-view.modern .panel-tabs button {
+  flex: 1 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+}
+.writing-view.modern .panel-tabs button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 15%, transparent);
+}
+/* The tabs already say which panel this is. */
+.writing-view.modern .side-panel > :not(.panel-tabs) > h2:first-child {
+  display: none;
+}
+.writing-view.modern .page-area {
+  background: transparent;
+}
+.writing-view.modern .status-bar {
+  background: transparent;
+  border-top: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.3rem 1.25rem 0.5rem;
+}
+
+/* While typing, the bars step back; moving the mouse brings them back. */
+.writing-view.modern .top-bar,
+.writing-view.modern .icon-rail,
+.writing-view.modern .status-bar,
+.writing-view.modern .side-panel {
+  transition: opacity 0.4s ease;
+}
+.writing-view.modern.typing .top-bar,
+.writing-view.modern.typing .icon-rail,
+.writing-view.modern.typing .status-bar {
+  opacity: 0.08;
+}
+.writing-view.modern.typing .side-panel {
+  opacity: 0.45;
+}
+
+/* New look, round 2: the formatting bar, the chapter list, the chapter header, tight panes. */
+.writing-view.modern .toolbar {
+  background: transparent;
+  border-bottom: none;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0.35rem 0.75rem 0.15rem;
+  transition: opacity 0.4s ease;
+}
+.writing-view.modern .toolbar button,
+.writing-view.modern .toolbar select {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.writing-view.modern .toolbar button:hover,
+.writing-view.modern .toolbar select:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.writing-view.modern.typing .toolbar {
+  opacity: 0.08;
+}
+.writing-view.modern .binder-row {
+  border-radius: 8px;
+}
+.writing-view.modern .binder-row.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* The chapter's kind and POV: plain words until you point at them. */
+.writing-view.modern .chapter-meta select,
+.writing-view.modern .chapter-meta input {
+  border-color: transparent;
+}
+.writing-view.modern .chapter-meta:hover select,
+.writing-view.modern .chapter-meta:hover input,
+.writing-view.modern .chapter-meta :focus {
+  border-color: var(--m-line);
+}
+/* The Beside switch looks like the view switch. */
+.writing-view.modern .beside-switch {
+  border-left: none;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.writing-view.modern .beside-switch .muted {
+  padding: 0 0.35rem;
+  margin: 0;
+}
+.writing-view.modern .beside-switch button {
+  border-radius: 7px;
+}
+.writing-view.modern .beside-switch button.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 15%, transparent);
+}
+/* Tight panes (beside the world or the AI): the switches keep their size, the path gives way. */
+.writing-view.modern .top-bar > * {
+  flex-shrink: 0;
+}
+.writing-view.modern .top-bar > .breadcrumb {
+  flex-shrink: 1;
+  overflow: hidden;
+}
+.writing-view.modern .top-bar > button.link {
+  white-space: nowrap;
+}
+@container (max-width: 760px) {
+  .writing-view.modern .beside-switch .muted,
+  .writing-view.modern .breadcrumb {
+    display: none;
+  }
+}

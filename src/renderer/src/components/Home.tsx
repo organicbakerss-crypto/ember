@@ -203,6 +203,17 @@ export function Home(props: { detached?: PaneRoute | null }) {
     })
   }, [snapshot])
 
+  /** New look: the world beside the page, from writing alone or with the AI beside (or closes it). */
+  const toggleWorldBeside = useCallback(() => {
+    setRoute((current) => {
+      if (current.view === 'split') return { view: 'volume', ...current.write }
+      const write =
+        current.view === 'volume' ? current : current.view === 'splitAi' ? current.write : null
+      const worldId = write && snapshot?.series.find((s) => s.id === write.seriesId)?.worldId
+      return write && worldId ? { view: 'split', write: { ...write }, world: { worldId } } : current
+    })
+  }, [snapshot])
+
   // Ctrl/Cmd+\ opens (or closes) the other mode beside this one.
   useEffect(() => {
     if (detached) return
@@ -537,6 +548,16 @@ export function Home(props: { detached?: PaneRoute | null }) {
         onToggleAi={() => toggleAi(write, place)}
         aiBeside={route.view === 'splitAi'}
         hideModeSwitch={place !== 'alone'}
+        beside={
+          place === 'detached'
+            ? null
+            : route.view === 'split'
+              ? 'world'
+              : route.view === 'splitAi'
+                ? 'ai'
+                : null
+        }
+        onToggleWorldBeside={place !== 'detached' && series.worldId ? toggleWorldBeside : undefined}
       />
     )
     if (place === 'alone') {

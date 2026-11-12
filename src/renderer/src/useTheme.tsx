@@ -79,6 +79,9 @@ export function SettingsProvider(props: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.style.setProperty('--text-width', `${settings.pageWidth}px`)
   }, [settings.pageWidth])
+  useEffect(() => {
+    document.documentElement.dataset['look'] = settings.look === 'modern' ? 'modern' : 'classic'
+  }, [settings.look])
 
   return (
     <SettingsContext.Provider value={{ settings, theme, update }}>
