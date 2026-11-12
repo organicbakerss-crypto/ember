@@ -141,23 +141,38 @@ function AppearanceSettings() {
   return (
     <section className="settings-section">
       <h3>Layout</h3>
-      {(
-        [
-          ['classic', 'Classic: every panel has its own button'],
-          ['refined', 'Refined: the same layout, fewer buttons, panels with tabs'],
-          ['margins', 'Margins: no side bars; chapters along the bottom, notes in the margins'],
-        ] as const
-      ).map(([look, label]) => (
-        <label key={look} className="radio">
-          <input
-            type="radio"
-            name="look"
-            checked={settings.look === look}
-            onChange={() => update({ look })}
-          />
-          {label}
-        </label>
-      ))}
+      <p className="muted small">Each part of the app can have its own layout.</p>
+      <label>
+        Writing
+        <select
+          value={settings.look}
+          onChange={(e) => update({ look: e.target.value as typeof settings.look })}
+        >
+          <option value="classic">Classic: every panel has its own button</option>
+          <option value="refined">Refined: the same layout, fewer buttons, panels with tabs</option>
+          <option value="margins">Margins: chapters along the bottom, notes in the margins</option>
+        </select>
+      </label>
+      <label>
+        AI
+        <select
+          value={settings.lookAi}
+          onChange={(e) => update({ lookAi: e.target.value as typeof settings.lookAi })}
+        >
+          <option value="classic">Classic: chat bubbles</option>
+          <option value="margins">Margins: like notes in a manuscript</option>
+        </select>
+      </label>
+      <label>
+        Bookshelf
+        <select
+          value={settings.lookShelf}
+          onChange={(e) => update({ lookShelf: e.target.value as typeof settings.lookShelf })}
+        >
+          <option value="classic">Classic: covers on a shelf</option>
+          <option value="margins">Margins: pick up where you left off, then your covers</option>
+        </select>
+      </label>
       <h3>Theme</h3>
       <fieldset className="plain-fieldset">
         <legend className="small muted">Everyday</legend>

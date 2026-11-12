@@ -1126,7 +1126,7 @@ export function AiView(props: {
   }
 
   return (
-    <div className="ai-view" ref={root}>
+    <div className={`ai-view ${settings.lookAi === 'margins' ? 'ai-look-margins' : ''}`} ref={root}>
       {history}
       <section className="ai-main">
         <header className="ai-head">
@@ -1238,9 +1238,15 @@ export function AiView(props: {
               </div>
             )}
             {messages.map((m, i) => (
-              <div key={i} className={`ai-message ${m.role}`}>
-                {by(m) && (
+              <div key={i} className={`ai-message ${m.role} ${by(m) ? 'second' : ''}`}>
+                {by(m) ? (
                   <div className="ai-by muted small">Second opinion from {nameOf(by(m)!)}</div>
+                ) : (
+                  settings.lookAi === 'margins' && (
+                    <div className="ai-who">
+                      {m.role === 'user' ? 'You' : nameOf(thread.characterId)}
+                    </div>
+                  )
                 )}
                 {m.content ? (
                   <div className="ai-text">

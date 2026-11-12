@@ -52,6 +52,8 @@ const appSettingsSchema = z.looseObject({
     .preprocess((v) => (v === 'modern' ? 'refined' : v), z.enum(['classic', 'refined', 'margins']))
     .catch('classic')
     .default('classic'),
+  lookAi: z.enum(['classic', 'margins']).catch('classic').default('classic'),
+  lookShelf: z.enum(['classic', 'margins']).catch('classic').default('classic'),
   spellcheck: z.boolean().catch(true).default(true),
   spellLanguages: z.array(z.string()).catch([]).default([]),
   dictionary: z.array(z.string()).catch([]).default([]),

@@ -52,6 +52,10 @@ export interface AppSettings {
   typewriter: boolean
   /** The app's layout: the original, Refined (same layout, made with care) or Margins (no side bars). */
   look: 'classic' | 'refined' | 'margins'
+  /** The AI pane's layout. */
+  lookAi: 'classic' | 'margins'
+  /** The bookshelf's layout. */
+  lookShelf: 'classic' | 'margins'
   spellcheck: boolean
   /** Spellcheck languages (e.g. `en-GB`). Empty means the system language. Ignored on macOS. */
   spellLanguages: string[]
@@ -259,6 +263,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   paperSize: 'a4',
   typewriter: false,
   look: 'classic',
+  lookAi: 'classic',
+  lookShelf: 'classic',
   spellcheck: true,
   spellLanguages: [],
   dictionary: [],

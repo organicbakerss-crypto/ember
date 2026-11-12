@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { useSettings } from '../useTheme'
+import { MOD, useOpenPalette } from './commands'
+import { ShelfHero } from './ShelfHero'
 import type { LibrarySnapshot, SeriesSummary, WorldSummary } from '@shared/ipc'
 import { api, describeError } from '../api'
 import { formatVolumes, formatWords, seriesStack, worldCover } from '../covers'
@@ -22,6 +25,9 @@ export function Bookshelf(props: {
   onOpenWorld: (worldId: string) => void
 }) {
   const { snapshot } = props
+  const { settings } = useSettings()
+  const margins = settings.lookShelf === 'margins'
+  const openPalette = useOpenPalette()
   const [creatingSeries, setCreatingSeries] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
   const { openMenu, toast } = useOverlays()
@@ -80,8 +86,21 @@ export function Bookshelf(props: {
   }
 
   return (
-    <main className="bookshelf">
+    <main className={`bookshelf ${margins ? 'shelf-margins' : ''}`}>
       <header className="bookshelf-header">
+        {margins && (
+          <>
+            <span className="shelf-library">Your library</span>
+            <button
+              className="command-box"
+              onClick={openPalette}
+              title={`Command palette (${MOD}K)`}
+            >
+              <span aria-hidden>⌕</span> Find a story, a chapter, anything
+              <kbd>{MOD}K</kbd>
+            </button>
+          </>
+        )}
         <button className="shelf-button" onClick={props.onOpenSettings}>
           <svg
             viewBox="0 0 24 24"
@@ -119,6 +138,7 @@ export function Bookshelf(props: {
         </button>
       </header>
       {snapshot.problems.length > 0 && <Problems problems={snapshot.problems} />}
+      {margins && <ShelfHero snapshot={snapshot} onOpenVolume={props.onOpenVolume} />}
 
       <section className="shelf">
         <h2>Stories</h2>

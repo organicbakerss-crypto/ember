@@ -389,6 +389,19 @@ export function WritingView(props: {
       chapterId: selectedId ?? undefined,
     })
   }, [onRoute, series.id, volume.id, selectedId])
+  // The bookshelf's "pick up where you left off": the book and chapter last open.
+  useEffect(() => {
+    if (!selectedId) return
+    saveLocal(
+      'writing.lastOpened',
+      JSON.stringify({
+        seriesId: series.id,
+        volumeId: volume.id,
+        chapterId: selectedId,
+        at: Date.now(),
+      }),
+    )
+  }, [series.id, volume.id, selectedId])
 
   // Open a chapter asked for from elsewhere (an entry's appearances), at the first mention.
   const { open } = props
