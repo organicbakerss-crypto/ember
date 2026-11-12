@@ -5732,3 +5732,9 @@ kbd {
 .strip-arc-name {
   width: 15rem;
 }
+/* Focus mode: just the page, in every layout. */
+.writing-view.focus-mode .chapter-strip,
+.writing-view.focus-mode .margin-notes,
+.writing-view.focus-mode .scene-cast {
+  display: none;
+}

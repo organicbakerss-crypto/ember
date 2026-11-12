@@ -1619,16 +1619,6 @@ export function WritingView(props: {
             >
               ›
             </button>
-            {margins && (
-              <button
-                className="icon"
-                title="Settings"
-                aria-label="Settings"
-                onClick={() => setSettingsOpen((open) => !open)}
-              >
-                ⚙
-              </button>
-            )}
           </>
         ) : (
           <>
@@ -1677,6 +1667,16 @@ export function WritingView(props: {
               </div>
             )}
           </>
+        )}
+        {margins && (
+          <button
+            className="icon"
+            title="Settings"
+            aria-label="Settings"
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            ⚙
+          </button>
         )}
       </header>
 
