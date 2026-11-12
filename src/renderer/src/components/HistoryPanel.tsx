@@ -181,7 +181,7 @@ export function HistoryPanel(props: {
               </div>
             </header>
             <div className="history-preview-page page">
-              <ReadOnlyDoc content={preview.content} />
+              <ReadOnlyDoc content={preview.content} book={{ seriesId, volumeId }} />
             </div>
           </div>
         </div>

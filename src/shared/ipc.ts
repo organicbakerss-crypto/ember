@@ -671,6 +671,11 @@ export const ipcInputs = {
   'outline:get': z.object(volumeRef),
   'outline:save': z.object({ ...volumeRef, outline: outlineFileSchema }),
   'arc:create': z.object({ ...volumeRef, name: nameSchema }),
+  /** Stores a picture for a chapter in the book's folder; the chapter refers to it by `file`. */
+  'chapter:image': z.object({
+    ...volumeRef,
+    data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= MAX_COVER_BYTES, 'Too big'),
+  }),
   'chapter:create': z.object({
     ...volumeRef,
     title: z.string().trim().max(200),
@@ -1297,6 +1302,7 @@ export interface IpcResults {
   'character:make': { name: string; card: string }
   'ai:selection': SelectionAnswer
   'ai:pageNotes': { notes: PageNote[] }
+  'chapter:image': { file: string }
   /** `unread`: chapters without a summary yet (found only by their words). */
   'ai:findScene': { hits: SceneHit[]; unread: number }
   'ai:roundtableTurn': { text: string; ranking: string[] | null }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { ChapterImage } from '../editor/chapterImage'
 import { EditorContent, useEditor, type Editor, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style'
@@ -9,6 +10,8 @@ import { api, describeError, useIpcEvent } from '../api'
 import { Cover } from '../components/Cover'
 import { volumeCover } from '../covers'
 import { Toolbar } from '../editor/Toolbar'
+import { insertPictures, pictureFiles } from '../editor/pictures'
+import { useOverlays } from '../components/overlays'
 import { SceneBreak } from '../editor/sceneBreak'
 import { CommentMark } from '../editor/comments'
 import { Pagination } from '../editor/pagination'
@@ -148,6 +151,18 @@ function ManuscriptEditor(props: {
   }))
 
   const editorRef = useRef<ReturnType<typeof useEditor>>(null)
+  const { toast } = useOverlays()
+  const toastRef = useRef(toast)
+  useEffect(() => {
+    toastRef.current = toast
+  })
+  const book = { seriesId: series.id, volumeId: volume.id }
+  /** Pasted or dropped pictures are stored in the book and put on the page. */
+  const addPictures = (files: File[], at?: number) =>
+    editorRef.current &&
+    void insertPictures(editorRef.current, book, files, at).then(
+      (err) => err && toastRef.current(err),
+    )
   const retry = useRef<() => void>(() => {})
   const flush = useCallback((): Promise<void> => {
     clearTimeout(timer.current)
@@ -198,6 +213,7 @@ function ManuscriptEditor(props: {
       Color,
       FontFamily,
       SceneBreak,
+      ChapterImage.configure({ seriesId: series.id, volumeId: volume.id }),
       CommentMark,
       ManuscriptDocument,
       ChapterSection,
@@ -207,6 +223,23 @@ function ManuscriptEditor(props: {
     content,
     editorProps: {
       attributes: { class: 'chapter-content manuscript-content', spellcheck: 'true' },
+      handlePaste(_view, event) {
+        const pictures = pictureFiles(event.clipboardData?.files)
+        if (!pictures.length) return false
+        event.preventDefault()
+        addPictures(pictures)
+        return true
+      },
+      handleDrop(view, event) {
+        const pictures = pictureFiles(event.dataTransfer?.files)
+        if (!pictures.length) return false
+        event.preventDefault()
+        const hit = view.posAtCoords({ left: event.clientX, top: event.clientY })
+        // After the paragraph it lands on (inside that chapter's section).
+        const $pos = hit ? view.state.doc.resolve(hit.pos) : null
+        addPictures(pictures, $pos && $pos.depth >= 2 ? $pos.after(2) : hit?.pos)
+        return true
+      },
     },
     onCreate: ({ editor: e }) => {
       for (const [id, node] of sectionsById(e.state.doc)) saved.current.set(id, node)
@@ -315,7 +348,7 @@ function ManuscriptEditor(props: {
   if (!editor) return null
   return (
     <>
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} book={book} />
       <ManuscriptPages
         editor={editor}
         series={series}

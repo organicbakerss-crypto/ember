@@ -1588,7 +1588,10 @@ kbd {
 .settings-window {
   display: grid;
   grid-template-columns: 14rem 1fr;
-  height: 100%;
+  /* Over the whole window, whichever pane opened it. */
+  position: fixed;
+  inset: 0;
+  z-index: 90;
   background: var(--bg);
 }
 .settings-nav {
@@ -6100,4 +6103,41 @@ kbd {
 .rule-empty {
   margin-top: 0.5rem;
   line-height: 1.8;
+}
+/* On a story's page: just the way back in and the progress. */
+.shelf-hero.compact {
+  grid-template-columns: 1fr;
+  padding: 0;
+}
+.series-page .shelf-hero.compact {
+  max-width: 52rem;
+}
+
+/* Pictures in a chapter (the page, Manuscript and Book mode). */
+.chapter-content figure.chapter-image {
+  margin: 1.2em 0;
+  text-align: center;
+  cursor: grab;
+}
+.chapter-content figure.chapter-image img {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 2px;
+}
+.chapter-content figure.chapter-image span {
+  color: var(--muted);
+  font-style: italic;
+}
+.chapter-content figure.chapter-image.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.book-columns figure.picture {
+  margin: 1em 0;
+  text-align: center;
+  break-inside: avoid;
+}
+.book-columns figure.picture img {
+  max-width: 100%;
+  max-height: calc((var(--book-h) - 2 * var(--book-pad)) * 0.8);
 }

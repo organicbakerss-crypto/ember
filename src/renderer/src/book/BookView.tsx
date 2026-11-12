@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { SeriesSummary, VolumeSummary } from '@shared/ipc'
 import { docToBlocks, numberChapters, type ExportStyle } from '@shared/manuscript/blocks'
 import { chapterBodyHtml } from '@shared/manuscript/html'
+import { chapterImageUrl } from '@shared/media'
 import { api, describeError } from '../api'
 import { Cover } from '../components/Cover'
 import { volumeCover } from '../covers'
@@ -59,6 +60,8 @@ export function BookView(props: {
                 blocks: docToBlocks(f.content),
               },
               style,
+              false,
+              (file) => chapterImageUrl(series.id, volume.id, file),
             ),
           })),
         )
@@ -87,6 +90,14 @@ export function BookView(props: {
   }, [size])
   useLayoutEffect(() => {
     if (chapters) measure()
+  }, [chapters, measure])
+  // Pictures change the page count once they've loaded.
+  useEffect(() => {
+    const box = measurer.current
+    if (!box || !chapters) return
+    const imgs = [...box.querySelectorAll('img')].filter((img) => !img.complete)
+    for (const img of imgs) img.addEventListener('load', measure, { once: true })
+    return () => imgs.forEach((img) => img.removeEventListener('load', measure))
   }, [chapters, measure])
   useEffect(() => {
     void document.fonts?.ready.then(measure)

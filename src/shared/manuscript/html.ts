@@ -29,6 +29,8 @@ interface HtmlOptions {
   styled: boolean
   /** XHTML (EPUB): self-closing empty elements. */
   xhtml?: boolean
+  /** Where a picture's image comes from; null or unset puts a short note in its place. */
+  imageSrc?: (file: string) => string | null
 }
 
 function runsHtml(runs: Run[], o: HtmlOptions): string {
@@ -66,6 +68,13 @@ function blocksHtml(blocks: Block[], style: ExportStyle, o: HtmlOptions): string
       if (b.kind === 'break')
         return `<p class="scene-break" style="text-align: center">${escapeHtml(style.sceneBreak)}</p>`
       if (b.kind === 'quote') return `<blockquote>${blocksHtml(b.blocks, style, o)}</blockquote>`
+      if (b.kind === 'image') {
+        const src = o.imageSrc?.(b.file)
+        if (!src)
+          return `<p class="picture-note"><em>[Picture${b.alt ? `: ${escapeHtml(b.alt)}` : ''}]</em></p>`
+        const img = `<img src="${escapeHtml(src)}" alt="${escapeHtml(b.alt)}"${o.xhtml ? '/' : ''}>`
+        return `<figure class="picture">${img}</figure>`
+      }
       const tag = b.ordered ? 'ol' : 'ul'
       return `<${tag}>${b.items.map((item) => `<li>${blocksHtml(item, style, o)}</li>`).join('')}</${tag}>`
     })
@@ -86,6 +95,7 @@ export function chapterPlainText(chapter: ManuscriptChapter, style: ExportStyle)
     blocks.flatMap((b) => {
       if (b.kind === 'paragraph' || b.kind === 'heading') return [runsText(b.runs)]
       if (b.kind === 'break') return [style.sceneBreak]
+      if (b.kind === 'image') return [`[Picture${b.alt ? `: ${b.alt}` : ''}]`]
       if (b.kind === 'quote') return lines(b.blocks)
       return b.items.flatMap((item, i) =>
         lines(item).map((l) => `${b.ordered ? `${i + 1}.` : '•'} ${l}`),
@@ -99,12 +109,21 @@ export function chapterBodyHtml(
   chapter: ManuscriptChapter,
   style: ExportStyle,
   xhtml = false,
+  imageSrc?: (file: string) => string | null,
 ): string {
   return `<h1 class="chapter-title">${escapeHtml(chapterHeading(chapter, style))}</h1>\n${blocksHtml(
     chapter.blocks,
     style,
-    { styled: true, xhtml },
+    { styled: true, xhtml, imageSrc },
   )}`
+}
+
+/** A picture embedded in the page itself (PDF, printed from one HTML page). */
+export function dataUri(image: { mime: string; data: Uint8Array }): string {
+  let s = ''
+  for (let i = 0; i < image.data.length; i += 0x8000)
+    s += String.fromCharCode(...image.data.subarray(i, i + 0x8000))
+  return `data:${image.mime};base64,${btoa(s)}`
 }
 
 /** Rich text (an entry's page, say) as HTML, with its fonts and colours. */
@@ -125,6 +144,8 @@ h3 { font-size: 1.25em; } h4 { font-size: 1.1em; }
 ${paragraphs}
 p.scene-break { text-align: center; margin: 1em 0; }
 blockquote { margin: 0.8em 2em; font-style: italic; }
+figure.picture { margin: 1.2em 0; text-align: center; break-inside: avoid; }
+figure.picture img { max-width: 100%; max-height: 80vh; }
 .title-page { text-align: center; margin-top: 30%; }
 .title-page h1 { font-size: 2.2em; font-weight: normal; margin-bottom: 0.4em; }
 .title-page .series { font-style: italic; margin-bottom: 2em; }
@@ -142,7 +163,12 @@ const PAGE_SIZES: Record<PaperSize, string> = {
 /** A whole book as one HTML page for printing to PDF: a title page, then each chapter on a new page. */
 export function bookHtmlForPrint(m: Manuscript, style: ExportStyle, paper: PaperSize): string {
   const chapters = m.chapters
-    .map((c) => `<section class="chapter">${chapterBodyHtml(c, style)}</section>`)
+    .map(
+      (c) =>
+        `<section class="chapter">${chapterBodyHtml(c, style, false, (file) =>
+          m.images?.[file] ? dataUri(m.images[file]) : null,
+        )}</section>`,
+    )
     .join('\n')
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>${escapeHtml(m.title)}</title>

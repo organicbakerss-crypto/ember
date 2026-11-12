@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
-import { EditorContent, useEditor, type JSONContent } from '@tiptap/react'
+import { EditorContent, useEditor, type Editor, type JSONContent } from '@tiptap/react'
 import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model'
 import { TextSelection } from '@tiptap/pm/state'
 import type { ChapterFile, ChapterType } from '@shared/schema'
@@ -26,6 +26,8 @@ import { PAGE_GAP, usePages } from './usePages'
 import { useChapterSaver, type SaveState } from './useChapterSaver'
 import type { Pov } from '@shared/world/povs'
 import { TEST_SCENE_DRAG } from '../binder/Binder'
+import { useOverlays } from '../components/overlays'
+import { insertPictures, pictureFiles, type BookRef } from './pictures'
 
 export interface ChapterMeta {
   title: string
@@ -290,6 +292,15 @@ function EditorPage(
     onDropTest.current = props.onDropTest
   })
   const scroller = useRef<HTMLDivElement>(null)
+  // For the editor's paste and drop handling (set up once).
+  const { toast } = useOverlays()
+  const toastRef = useRef(toast)
+  const bookRef = useRef<BookRef | null>(null)
+  const editorRef = useRef<Editor | null>(null)
+  useEffect(() => {
+    toastRef.current = toast
+    bookRef.current = { seriesId: props.seriesId, volumeId: props.volumeId }
+  })
 
   const paragraphTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const selectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -303,7 +314,10 @@ function EditorPage(
   const [activeEcho, setActiveEcho] = useState<ActiveEcho | null>(null)
 
   const editor = useEditor({
-    extensions: chapterExtensions(),
+    extensions: chapterExtensions(undefined, {
+      seriesId: props.seriesId,
+      volumeId: props.volumeId,
+    }),
     content: editableContent(chapter.content),
     enableContentCheck: true,
     onContentError: ({ error }) => {
@@ -349,6 +363,19 @@ function EditorPage(
       // A test scene dragged from the binder goes in between the blocks it's dropped on.
       handleDrop(view, event) {
         const data = event.dataTransfer
+        const pictures = pictureFiles(data?.files)
+        if (pictures.length && !data?.types.includes(TEST_SCENE_DRAG)) {
+          const book = bookRef.current
+          if (readOnly || !book) return false
+          event.preventDefault()
+          const hit = view.posAtCoords({ left: event.clientX, top: event.clientY })
+          const $pos = hit ? view.state.doc.resolve(hit.pos) : null
+          const at = $pos ? ($pos.depth === 0 ? $pos.pos : $pos.after(1)) : undefined
+          void insertPictures(editorRef.current!, book, pictures, at).then(
+            (err) => err && toastRef.current(err),
+          )
+          return true
+        }
         if (!data?.types.includes(TEST_SCENE_DRAG)) return false
         event.preventDefault()
         const testId = data.getData(TEST_SCENE_DRAG)
@@ -364,10 +391,25 @@ function EditorPage(
         onDropTest.current?.(testId, at)
         return true
       },
+      // Pasted pictures (a screenshot, an image copied from a browser) are stored in the book.
+      handlePaste(_view, event) {
+        const pictures = pictureFiles(event.clipboardData?.files)
+        const book = bookRef.current
+        if (!pictures.length || readOnly || !book) return false
+        event.preventDefault()
+        void insertPictures(editorRef.current!, book, pictures).then(
+          (err) => err && toastRef.current(err),
+        )
+        return true
+      },
     },
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
   })
+
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   // Rhythm / Echo / highlight options, and the Echo the writer clicked.
   const { analysis } = props
@@ -715,6 +757,7 @@ function EditorPage(
           echo={analysis.echo}
           onToggleRhythm={props.onToggleRhythm}
           onToggleEcho={props.onToggleEcho}
+          book={readOnly ? undefined : { seriesId: props.seriesId, volumeId: props.volumeId }}
         />
       )}
       <NameCards

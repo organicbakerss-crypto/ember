@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ShelfHero } from './ShelfHero'
 import type { SeriesSummary, VolumeSummary, WorldSummary } from '@shared/ipc'
 import { api, describeError } from '../api'
 import { formatWords, seriesCover, volumeCover } from '../covers'
@@ -122,6 +123,13 @@ export function SeriesPage(props: {
           }}
         />
       </header>
+      {series.volumes.some((v) => v.wordCount > 0) && (
+        <ShelfHero
+          series={series}
+          compact
+          onOpenVolume={(_, volumeId) => props.onOpenVolume(volumeId)}
+        />
+      )}
       {settingsOpen && (
         <div className="series-settings">
           <SettingsWindow onClose={() => setSettingsOpen(false)} />

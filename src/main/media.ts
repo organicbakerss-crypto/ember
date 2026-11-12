@@ -5,7 +5,13 @@
 import fs from 'node:fs'
 import { extname } from 'node:path'
 import { protocol } from 'electron'
-import { MEDIA_SCHEME, mimeForExtension, parseCoverUrl, parseWorldImageUrl } from '@shared/media'
+import {
+  MEDIA_SCHEME,
+  mimeForExtension,
+  parseCoverUrl,
+  parseChapterImageUrl,
+  parseWorldImageUrl,
+} from '@shared/media'
 import { isId } from '@shared/ids'
 import { coverTargetSchema } from '@shared/ipc'
 import type { LibraryHost } from './libraryHost'
@@ -35,6 +41,20 @@ export function handleMediaRequests(host: LibraryHost): void {
             'cache-control': 'max-age=31536000, immutable',
             'access-control-allow-origin': '*',
           },
+        })
+      } catch {
+        return new Response('Not found', { status: 404 })
+      }
+    }
+    const picture = parseChapterImageUrl(request.url)
+    if (picture) {
+      if (!isId('series', picture.seriesId) || !isId('volume', picture.volumeId))
+        return new Response('Not found', { status: 404 })
+      try {
+        const path = host.current.chapterImagePath(picture.seriesId, picture.volumeId, picture.file)
+        const mime = mimeForExtension(extname(path).slice(1)) ?? 'application/octet-stream'
+        return new Response(await fs.promises.readFile(path), {
+          headers: { 'content-type': mime, 'cache-control': 'max-age=31536000, immutable' },
         })
       } catch {
         return new Response('Not found', { status: 404 })

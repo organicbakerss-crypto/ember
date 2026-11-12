@@ -143,7 +143,7 @@ export function editMessages(input: {
   return [
     {
       role: 'system',
-      content: `You edit one chapter of the writer's novel, doing exactly what they ask and nothing else. Every paragraph you weren't asked to change stays word for word as it is.${keep} The chapter is in Markdown: paragraphs separated by blank lines, "* * *" for scene breaks, ## for headings, **bold**, *italic*, ~~strike~~, <u>underline</u>, > for quoted text. Reply with the whole edited chapter in that same Markdown, from its first paragraph to its last, and nothing else: no introduction, no notes, no code fence.`,
+      content: `You edit one chapter of the writer's novel, doing exactly what they ask and nothing else. Every paragraph you weren't asked to change stays word for word as it is.${keep} The chapter is in Markdown: paragraphs separated by blank lines, "* * *" for scene breaks, ![…](picture:…) for pictures (keep each one exactly as it is unless asked to move it), ## for headings, **bold**, *italic*, ~~strike~~, <u>underline</u>, > for quoted text. Reply with the whole edited chapter in that same Markdown, from its first paragraph to its last, and nothing else: no introduction, no notes, no code fence.`,
     },
     {
       role: 'user',

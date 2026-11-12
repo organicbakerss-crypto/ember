@@ -26,7 +26,10 @@ export function manuscriptEpub(
   const chapters = m.chapters.map((c, i) => ({
     file: `chapter-${String(i + 1).padStart(3, '0')}.xhtml`,
     heading: chapterHeading(c, style),
-    html: xhtml(chapterHeading(c, style), chapterBodyHtml(c, style, true)),
+    html: xhtml(
+      chapterHeading(c, style),
+      chapterBodyHtml(c, style, true, (file) => (m.images?.[file] ? `images/${file}` : null)),
+    ),
   }))
   const modified = now.toISOString().replace(/\.\d{3}Z$/, 'Z')
   const author = m.author.trim()
@@ -46,6 +49,11 @@ ${author ? `<dc:creator>${escapeHtml(author)}</dc:creator>` : ''}
 <item id="css" href="style.css" media-type="text/css"/>
 <item id="title" href="title.xhtml" media-type="application/xhtml+xml"/>
 ${chapters.map((c, i) => `<item id="c${i + 1}" href="${c.file}" media-type="application/xhtml+xml"/>`).join('\n')}
+${Object.entries(m.images ?? {})
+  .map(
+    ([file, img], i) => `<item id="img${i + 1}" href="images/${file}" media-type="${img.mime}"/>`,
+  )
+  .join('\n')}
 </manifest>
 <spine toc="ncx">
 <itemref idref="title"/>
@@ -93,5 +101,8 @@ ${chapters
     'OEBPS/title.xhtml': strToU8(title),
   }
   for (const c of chapters) files[`OEBPS/${c.file}`] = strToU8(c.html)
+  // Pictures are already compressed; stored as they are.
+  for (const [file, img] of Object.entries(m.images ?? {}))
+    files[`OEBPS/images/${file}`] = [img.data, { level: 0 }]
   return zipSync(files, { level: 6 })
 }

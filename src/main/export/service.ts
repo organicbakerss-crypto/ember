@@ -15,6 +15,7 @@ import {
   type ExportStyle,
   type Manuscript,
   type ManuscriptChapter,
+  blockImages,
 } from '@shared/manuscript/blocks'
 import {
   bookHtmlForPrint,
@@ -66,8 +67,13 @@ export async function buildManuscript(
     number: numberOf.get(c.id) ?? null,
     blocks: docToBlocks(c.content),
   }))
+  const images = await library.chapterImages(
+    seriesId,
+    volumeId,
+    chapters.flatMap((c) => blockImages(c.blocks)),
+  )
   return {
-    manuscript: { title: found.volume, series: found.series, author, chapters },
+    manuscript: { title: found.volume, series: found.series, author, chapters, images },
     skipped: found.skipped,
     headings: found.headings,
   }

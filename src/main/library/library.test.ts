@@ -378,6 +378,38 @@ describe('damaged files', () => {
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
 const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 4, 5, 6])
 
+describe('chapter pictures', () => {
+  it('stores a picture once in the book, named by its content, and records it for sync', async () => {
+    const { ref } = await makeVolume()
+    const a = await lib.storeChapterImage(...ref, PNG)
+    const b = await lib.storeChapterImage(...ref, PNG)
+    expect(a.file).toBe(`${sha256(PNG)}.png`)
+    expect(b).toEqual(a)
+    const dir = lib.paths.volumeDir(...ref)
+    expect(await fs.promises.readdir(join(dir, 'images'))).toEqual([a.file])
+    const manifest = await readJsonFile(join(dir, 'manifest.json'), manifestFileSchema)
+    expect(manifest.files[`images/${a.file}`]?.hash).toBe(sha256(PNG))
+    const read = await lib.chapterImages(...ref, [a.file, a.file, `${'0'.repeat(64)}.png`])
+    expect(Object.keys(read)).toEqual([a.file])
+    expect(read[a.file]!.mime).toBe('image/png')
+  })
+
+  it('refuses files that are not pictures, and names it did not make', async () => {
+    const { ref } = await makeVolume()
+    await expect(lib.storeChapterImage(...ref, Uint8Array.from([1, 2, 3]))).rejects.toThrow()
+    expect(() => lib.chapterImagePath(...ref, '../../library.json')).toThrow()
+  })
+
+  it('repairs a damaged copy of a picture when the same picture is added again', async () => {
+    const { ref } = await makeVolume()
+    const { file } = await lib.storeChapterImage(...ref, PNG)
+    const path = join(lib.paths.volumeDir(...ref), 'images', file)
+    await fs.promises.writeFile(path, 'half-written')
+    await lib.storeChapterImage(...ref, PNG)
+    expect(new Uint8Array(await fs.promises.readFile(path))).toEqual(PNG)
+  })
+})
+
 describe('covers', () => {
   it('stores a volume cover inside the volume folder and records it in the manifest', async () => {
     const { series, volume, ref } = await makeVolume()

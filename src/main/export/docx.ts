@@ -5,6 +5,7 @@ import {
   HeadingLevel,
   LevelFormat,
   Packer,
+  ImageRun,
   Paragraph,
   TextRun,
   type IRunOptions,
@@ -16,6 +17,7 @@ import {
   type Manuscript,
   type Run,
 } from '@shared/manuscript/blocks'
+import { imageSize } from '@shared/media'
 
 const INDENT = 360 // first-line indent, in twentieths of a point (a quarter inch)
 
@@ -65,6 +67,48 @@ export async function manuscriptDocx(m: Manuscript, style: ExportStyle): Promise
             alignment: AlignmentType.CENTER,
             spacing: { before: 200, after: 200 },
             children: [new TextRun(style.sceneBreak)],
+          }),
+        ]
+      }
+      if (b.kind === 'image') {
+        // Word takes PNG, JPEG and GIF; anything else (WebP) gets a note in its place.
+        const img = m.images?.[b.file]
+        const type =
+          img?.mime === 'image/png'
+            ? 'png'
+            : img?.mime === 'image/jpeg'
+              ? 'jpg'
+              : img?.mime === 'image/gif'
+                ? 'gif'
+                : null
+        const size = img && type ? imageSize(img.data) : null
+        if (!img || !type || !size) {
+          return [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({ text: `[Picture${b.alt ? `: ${b.alt}` : ''}]`, italics: true }),
+              ],
+            }),
+          ]
+        }
+        // At most the text width (about 6 inches at 96 px each), keeping its shape.
+        const scale = Math.min(1, 576 / size.width)
+        return [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 200, after: 200 },
+            children: [
+              new ImageRun({
+                type,
+                data: img.data,
+                transformation: {
+                  width: Math.round(size.width * scale),
+                  height: Math.round(size.height * scale),
+                },
+                altText: { name: b.alt || 'Picture', description: b.alt, title: b.alt },
+              }),
+            ],
           }),
         ]
       }

@@ -52,6 +52,9 @@ export function blockMd(node: DocNode): string {
       return `${node.attrs?.['level'] === 3 ? '###' : '##'} ${inlineMd(node.content)}`
     case 'sceneBreak':
       return '* * *'
+    case 'chapterImage':
+      // Kept as a Markdown picture so an edit leaves it where it is.
+      return `![${String(node.attrs?.['alt'] ?? '').replace(/[[\]]/g, '')}](picture:${String(node.attrs?.['file'] ?? '')})`
     case 'blockquote':
       return (node.content ?? [])
         .map((p) => blockMd(p))
@@ -122,6 +125,8 @@ const para = (text: string): DocNode => {
 export function mdNode(md: string): DocNode {
   const text = md.trim()
   if (isSceneBreakLine(text)) return { type: 'sceneBreak' }
+  const pic = /^!\[([^\]]*)\]\(picture:([0-9a-f]{64}\.[a-z]+)\)$/.exec(text)
+  if (pic) return { type: 'chapterImage', attrs: { file: pic[2]!, alt: pic[1]! } }
   const h = /^(#{1,6})\s+([\s\S]*)$/.exec(text)
   if (h) {
     const content = inlineNodes(h[2]!.trim())

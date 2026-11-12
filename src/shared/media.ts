@@ -100,3 +100,51 @@ export function parseWorldImageUrl(url: string): { worldId: string; file: string
   if (rest.length || !worldId || !file || !WORLD_IMAGE.test(file)) return null
   return { worldId, file }
 }
+
+/** Pictures in chapters: stored once per book (volume), named by content hash like world images. */
+export const CHAPTER_IMAGE = WORLD_IMAGE
+
+/** e.g. `library-media://chapter-image/<series-id>/<volume-id>/<hash>.png` */
+export function chapterImageUrl(seriesId: string, volumeId: string, file: string): string {
+  return `${MEDIA_SCHEME}://chapter-image/${seriesId}/${volumeId}/${file}`
+}
+
+export function parseChapterImageUrl(
+  url: string,
+): { seriesId: string; volumeId: string; file: string } | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== `${MEDIA_SCHEME}:` || parsed.host !== 'chapter-image') return null
+  const [seriesId, volumeId, file, ...rest] = parsed.pathname.split('/').filter(Boolean)
+  if (rest.length || !seriesId || !volumeId || !file || !CHAPTER_IMAGE.test(file)) return null
+  return { seriesId, volumeId, file }
+}
+
+/** Width and height of a PNG, JPEG or GIF (null when unknown), for exports that need a size. */
+export function imageSize(b: Uint8Array): { width: number; height: number } | null {
+  if (b[0] === 0x89 && b[1] === 0x50 && b.length > 24) {
+    const v = new DataView(b.buffer, b.byteOffset, b.byteLength)
+    return { width: v.getUint32(16), height: v.getUint32(20) }
+  }
+  if (b[0] === 0x47 && b[1] === 0x49 && b.length > 10) {
+    return { width: b[6]! | (b[7]! << 8), height: b[8]! | (b[9]! << 8) }
+  }
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) return null
+      const marker = b[i + 1]!
+      const len = (b[i + 2]! << 8) | b[i + 3]!
+      // Start-of-frame markers carry the size.
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+        return { height: (b[i + 5]! << 8) | b[i + 6]!, width: (b[i + 7]! << 8) | b[i + 8]! }
+      }
+      i += 2 + len
+    }
+  }
+  return null
+}

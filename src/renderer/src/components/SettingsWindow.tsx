@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { BackupSettingsSection } from './BackupSettings'
 import {
   PAGE_WIDTH,
@@ -67,7 +68,8 @@ export function SettingsWindow(props: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  // A layer over the whole window, wherever it was opened from (never squeezed into a pane).
+  return createPortal(
     <div className="settings-window" role="dialog" aria-label="Settings">
       <nav className="settings-nav" aria-label="Settings categories">
         <h2>Settings</h2>
@@ -100,7 +102,8 @@ export function SettingsWindow(props: { onClose: () => void }) {
         </header>
         {category.render?.()}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -1321,6 +1324,7 @@ function WorldSettings() {
   const { settings, update } = useSettings()
   return (
     <section className="settings-section">
+      <h3>Names in your chapters</h3>
       <label className="radio">
         <input
           type="checkbox"
@@ -1356,6 +1360,19 @@ function WorldSettings() {
       <label className="radio">
         <input
           type="checkbox"
+          checked={!settings.analysis.includeNames}
+          onChange={(e) =>
+            update(({ analysis }) => ({
+              analysis: { ...analysis, includeNames: !e.target.checked },
+            }))
+          }
+        />
+        Leave character and place names out of Echo and repeated words
+      </label>
+      <h3>Map and people board</h3>
+      <label className="radio">
+        <input
+          type="checkbox"
           checked={settings.world.map}
           onChange={(e) => update(({ world }) => ({ world: { ...world, map: e.target.checked } }))}
         />
@@ -1367,12 +1384,24 @@ function WorldSettings() {
       <label className="radio">
         <input
           type="checkbox"
-          checked={settings.world.lighter}
+          checked={settings.world.timeScrubber}
           onChange={(e) =>
-            update(({ world }) => ({ world: { ...world, lighter: e.target.checked } }))
+            update(({ world }) => ({ world: { ...world, timeScrubber: e.target.checked } }))
           }
         />
-        Lighter mode for slower computers (smaller map images, no animations)
+        Show the time scrubber above the map and the board (otherwise the world as it stands at the
+        latest chapter)
+      </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.trails}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, trails: e.target.checked } }))
+          }
+        />
+        Movement trails and animations (portraits glide to where they are; off when reduced motion
+        is on)
       </label>
       <label className="radio">
         <input
@@ -1385,6 +1414,33 @@ function WorldSettings() {
         On the people board, show every relationship type along a line (otherwise one colour: the
         strongest)
       </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.world.lighter}
+          onChange={(e) =>
+            update(({ world }) => ({ world: { ...world, lighter: e.target.checked } }))
+          }
+        />
+        Lighter mode for slower computers (smaller map images, no animations)
+      </label>
+      <h3>Cast</h3>
+      <label>
+        “Gone quiet” after
+        <input
+          type="number"
+          min={1}
+          max={200}
+          value={settings.world.quietAfter}
+          onChange={(e) => {
+            const n = Math.round(Number(e.target.value))
+            if (n >= 1 && n <= 200) update(({ world }) => ({ world: { ...world, quietAfter: n } }))
+          }}
+          style={{ width: '5rem' }}
+        />{' '}
+        chapters without a mention
+      </label>
+      <h3>World skins</h3>
       <fieldset className="plain-fieldset">
         <legend>World skin (Fantasy, Cyberpunk and Arcade themes)</legend>
         {(
@@ -1415,57 +1471,8 @@ function WorldSettings() {
         />
         Themed words in a skin (Atlas, Chronicle, Lore…; otherwise Where, When, How)
       </label>
-      <label className="radio">
-        <input
-          type="checkbox"
-          checked={settings.world.timeScrubber}
-          onChange={(e) =>
-            update(({ world }) => ({ world: { ...world, timeScrubber: e.target.checked } }))
-          }
-        />
-        Show the time scrubber above the map and the board (otherwise the world as it stands at the
-        latest chapter)
-      </label>
-      <label className="radio">
-        <input
-          type="checkbox"
-          checked={settings.world.trails}
-          onChange={(e) =>
-            update(({ world }) => ({ world: { ...world, trails: e.target.checked } }))
-          }
-        />
-        Movement trails and animations (portraits glide to where they are; off when reduced motion
-        is on)
-      </label>
-      <label>
-        “Gone quiet” after
-        <input
-          type="number"
-          min={1}
-          max={200}
-          value={settings.world.quietAfter}
-          onChange={(e) => {
-            const n = Math.round(Number(e.target.value))
-            if (n >= 1 && n <= 200) update(({ world }) => ({ world: { ...world, quietAfter: n } }))
-          }}
-          style={{ width: '5rem' }}
-        />{' '}
-        chapters without a mention
-      </label>
-      <label className="radio">
-        <input
-          type="checkbox"
-          checked={!settings.analysis.includeNames}
-          onChange={(e) =>
-            update(({ analysis }) => ({
-              analysis: { ...analysis, includeNames: !e.target.checked },
-            }))
-          }
-        />
-        Leave character and place names out of Echo and repeated words
-      </label>
       <p className="muted small">
-        Templates (which details each kind of entry has) are set per world: World mode → ⋯ →
+        Templates (which details each kind of entry has) are set per world: World mode → ⋯ World →
         Templates. To add a name from a chapter, select it and right-click → “Add to the world…” (
         {MOD}Alt+N). To save a line into the world, select it and right-click → “Capture to the
         world”.

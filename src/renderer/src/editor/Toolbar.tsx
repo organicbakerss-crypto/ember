@@ -1,4 +1,7 @@
+import { useRef } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
+import { useOverlays } from '../components/overlays'
+import { insertPictures, pictureFiles, type BookRef } from './pictures'
 import { MOD } from '../components/commands'
 import { COLOR_CHOICES, FONT_CHOICES } from './extensions'
 
@@ -10,8 +13,12 @@ export function Toolbar(props: {
   /** Left out (the Manuscript view): no Rhythm and Echo buttons. */
   onToggleRhythm?: () => void
   onToggleEcho?: () => void
+  /** The book the chapter is in: shows the Picture button. */
+  book?: BookRef
 }) {
-  const { editor } = props
+  const { editor, book } = props
+  const { toast } = useOverlays()
+  const picker = useRef<HTMLInputElement>(null)
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -84,6 +91,25 @@ export function Toolbar(props: {
       >
         ***
       </ToolButton>
+      {book && editor.isEditable && (
+        <>
+          <ToolButton label="Picture" onClick={() => picker.current?.click()}>
+            🖼
+          </ToolButton>
+          <input
+            ref={picker}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            multiple
+            hidden
+            onChange={(e) => {
+              const files = pictureFiles(e.target.files)
+              e.target.value = ''
+              void insertPictures(editor, book, files).then((err) => err && toast(err))
+            }}
+          />
+        </>
+      )}
       <span className="toolbar-gap" />
       <select
         aria-label="Font"

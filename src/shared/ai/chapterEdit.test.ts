@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assemble, docToMarkdown, editedDoc, mdNode } from './chapterEdit'
+import { assemble, blockMd, docToMarkdown, editedDoc, mdNode } from './chapterEdit'
 
 const doc = {
   type: 'doc',
@@ -95,5 +95,25 @@ describe('chapter edits through Markdown', () => {
       text: 'under',
       marks: [{ type: 'underline' }],
     })
+  })
+
+  it('keeps pictures through an edit', () => {
+    const file = 'a'.repeat(64) + '.png'
+    const pic = { type: 'chapterImage', attrs: { file, alt: 'The old [mill]' } }
+    expect(blockMd(pic)).toBe(`![The old mill](picture:${file})`)
+    expect(mdNode(blockMd(pic))).toEqual({
+      type: 'chapterImage',
+      attrs: { file, alt: 'The old mill' },
+    })
+    const doc = {
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Before.' }] },
+        pic,
+        { type: 'paragraph', content: [{ type: 'text', text: 'After.' }] },
+      ],
+    }
+    const r = editedDoc(doc, `Before, changed.\n\n![The old mill](picture:${file})\n\nAfter.`)
+    // The unchanged picture is the very same node.
+    expect(r.doc.content[1]).toBe(pic)
   })
 })

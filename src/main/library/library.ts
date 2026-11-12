@@ -58,7 +58,13 @@ import type {
   WorldSummary,
 } from '@shared/ipc'
 import { SNAPSHOT_ID } from '@shared/ipc'
-import { COVER_EXTENSIONS, detectImageType, type CoverInfo, type CoverTarget } from '@shared/media'
+import {
+  CHAPTER_IMAGE,
+  COVER_EXTENSIONS,
+  detectImageType,
+  type CoverInfo,
+  type CoverTarget,
+} from '@shared/media'
 import { docToText, docWordCount } from '@shared/text'
 import { docParagraphs } from '@shared/analysis/doc'
 import { chapterLabels, type StoryChapter } from '@shared/world/story'
@@ -2221,6 +2227,65 @@ export class Library {
    * `cover.<ext>` so it travels with it. A previous cover is moved to the
    * device's trash, not deleted.
    */
+  /**
+   * A picture for a chapter: stored once in the book's folder (images/), named
+   * by its content hash, and recorded for sync with the book.
+   */
+  async storeChapterImage(
+    seriesId: string,
+    volumeId: string,
+    data: Uint8Array,
+  ): Promise<{ file: string }> {
+    const type = detectImageType(data)
+    if (!type)
+      throw new AppError('invalid-input', 'Pictures must be PNG, JPEG, WebP or GIF images.')
+    await this.getVolume(seriesId, volumeId)
+    const dir = this.paths.volumeDir(seriesId, volumeId)
+    const hash = sha256(data)
+    const file = `${hash}.${type.ext}`
+    const rel = `images/${file}`
+    await this.lock.run(`volume:${volumeId}`, async () => {
+      // Named by content, so a copy already there with the same content is this picture.
+      // A damaged copy (a crash, a bad sync) gets the right bytes back.
+      const there = await fs.promises.readFile(join(dir, rel)).catch(() => null)
+      if (there && sha256(there) === hash) return
+      await fs.promises.mkdir(join(dir, 'images'), { recursive: true })
+      await writeFileAtomic(join(dir, rel), data)
+      await this.recordInManifest({ type: 'volume', dir, id: volumeId }, rel, {
+        hash,
+        size: data.byteLength,
+      })
+    })
+    return { file }
+  }
+
+  /** Where a chapter picture is on disk (only names made by `storeChapterImage`). */
+  chapterImagePath(seriesId: string, volumeId: string, file: string): string {
+    if (!CHAPTER_IMAGE.test(file)) throw new AppError('not-found', 'No such picture.')
+    return join(this.paths.volumeDir(seriesId, volumeId), 'images', file)
+  }
+
+  /** The pictures a book's chapters use, read for an export (missing ones are left out). */
+  async chapterImages(
+    seriesId: string,
+    volumeId: string,
+    files: Iterable<string>,
+  ): Promise<Record<string, { mime: string; data: Uint8Array }>> {
+    const out: Record<string, { mime: string; data: Uint8Array }> = {}
+    for (const file of new Set(files)) {
+      try {
+        const data = new Uint8Array(
+          await fs.promises.readFile(this.chapterImagePath(seriesId, volumeId, file)),
+        )
+        const type = detectImageType(data)
+        if (type) out[file] = { mime: type.mime, data }
+      } catch {
+        // A missing picture is skipped; the export goes on without it.
+      }
+    }
+    return out
+  }
+
   async setCover(target: CoverTarget, data: Uint8Array): Promise<CoverInfo> {
     const type = detectImageType(data)
     if (!type) throw new AppError('invalid-input', 'Covers must be PNG, JPEG, WebP or GIF images.')

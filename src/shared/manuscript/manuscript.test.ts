@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { RichTextDoc } from '../schema'
 import {
+  blockImages,
   chapterHeading,
   DEFAULT_EXPORT_STYLE,
   docToBlocks,
   numberChapters,
   type Manuscript,
 } from './blocks'
-import { bookHtmlForPrint, chapterPlainText, royalRoadHtml } from './html'
+import { bookHtmlForPrint, chapterBodyHtml, chapterPlainText, royalRoadHtml } from './html'
 import { chapterMarkdown, manuscriptMarkdown } from './markdown'
 
 const text = (t: string, ...marks: (string | { type: string; attrs: object })[]) => ({
@@ -118,5 +119,36 @@ describe('the manuscript model', () => {
     expect(html).toContain('<h1 class="chapter-title">Chapter 1: Arrival</h1>')
     expect(html).toContain('text-indent: 1.5em')
     expect(html).toContain('font-family: Georgia')
+  })
+})
+
+describe('pictures in the manuscript model', () => {
+  it('reads a picture node as an image block and lists the pictures', () => {
+    const file = 'c'.repeat(64) + '.jpg'
+    const blocks = docToBlocks({
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Hi' }] },
+        { type: 'chapterImage', attrs: { file, alt: 'A gate' } },
+        { type: 'chapterImage', attrs: { file: null, alt: '' } },
+      ],
+    })
+    expect(blocks[1]).toEqual({ kind: 'image', file, alt: 'A gate' })
+    expect(blocks).toHaveLength(2)
+    expect(blockImages(blocks)).toEqual([file])
+  })
+
+  it('shows a placeholder in Markdown and the picture in HTML', () => {
+    const file = 'c'.repeat(64) + '.jpg'
+    const ch = {
+      title: 'A',
+      type: 'chapter' as const,
+      number: 1,
+      blocks: [{ kind: 'image' as const, file, alt: 'A gate' }],
+    }
+    expect(chapterBodyHtml(ch, DEFAULT_EXPORT_STYLE, false, (f) => `x/${f}`)).toContain(
+      `<img src="x/${file}" alt="A gate">`,
+    )
+    expect(chapterBodyHtml(ch, DEFAULT_EXPORT_STYLE)).toContain('[Picture: A gate]')
   })
 })

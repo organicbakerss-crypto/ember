@@ -7,12 +7,17 @@ import { ReadingMark } from './readingMark'
 import { LinkedNames } from './linkedNames'
 import { Pagination } from './pagination'
 import { SceneBreak } from './sceneBreak'
+import { ChapterImage } from './chapterImage'
 import { CommentMark } from './comments'
 import { Typewriter } from './typewriter'
 import { ActiveBlock } from './activeBlock'
 
 /** The editor's schema. Changing it changes what chapter files can contain. */
-export function chapterExtensions(placeholder = 'Start writing…'): Extensions {
+export function chapterExtensions(
+  placeholder = 'Start writing…',
+  /** The book the text is in, so its pictures can be shown. */
+  book?: { seriesId: string; volumeId: string },
+): Extensions {
   return [
     StarterKit.configure({
       heading: { levels: [2, 3] },
@@ -26,6 +31,7 @@ export function chapterExtensions(placeholder = 'Start writing…'): Extensions 
     Color,
     FontFamily,
     SceneBreak,
+    ChapterImage.configure({ seriesId: book?.seriesId ?? null, volumeId: book?.volumeId ?? null }),
     CommentMark,
     AnalysisDecorations,
     ReadingMark,

@@ -36,6 +36,7 @@ function blocksMarkdown(blocks: Block[], style: ExportStyle): string[] {
     if (b.kind === 'paragraph') out.push(runsMarkdown(b.runs))
     else if (b.kind === 'heading') out.push(`${'#'.repeat(b.level)} ${runsMarkdown(b.runs)}`)
     else if (b.kind === 'break') out.push(escape(style.sceneBreak))
+    else if (b.kind === 'image') out.push(`_[Picture${b.alt ? `: ${escape(b.alt)}` : ''}]_`)
     else if (b.kind === 'quote')
       out.push(
         blocksMarkdown(b.blocks, style)

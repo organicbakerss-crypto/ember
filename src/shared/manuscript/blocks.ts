@@ -26,6 +26,8 @@ export type Block =
   | { kind: 'list'; ordered: boolean; items: Block[][] }
   /** A scene break. */
   | { kind: 'break' }
+  /** A picture: its file in the book's images folder, and a description. */
+  | { kind: 'image'; file: string; alt: string }
 
 interface Node {
   type?: string
@@ -87,6 +89,14 @@ function blocksOf(nodes: Node[] | undefined): Block[] {
       case 'sceneBreak':
         out.push({ kind: 'break' })
         break
+      case 'chapterImage':
+        if (typeof n.attrs?.['file'] === 'string')
+          out.push({
+            kind: 'image',
+            file: n.attrs['file'],
+            alt: typeof n.attrs['alt'] === 'string' ? n.attrs['alt'] : '',
+          })
+        break
       default:
         // Anything else that holds text is kept as paragraphs, so no words are dropped.
         if (n.content?.length) out.push(...blocksOf(n.content))
@@ -104,6 +114,19 @@ export function docToBlocks(doc: RichTextDoc): Block[] {
     else break
   }
   return blocks
+}
+
+/** The picture files some blocks use (in quotes and lists too). */
+export function blockImages(blocks: Block[]): string[] {
+  return blocks.flatMap((b) =>
+    b.kind === 'image'
+      ? [b.file]
+      : b.kind === 'quote'
+        ? blockImages(b.blocks)
+        : b.kind === 'list'
+          ? b.items.flatMap(blockImages)
+          : [],
+  )
 }
 
 /** The plain text of some runs. */
@@ -127,6 +150,8 @@ export interface Manuscript {
   series: string
   author: string
   chapters: ManuscriptChapter[]
+  /** The pictures the chapters use, by file (exports that embed them). */
+  images?: Record<string, { mime: string; data: Uint8Array }>
 }
 
 export interface ExportStyle {

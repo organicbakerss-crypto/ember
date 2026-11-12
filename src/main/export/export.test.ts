@@ -83,3 +83,50 @@ describe('EPUB export', () => {
     expect(ch1).toContain('<ol><li><p>first</p></li></ol>')
   })
 })
+
+describe('pictures in exports', () => {
+  const file = 'b'.repeat(64) + '.png'
+  // A 1×1 PNG.
+  const png = Uint8Array.from(
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    ),
+  )
+  const withPic: Manuscript = {
+    ...m,
+    chapters: [
+      {
+        title: 'Maps',
+        type: 'chapter',
+        number: 1,
+        blocks: [
+          { kind: 'paragraph', runs: [{ text: 'See:' }] },
+          { kind: 'image', file, alt: 'The coast' },
+        ],
+      },
+    ],
+    images: { [file]: { mime: 'image/png', data: png } },
+  }
+
+  it('puts the picture in the EPUB and its package', () => {
+    const files = unzipSync(manuscriptEpub(withPic, DEFAULT_EXPORT_STYLE, new Date(), 'urn:x'))
+    expect(files[`OEBPS/images/${file}`]).toEqual(png)
+    expect(strFromU8(files['OEBPS/content.opf']!)).toContain(`href="images/${file}"`)
+    expect(strFromU8(files['OEBPS/chapter-001.xhtml']!)).toContain(
+      `<img src="images/${file}" alt="The coast"/>`,
+    )
+  })
+
+  it('puts the picture in the Word file', async () => {
+    const files = unzipSync(await manuscriptDocx(withPic, DEFAULT_EXPORT_STYLE))
+    expect(Object.keys(files).some((f) => f.startsWith('word/media/'))).toBe(true)
+  })
+
+  it('shows the description when the picture is missing', () => {
+    const files = unzipSync(
+      manuscriptEpub({ ...withPic, images: {} }, DEFAULT_EXPORT_STYLE, new Date(), 'urn:x'),
+    )
+    expect(strFromU8(files['OEBPS/chapter-001.xhtml']!)).toContain('The coast')
+  })
+})

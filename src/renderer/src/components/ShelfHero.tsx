@@ -36,15 +36,22 @@ function ago(at: number | undefined): string {
  * straight back to the chapter.
  */
 export function ShelfHero(props: {
-  snapshot: LibrarySnapshot
+  /** The library (the bookshelf picks the story last open)… */
+  snapshot?: LibrarySnapshot
+  /** …or one story (its own page). */
+  series?: SeriesSummary
+  /** On a story's page: no cover or book cards (the page shows them). */
+  compact?: boolean
   onOpenVolume: (seriesId: string, volumeId: string) => void
 }) {
   const last = lastOpened()
   const series =
-    props.snapshot.series.find((s) => s.id === last?.seriesId) ??
-    props.snapshot.series.find((s) => s.volumes.length > 0)
+    props.series ??
+    props.snapshot?.series.find((s) => s.id === last?.seriesId) ??
+    props.snapshot?.series.find((s) => s.volumes.length > 0)
+  const mine = last?.seriesId === series?.id ? last : null
   const volume =
-    series?.volumes.find((v) => v.id === last?.volumeId) ??
+    series?.volumes.find((v) => v.id === mine?.volumeId) ??
     series?.volumes[series.volumes.length - 1]
   const [book, setBook] = useState<{ view: OutlineView; stats: VolumeStats } | null>(null)
   const seriesId = series?.id
@@ -68,10 +75,11 @@ export function ShelfHero(props: {
   const order = book
     ? chapterOrder(toContainers(book.view.outline)).filter((id) => id in book.view.chapters)
     : []
-  const chapterId =
-    last?.volumeId === volume.id && last.chapterId && order.includes(last.chapterId)
-      ? last.chapterId
-      : order[order.length - 1]
+  // The chapter last open in this book (remembered per book), else its last chapter.
+  const remembered =
+    (mine?.volumeId === volume.id ? mine.chapterId : null) ??
+    loadLocal(`writing.lastChapter.${volume.id}`)
+  const chapterId = remembered && order.includes(remembered) ? remembered : order[order.length - 1]
   const at = chapterId ? order.indexOf(chapterId) : -1
   const chapter = chapterId ? book?.view.chapters[chapterId] : undefined
   const words = (id: string) => book?.stats.chapterWords[id] ?? 0
@@ -80,23 +88,30 @@ export function ShelfHero(props: {
   const seriesWords = series.volumes.reduce((n, v) => n + v.wordCount, 0)
 
   return (
-    <section className="shelf-hero" aria-label="Pick up where you left off">
-      <div className="shelf-hero-cover">
-        <CoverStack
-          sources={[
-            volumeCover(series, volume),
-            ...series.volumes.filter((v) => v.id !== volume.id).map((v) => volumeCover(series, v)),
-          ]}
-        />
-      </div>
+    <section
+      className={`shelf-hero ${props.compact ? 'compact' : ''}`}
+      aria-label="Pick up where you left off"
+    >
+      {!props.compact && (
+        <div className="shelf-hero-cover">
+          <CoverStack
+            sources={[
+              volumeCover(series, volume),
+              ...series.volumes
+                .filter((v) => v.id !== volume.id)
+                .map((v) => volumeCover(series, v)),
+            ]}
+          />
+        </div>
+      )}
       <div className="shelf-hero-main">
         <div className="shelf-kicker">Pick up where you left off</div>
-        <h1 className="shelf-hero-title">{series.name}</h1>
+        {!props.compact && <h1 className="shelf-hero-title">{series.name}</h1>}
         <div className="shelf-hero-sub">
           {[
             multi ? volume.name : null,
             chapter ? `Chapter ${at + 1}, “${chapter.title || 'Untitled'}”` : null,
-            last?.seriesId === series.id ? ago(last.at) : null,
+            mine ? ago(mine.at) : null,
           ]
             .filter(Boolean)
             .join(' · ')}
@@ -104,7 +119,9 @@ export function ShelfHero(props: {
         <button className="shelf-continue" onClick={() => props.onOpenVolume(series.id, volume.id)}>
           Continue writing{chapter && <span> → Ch {at + 1}</span>}
         </button>
-        {multi && <Books series={series} current={volume.id} onOpen={props.onOpenVolume} />}
+        {multi && !props.compact && (
+          <Books series={series} current={volume.id} onOpen={props.onOpenVolume} />
+        )}
         {order.length > 0 && (
           <div className="shelf-mini" aria-hidden>
             {order.map((id) => {
