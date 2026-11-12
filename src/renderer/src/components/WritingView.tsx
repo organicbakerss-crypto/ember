@@ -32,7 +32,14 @@ import type {
 } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
 import { Binder, LABEL_NAMES, STATUS_NAMES } from '../binder/Binder'
-import { chapterOrder, toContainers } from '../binder/model'
+import {
+  chapterOrder,
+  findContainer,
+  fromContainers,
+  moveChapterTo,
+  ROOT,
+  toContainers,
+} from '../binder/model'
 import {
   ChapterEditor,
   type ChapterMeta,
@@ -743,6 +750,17 @@ export function WritingView(props: {
   }
 
   /** A new test scene kept with a chapter (optionally holding some text), opened. */
+  /** A test scene on its own (kept with no chapter), outside the reading order. */
+  const createLooseTest = async () => {
+    try {
+      await flushAll()
+      const test = await api.invoke('chapter:create', { ...ref, title: '', looseTest: true })
+      setView(await api.invoke('outline:get', ref))
+      select(test.id)
+    } catch (err) {
+      actions.toast(describeError(err).message)
+    }
+  }
   const createTest = async (chapterId: string, content?: RichTextDoc, title = '') => {
     try {
       await flushAll()
@@ -946,6 +964,24 @@ export function WritingView(props: {
     : ''
   const manuscriptIds = useMemo(() => (idsKey ? idsKey.split(',') : []), [idsKey])
 
+  /**
+   * Puts a chapter in an arc. Into an empty arc, the arc moves to where the
+   * chapter is, so the reading order stays the same; otherwise it joins the
+   * end of the arc (as in the Chapters list).
+   */
+  const moveIntoArc = (chapterId: string, arcId: string) => {
+    if (!view) return
+    let containers = toContainers(view.outline)
+    if ((containers[arcId] ?? []).length === 0) {
+      const root = containers[ROOT]!.filter((x) => x !== arcId)
+      const holder = findContainer(containers, chapterId)
+      const at = root.indexOf(holder === ROOT ? chapterId : (holder ?? chapterId))
+      root.splice(at < 0 ? root.length : at, 0, arcId)
+      containers = { ...containers, [ROOT]: root }
+    }
+    void saveOutline(fromContainers(view.outline, moveChapterTo(containers, chapterId, arcId)))
+  }
+
   // Margins: a chapter's menu on the strip (reordering and arcs stay in the Chapters drawer).
   const stripMenu = (id: string): MenuItem[] => {
     const order = manuscriptIds
@@ -999,7 +1035,32 @@ export function WritingView(props: {
           ),
       },
       { label: 'Export…', onSelect: () => setExporting({ chapterId: id, only: true }) },
-      { label: 'Move or put in an arc… (Chapters list)', onSelect: () => switchTab('binder') },
+      {
+        label: 'Move to arc',
+        disabled: !view?.outline.items.some((item) => item.type === 'arc'),
+        submenu: [
+          ...(view?.outline.items ?? []).flatMap((item) =>
+            item.type === 'arc'
+              ? [
+                  {
+                    label: item.name,
+                    disabled: item.chapterIds.includes(id),
+                    onSelect: () => moveIntoArc(id, item.id),
+                  },
+                ]
+              : [],
+          ),
+          {
+            label: 'No arc',
+            onSelect: () =>
+              view &&
+              void saveOutline(
+                fromContainers(view.outline, moveChapterTo(toContainers(view.outline), id, null)),
+              ),
+          },
+        ],
+      },
+      { label: 'Reorder… (Chapters list)', onSelect: () => switchTab('binder') },
       { label: 'Delete…', danger: true, onSelect: () => trashChapter(id) },
     ]
   }
@@ -1768,6 +1829,7 @@ export function WritingView(props: {
               onJump={(pos) => editor.current?.jumpTo(pos)}
               onSave={saveOutline}
               onCreateChapter={(arcId) => void createChapter(arcId)}
+              onCreateLooseTest={() => void createLooseTest()}
               onCreateTest={(chapterId) => void createTest(chapterId)}
               onSetTest={(chapterId, testOf) => void setTest(chapterId, testOf)}
               words={
@@ -2077,11 +2139,27 @@ export function WritingView(props: {
       {margins && view && groupOf(panel) !== 'chapters' && (
         <ChapterStrip
           onMenu={(e, id) => openMenu(e, stripMenu(id))}
-          onNew={() => void createChapter()}
+          arcs={view.outline.items.flatMap((item) =>
+            item.type === 'arc' ? [{ id: item.id, name: item.name }] : [],
+          )}
+          onNewChapter={(arcId) => void createChapter(arcId)}
+          onNewArc={(name) =>
+            void api
+              .invoke('arc:create', { ...ref, name })
+              .then(refresh, (err) => actions.toast(describeError(err).message))
+          }
+          onNewLooseTest={() => void createLooseTest()}
+          onNewTestHere={() => selectedId && void createTest(selectedId)}
+          tests={view.outline.tests.length}
+          onOpenTests={() => switchTab('binder')}
           chapters={manuscriptIds.map((id) => {
             const m = liveMeta[id] ?? view.chapters[id]
             return {
               id,
+              arcId:
+                view.outline.items.find(
+                  (item) => item.type === 'arc' && item.chapterIds.includes(id),
+                )?.id ?? null,
               title: m?.title ?? '',
               words: liveWords[id] ?? stats?.chapterWords[id] ?? 0,
               pov: m?.povs?.[0]?.name ?? m?.pov ?? null,

@@ -85,6 +85,8 @@ interface BinderProps {
   onJump: (pos: number) => void
   onSave: (outline: OutlineFile) => Promise<void>
   onCreateChapter: (arcId?: string) => void
+  /** A test scene on its own (kept with no chapter). */
+  onCreateLooseTest?: () => void
   onCreateArc: (name: string) => Promise<unknown>
   /** The item being renamed inline (a chapter or arc id), shared so F2 (or F3) can start it. */
   renamingId: string | null
@@ -607,6 +609,11 @@ export function Binder(props: BinderProps) {
           + Chapter
         </button>
         <InlineCreate label="Arc" placeholder="Arc name" onCreate={props.onCreateArc} />
+        {props.onCreateLooseTest && (
+          <button className="link" onClick={props.onCreateLooseTest}>
+            + Test scene
+          </button>
+        )}
       </footer>
     </div>
   )

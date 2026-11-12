@@ -701,6 +701,8 @@ export class Library {
     type?: ChapterType
     arcId?: string
     testOf?: string
+    /** A test scene on its own (kept with no chapter). */
+    looseTest?: boolean
   }): Promise<ChapterFile> {
     const { seriesId, volumeId } = input
     const time = this.timestamp()
@@ -733,7 +735,8 @@ export class Library {
 
       // Chapter file first: if the outline write fails, getOutline() still shows it.
       await this.writeVolumeFile(seriesId, volumeId, unitPaths.chapter(chapter.id), chapter)
-      if (input.testOf) outline.tests.push({ id: chapter.id, chapterId: input.testOf })
+      if (input.testOf || input.looseTest)
+        outline.tests.push({ id: chapter.id, chapterId: input.testOf ?? null })
       else if (arc?.type === 'arc') arc.chapterIds.push(chapter.id)
       else outline.items.push({ type: 'chapter', id: chapter.id })
       await this.writeVolumeFile(seriesId, volumeId, unitPaths.outline, outline)

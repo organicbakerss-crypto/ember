@@ -5706,3 +5706,29 @@ kbd {
   color: var(--accent);
   border-color: var(--accent);
 }
+.strip-arc {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.strip-arc-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 0.1rem;
+  margin: 0 1px 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strip-arc-bars {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.strip-arc-name {
+  width: 15rem;
+}

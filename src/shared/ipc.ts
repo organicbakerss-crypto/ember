@@ -678,6 +678,8 @@ export const ipcInputs = {
     arcId: id('arc').optional(),
     /** Makes a test scene kept with this chapter, outside the reading order. */
     testOf: id('chapter').optional(),
+    /** Makes a test scene on its own (kept with no chapter). */
+    looseTest: z.boolean().optional(),
   }),
   /**
    * Makes a chapter a test scene of another (`testOf`), or a test scene a

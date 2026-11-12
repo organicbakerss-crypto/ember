@@ -1,4 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react'
+import { useOverlays } from './overlays'
 import type { CommentInfo } from '../editor/comments'
 
 /** A steady colour for a name (POVs on the strip, people in the cast). */
@@ -29,20 +30,91 @@ const initials = (name: string) =>
 /**
  * Margins: the book along the bottom. One bar per chapter, as tall as its
  * words, coloured by its POV; chapters with nothing written yet are hatched.
+ * Arcs are bracketed and named above their chapters.
  */
 export function ChapterStrip(props: {
-  chapters: { id: string; title: string; words: number; pov: string | null }[]
+  chapters: { id: string; title: string; words: number; pov: string | null; arcId: string | null }[]
+  arcs: { id: string; name: string }[]
   selectedId: string | null
   onSelect: (id: string) => void
-  /** "Book One · 41,280 words · today 340 / 550" */
+  /** "Book One · 41,280 words" */
   summary: string
   /** A chapter's menu (right-click a bar). */
   onMenu: (e: React.MouseEvent, id: string) => void
-  /** Adds a chapter at the end. */
-  onNew: () => void
+  onNewChapter: (arcId?: string) => void
+  onNewArc: (name: string) => void
+  /** A test scene on its own, outside the reading order. */
+  onNewLooseTest: () => void
+  /** A test scene kept with the open chapter. */
+  onNewTestHere: () => void
+  /** How many test scenes there are (they live in the Chapters list, not on the strip). */
+  tests: number
+  onOpenTests: () => void
 }) {
+  const { openMenu } = useOverlays()
+  const [naming, setNaming] = useState<string | null>(null)
   const max = Math.max(1, ...props.chapters.map((c) => c.words))
   const povs = [...new Set(props.chapters.map((c) => c.pov).filter((p): p is string => !!p))]
+  const arcName = new Map(props.arcs.map((a) => [a.id, a.name]))
+  // Runs of chapters in the same arc (or none), in reading order.
+  const groups: {
+    arcId: string | null
+    items: { c: (typeof props.chapters)[number]; i: number }[]
+  }[] = []
+  props.chapters.forEach((c, i) => {
+    const last = groups[groups.length - 1]
+    if (last && last.arcId === c.arcId) last.items.push({ c, i })
+    else groups.push({ arcId: c.arcId, items: [{ c, i }] })
+  })
+  const current = props.chapters.findIndex((c) => c.id === props.selectedId)
+  const addMenu = (e: React.MouseEvent) =>
+    openMenu(e, [
+      { label: 'New chapter', onSelect: () => props.onNewChapter() },
+      ...(props.arcs.length
+        ? [
+            {
+              label: 'New chapter in an arc',
+              submenu: props.arcs.map((a) => ({
+                label: a.name,
+                onSelect: () => props.onNewChapter(a.id),
+              })),
+            },
+          ]
+        : []),
+      { label: 'New arc…', onSelect: () => setNaming('') },
+      { label: 'New test scene (on its own)', onSelect: props.onNewLooseTest },
+      {
+        label: 'New test scene kept with this chapter',
+        disabled: !props.selectedId,
+        onSelect: props.onNewTestHere,
+      },
+    ])
+  const bar = (c: (typeof props.chapters)[number], i: number) => {
+    const on = c.id === props.selectedId
+    return (
+      <button
+        key={c.id}
+        className={`strip-bar ${on ? 'on' : ''} ${c.words ? '' : 'empty'}`}
+        title={`${i + 1}. ${c.title || 'Untitled chapter'}${c.pov ? ` · ${c.pov}` : ''} · ${c.words.toLocaleString()} words`}
+        aria-label={`Chapter ${i + 1}: ${c.title || 'Untitled'}`}
+        aria-current={on}
+        onClick={() => props.onSelect(c.id)}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          props.onMenu(e, c.id)
+        }}
+      >
+        <span
+          className="strip-fill"
+          style={{
+            height: c.words ? `${Math.max(14, (c.words / max) * 100)}%` : undefined,
+            background: c.words ? (c.pov ? colorOf(c.pov) : 'var(--muted)') : undefined,
+          }}
+        />
+        <span className="strip-num">{i + 1}</span>
+      </button>
+    )
+  }
   return (
     <nav className="chapter-strip" aria-label="Chapters">
       <div className="strip-legend small">
@@ -52,50 +124,59 @@ export function ChapterStrip(props: {
             {p}
           </span>
         ))}
+        {props.tests > 0 && (
+          <button className="link small strip-tests" onClick={props.onOpenTests}>
+            {props.tests} test scene{props.tests === 1 ? '' : 's'}
+          </button>
+        )}
         <span className="status-spacer" />
-        {(() => {
-          const i = props.chapters.findIndex((c) => c.id === props.selectedId)
-          const c = props.chapters[i]
-          return c ? (
-            <span className="strip-current">
-              {i + 1} · {c.title || 'Untitled chapter'} · {c.words.toLocaleString()} words
-            </span>
-          ) : null
-        })()}
+        {naming !== null && (
+          <input
+            autoFocus
+            className="strip-arc-name small"
+            aria-label="Name of the new arc"
+            placeholder="Name of the new arc, then Enter"
+            value={naming}
+            onChange={(e) => setNaming(e.target.value)}
+            onBlur={() => setNaming(null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setNaming(null)
+              if (e.key === 'Enter' && naming.trim()) {
+                props.onNewArc(naming.trim())
+                setNaming(null)
+              }
+            }}
+          />
+        )}
+        {current >= 0 && (
+          <span className="strip-current">
+            {current + 1} · {props.chapters[current]!.title || 'Untitled chapter'} ·{' '}
+            {props.chapters[current]!.words.toLocaleString()} words
+          </span>
+        )}
         <span>{props.summary}</span>
       </div>
       <div className="strip-bars">
-        {props.chapters.map((c, i) => {
-          const on = c.id === props.selectedId
-          return (
-            <button
-              key={c.id}
-              className={`strip-bar ${on ? 'on' : ''} ${c.words ? '' : 'empty'}`}
-              title={`${i + 1}. ${c.title || 'Untitled chapter'}${c.pov ? ` · ${c.pov}` : ''} · ${c.words.toLocaleString()} words`}
-              aria-label={`Chapter ${i + 1}: ${c.title || 'Untitled'}`}
-              aria-current={on}
-              onClick={() => props.onSelect(c.id)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                props.onMenu(e, c.id)
-              }}
+        {groups.map((g, gi) =>
+          g.arcId ? (
+            <div
+              key={g.arcId + gi}
+              className="strip-arc"
+              style={{ flex: `${g.items.length} 1 0` }}
+              title={arcName.get(g.arcId)}
             >
-              <span
-                className="strip-fill"
-                style={{
-                  height: c.words ? `${Math.max(14, (c.words / max) * 100)}%` : undefined,
-                  background: c.words ? (c.pov ? colorOf(c.pov) : 'var(--muted)') : undefined,
-                }}
-              />
-              <span className="strip-num">{i + 1}</span>
-            </button>
-          )
-        })}
+              <span className="strip-arc-label">{arcName.get(g.arcId) ?? 'Arc'}</span>
+              <div className="strip-arc-bars">{g.items.map(({ c, i }) => bar(c, i))}</div>
+            </div>
+          ) : (
+            g.items.map(({ c, i }) => bar(c, i))
+          ),
+        )}
         <button
           className="strip-new"
-          title="New chapter"
-          aria-label="New chapter"
-          onClick={props.onNew}
+          title="Add…"
+          aria-label="Add a chapter, arc or test scene"
+          onClick={addMenu}
         >
           +
         </button>

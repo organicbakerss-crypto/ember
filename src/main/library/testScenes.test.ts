@@ -34,6 +34,19 @@ async function story() {
 }
 
 describe('test scenes', () => {
+  it('can stand on their own, kept with no chapter', async () => {
+    const { series, vol, a, b, order } = await story()
+    const t = await lib.createChapter({
+      seriesId: series.id,
+      volumeId: vol.id,
+      title: '',
+      looseTest: true,
+    })
+    const o = await order()
+    expect(o.order).toEqual([a.id, b.id])
+    expect(o.tests).toEqual([{ id: t.id, chapterId: null }])
+  })
+
   it('are kept with a chapter, outside the reading order and exports', async () => {
     const { series, vol, ref, a, b, order } = await story()
     const t = await lib.createChapter({
