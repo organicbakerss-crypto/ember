@@ -5226,249 +5226,15 @@ kbd {
   font-style: italic;
 }
 
-/* ===================== New look (Settings → Appearance → Layout) =====================
-   Style B: calm, rounded, floating panels, one accent. Built only on the theme's own
-   colours, so every theme and world skin carries over. Classic is untouched. */
+/* ===================== Layouts (Settings → Appearance → Layout) =====================
+   Classic is the original. Refined and Margins share the grouped panels (tabs), the view
+   and Beside switches (which can fold into one button), and a quieter chapter list. Both
+   are built only from the theme's colours, so every theme and world skin carries over. */
 
-:root[data-look='modern'] {
-  --m-radius: 12px;
-  --m-shadow:
-    0 1px 2px color-mix(in srgb, var(--text) 8%, transparent),
-    0 6px 20px color-mix(in srgb, var(--text) 7%, transparent);
-  --m-line: color-mix(in srgb, var(--border) 70%, transparent);
-}
-:root[data-look='modern'] button {
-  border-radius: 8px;
-  border-color: var(--m-line);
-  transition:
-    background 0.15s,
-    color 0.15s,
-    box-shadow 0.15s;
-}
-:root[data-look='modern'] button:not(.link, .icon, .primary, .rail-button):hover {
-  background: var(--surface-2);
-}
-:root[data-look='modern'] input,
-:root[data-look='modern'] select,
-:root[data-look='modern'] textarea {
-  border-radius: 8px;
-}
-:root[data-look='modern'] .card {
-  border-radius: var(--m-radius);
-  box-shadow: var(--m-shadow);
-  border-color: var(--m-line);
-}
-/* Segmented switches: a soft track with the chosen one raised, not a block of colour. */
-:root[data-look='modern'] .segmented {
-  border: none;
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-  border-radius: 9px;
-  padding: 2px;
-  gap: 2px;
-}
-:root[data-look='modern'] .segmented button {
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  padding: 0.28rem 0.7rem;
-}
-:root[data-look='modern'] .segmented button + button {
-  border-left: none;
-}
-:root[data-look='modern'] .segmented button.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 15%, transparent);
-}
-
-/* The writing screen: the desk everywhere, the bars and panels float on it. */
-.writing-view.modern {
-  background: var(--desk);
-  column-gap: 0;
-  container-type: inline-size;
-}
-.writing-view.modern.panel-open {
-  grid-template-columns: auto 18rem 1fr;
-}
+/* ---- shared by Refined and Margins ---- */
 .writing-view.modern .top-bar {
-  background: transparent;
-  border-bottom: none;
-  padding: 0.55rem 1rem 0.35rem;
-  gap: 0.9rem;
+  gap: 0.75rem;
 }
-.writing-view.modern .breadcrumb {
-  color: var(--muted);
-}
-.writing-view.modern .view-switch {
-  margin-left: auto;
-}
-.writing-view.modern .beside-switch {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding-left: 0.4rem;
-  border-left: 1px solid var(--m-line);
-}
-.writing-view.modern .beside-switch .muted {
-  margin-right: 0.2rem;
-}
-.writing-view.modern .beside-switch button {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  padding: 0.28rem 0.6rem;
-  font-size: 0.82rem;
-}
-.writing-view.modern .beside-switch button.active {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.writing-view.modern .icon-rail {
-  margin: 0.25rem 0 0.75rem 0.75rem;
-  padding: 0.45rem 0.3rem;
-  gap: 0.35rem;
-  border: none;
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: var(--m-shadow);
-}
-.writing-view.modern .rail-button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.15rem;
-  padding: 0.5rem 0.4rem 0.4rem;
-  border-radius: 10px;
-}
-.writing-view.modern .rail-label {
-  font-size: 0.68rem;
-  line-height: 1;
-}
-.writing-view.modern .side-panel {
-  margin: 0.25rem 0 0.75rem 0.6rem;
-  border: none;
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: var(--m-shadow);
-  padding: 0.75rem;
-}
-.writing-view.modern .panel-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 2px;
-  margin-bottom: 0.75rem;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-}
-.writing-view.modern .panel-tabs button {
-  flex: 1 0 auto;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  border-radius: 7px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
-}
-.writing-view.modern .panel-tabs button.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 15%, transparent);
-}
-/* The tabs already say which panel this is. */
-.writing-view.modern .side-panel > :not(.panel-tabs) > h2:first-child {
-  display: none;
-}
-.writing-view.modern .page-area {
-  background: transparent;
-}
-.writing-view.modern .status-bar {
-  background: transparent;
-  border-top: none;
-  color: var(--muted);
-  font-size: 0.8rem;
-  padding: 0.3rem 1.25rem 0.5rem;
-}
-
-/* While typing, the bars step back; moving the mouse brings them back. */
-.writing-view.modern .top-bar,
-.writing-view.modern .icon-rail,
-.writing-view.modern .status-bar,
-.writing-view.modern .side-panel {
-  transition: opacity 0.4s ease;
-}
-.writing-view.modern.typing .top-bar,
-.writing-view.modern.typing .icon-rail,
-.writing-view.modern.typing .status-bar {
-  opacity: 0.08;
-}
-.writing-view.modern.typing .side-panel {
-  opacity: 0.45;
-}
-
-/* New look, round 2: the formatting bar, the chapter list, the chapter header, tight panes. */
-.writing-view.modern .toolbar {
-  background: transparent;
-  border-bottom: none;
-  justify-content: center;
-  gap: 0.1rem;
-  padding: 0.35rem 0.75rem 0.15rem;
-  transition: opacity 0.4s ease;
-}
-.writing-view.modern .toolbar button,
-.writing-view.modern .toolbar select {
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted);
-}
-.writing-view.modern .toolbar button:hover,
-.writing-view.modern .toolbar select:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-}
-.writing-view.modern.typing .toolbar {
-  opacity: 0.08;
-}
-.writing-view.modern .binder-row {
-  border-radius: 8px;
-}
-.writing-view.modern .binder-row.selected {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-}
-/* The chapter's kind and POV: plain words until you point at them. */
-.writing-view.modern .chapter-meta select,
-.writing-view.modern .chapter-meta input {
-  border-color: transparent;
-}
-.writing-view.modern .chapter-meta:hover select,
-.writing-view.modern .chapter-meta:hover input,
-.writing-view.modern .chapter-meta :focus {
-  border-color: var(--m-line);
-}
-/* The Beside switch looks like the view switch. */
-.writing-view.modern .beside-switch {
-  border-left: none;
-  padding: 2px;
-  gap: 2px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--text) 6%, transparent);
-}
-.writing-view.modern .beside-switch .muted {
-  padding: 0 0.35rem;
-  margin: 0;
-}
-.writing-view.modern .beside-switch button {
-  border-radius: 7px;
-}
-.writing-view.modern .beside-switch button.active {
-  background: var(--surface);
-  color: var(--accent);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 15%, transparent);
-}
-/* Tight panes (beside the world or the AI): the switches keep their size, the path gives way. */
 .writing-view.modern .top-bar > * {
   flex-shrink: 0;
 }
@@ -5479,9 +5245,448 @@ kbd {
 .writing-view.modern .top-bar > button.link {
   white-space: nowrap;
 }
+.writing-view.modern .view-switch,
+.writing-view.modern .beside-switch,
+.writing-view.modern .panel-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: none;
+}
+.writing-view.modern .view-switch button,
+.writing-view.modern .beside-switch button,
+.writing-view.modern .panel-tabs button {
+  flex: 1 0 auto;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.22rem 0.65rem;
+  font-size: 0.8rem;
+}
+.writing-view.modern .view-switch button + button {
+  border-left: none;
+}
+.writing-view.modern .view-switch button.active,
+.writing-view.modern .beside-switch button.active,
+.writing-view.modern .panel-tabs button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 18%, transparent);
+}
+.writing-view.modern .beside-switch {
+  align-items: center;
+}
+.writing-view.modern .beside-switch .muted {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 0.4rem;
+}
+.writing-view.modern .beside-switch button.active {
+  color: var(--accent);
+}
+.writing-view.modern .switches-fold {
+  border: none;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.25rem 0.7rem;
+}
+.writing-view.modern .switches-fold-button {
+  color: var(--muted);
+}
+.writing-view.modern .panel-tabs {
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+.writing-view.modern .panel-tabs button {
+  padding: 0.2rem 0.45rem;
+}
+/* The tabs already say which panel this is. */
+.writing-view.modern .side-panel > :not(.panel-tabs) > h2:first-child {
+  display: none;
+}
+.writing-view.modern .binder-filter {
+  width: 100%;
+  margin: 0.1rem 0 0.5rem;
+}
+.writing-view.modern .binder-row {
+  border-radius: 6px;
+  position: relative;
+}
+.writing-view.modern .binder-row.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.writing-view.modern .binder-row.selected .binder-title {
+  font-weight: 600;
+}
+.writing-view.modern .binder-row.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.writing-view.modern .binder-words {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.writing-view.modern .binder-row.selected .binder-words {
+  color: var(--accent);
+}
+/* The chapter's kind and POV read as one quiet line until pointed at. */
+.writing-view.modern .chapter-meta select,
+.writing-view.modern .chapter-meta input {
+  border-color: transparent;
+}
+.writing-view.modern .chapter-meta:hover select,
+.writing-view.modern .chapter-meta:hover input,
+.writing-view.modern .chapter-meta :focus {
+  border-color: var(--border);
+}
+/* A lighter formatting bar. */
+.writing-view.modern .toolbar {
+  justify-content: center;
+}
+.writing-view.modern .toolbar button,
+.writing-view.modern .toolbar select {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.writing-view.modern .toolbar button:hover,
+.writing-view.modern .toolbar select:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+.writing-view.modern {
+  container-type: inline-size;
+}
 @container (max-width: 760px) {
   .writing-view.modern .beside-switch .muted,
   .writing-view.modern .breadcrumb {
+    display: none;
+  }
+}
+
+/* ---- Margins: no side bars; the book along the bottom, notes beside the page ---- */
+.writing-view.look-margins {
+  position: relative;
+  grid-template-columns: 0 0 1fr;
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas:
+    'top top top'
+    'rail panel page'
+    'strip strip strip'
+    'status status status';
+  background: var(--desk);
+}
+.writing-view.look-margins.panel-open {
+  grid-template-columns: 0 0 1fr;
+}
+.writing-view.look-margins .top-bar {
+  background: transparent;
+  border-bottom: none;
+  padding: 0.55rem 1.1rem;
+  position: relative;
+}
+.writing-view.look-margins .breadcrumb {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.writing-view.look-margins .margins-panels {
+  display: flex;
+  gap: 0.15rem;
+}
+.writing-view.look-margins .margins-panels .icon {
+  font-size: 1rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.writing-view.look-margins .margins-panels .icon.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.writing-view.look-margins .command-box {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(340px, 34%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.9rem;
+}
+.writing-view.look-margins .command-box kbd {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 0.35rem;
+}
+.writing-view.look-margins .view-switch {
+  margin-left: auto;
+}
+/* Panels open as a drawer along the left edge, part of the frame. */
+.writing-view.look-margins .side-panel {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  top: 3rem;
+  bottom: 0;
+  width: 19rem;
+  border-right: 1px solid var(--border);
+  box-shadow: 8px 0 24px color-mix(in srgb, #000 22%, transparent);
+}
+.writing-view.look-margins .page-area {
+  position: relative;
+  background: transparent;
+}
+.writing-view.look-margins .toolbar {
+  background: transparent;
+  border-bottom: none;
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
+}
+.writing-view.look-margins .toolbar:hover,
+.writing-view.look-margins .toolbar:focus-within {
+  opacity: 1;
+}
+/* The chapter header: a small-caps kicker, the title, the POV. */
+.writing-view.look-margins .chapter-meta {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.9;
+  margin-bottom: 0.4rem;
+}
+.writing-view.look-margins .chapter-title {
+  font-size: 2.4rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.writing-view.look-margins .status-bar {
+  background: transparent;
+  border-top: none;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+/* The book along the bottom. */
+.chapter-strip {
+  grid-area: strip;
+  padding: 0.3rem 2rem 0.2rem;
+}
+.strip-legend {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+.strip-legend i {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+}
+.strip-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 3.6rem;
+}
+.strip-bar {
+  flex: 1 1 0;
+  min-width: 6px;
+  border: none;
+  background: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  position: relative;
+}
+.strip-fill {
+  display: block;
+  border-radius: 3px 3px 0 0;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+.strip-bar:hover .strip-fill {
+  opacity: 0.85;
+}
+.strip-bar.on .strip-fill {
+  opacity: 1;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.strip-bar.empty .strip-fill {
+  height: 30%;
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--text) 18%, transparent) 0 3px,
+    transparent 3px 7px
+  );
+  opacity: 1;
+}
+.strip-num {
+  position: absolute;
+  bottom: -1.05rem;
+  left: 0;
+  right: 0;
+  font-size: 0.62rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.strip-bars:has(.strip-bar:nth-child(41)) .strip-num {
+  visibility: hidden;
+}
+.strip-bar.on .strip-num {
+  visibility: visible;
+  color: var(--accent);
+  font-weight: 600;
+  overflow: visible;
+}
+.chapter-strip {
+  padding-bottom: 1.1rem;
+}
+/* Notes beside the lines they're on. */
+.margin-notes {
+  position: absolute;
+  left: 1.5rem;
+  top: 0;
+  bottom: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.margin-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: auto;
+  text-align: left;
+  border: none;
+  border-left: 2px solid var(--accent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+.margin-note small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 0.15rem;
+}
+.margin-note.ai {
+  border-left-color: rgba(90, 143, 217, 0.9);
+}
+.margin-note:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+/* Who's in this scene, right of the page. */
+.scene-cast {
+  position: absolute;
+  right: 1.5rem;
+  top: 3.2rem;
+  z-index: 5;
+  width: 11.5rem;
+  display: grid;
+  gap: 0.45rem;
+}
+@container (max-width: 1100px) {
+  .scene-cast {
+    display: none;
+  }
+}
+.scene-cast-head {
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+.scene-who {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: none;
+  background: transparent;
+  padding: 0.15rem;
+  text-align: left;
+  color: var(--text);
+}
+.scene-who b {
+  display: block;
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+.scene-who small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.scene-avatar {
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #1a1512;
+}
+/* While typing, everything but the page steps back; moving the mouse brings it back. */
+.writing-view.look-margins .top-bar,
+.writing-view.look-margins .chapter-strip,
+.writing-view.look-margins .status-bar,
+.writing-view.look-margins .margin-notes,
+.writing-view.look-margins .scene-cast {
+  transition: opacity 0.4s ease;
+}
+.writing-view.look-margins.typing .top-bar,
+.writing-view.look-margins.typing .chapter-strip,
+.writing-view.look-margins.typing .status-bar,
+.writing-view.look-margins.typing .scene-cast,
+.writing-view.look-margins.typing .toolbar {
+  opacity: 0.08;
+}
+.writing-view.look-margins.typing .margin-notes {
+  opacity: 0.4;
+}
+.strip-current {
+  color: var(--accent);
+  font-weight: 600;
+}
+@container (max-width: 1050px) {
+  .writing-view.look-margins .command-box {
     display: none;
   }
 }

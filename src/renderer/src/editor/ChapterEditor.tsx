@@ -68,6 +68,8 @@ export interface EditorHandle {
    * reads `expected`; the new text ends up selected. Returns whether it did.
    */
   replaceRange: (from: number, to: number, expected: string, text: string) => boolean
+  /** Where a position in the chapter is on screen (null when it isn't laid out). */
+  coordsAt: (pos: number) => { top: number } | null
   /** The chapter's paragraphs as plain text (for AI notes). */
   paragraphs: () => string[]
   /** Puts AI notes on the words they quote, replacing earlier AI notes (one step); how many were placed. */
@@ -620,6 +622,14 @@ function EditorPage(
         before,
         after,
         rect: { left: start.left, top: start.top, bottom: Math.max(start.bottom, end.bottom) },
+      }
+    },
+    coordsAt(pos: number) {
+      try {
+        if (pos < 0 || pos > editor.state.doc.content.size) return null
+        return { top: editor.view.coordsAtPos(pos).top }
+      } catch {
+        return null
       }
     },
     paragraphs() {

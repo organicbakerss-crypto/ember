@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChapterStrip, MarginNotes, SceneCast } from './MarginsParts'
 import { isIndividualTemplate } from '@shared/world/templates'
 import { SelectionAiBox, type AiSelection } from '../ai/SelectionAiBox'
 import type { SelectionAction } from '@shared/ai/selection'
@@ -44,7 +45,7 @@ import type { AnalysisOptions } from '../editor/analysisDecorations'
 import { flushAll } from '../saving'
 import { useSettings } from '../useTheme'
 import { loadLocal, saveLocal } from '../storage'
-import { isMac, MOD, modKey, useCommands, type Command } from './commands'
+import { isMac, MOD, modKey, useCommands, useOpenPalette, type Command } from './commands'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { ChapterNotesPanel } from './ChapterNotesPanel'
 import { CommentsPanel } from './CommentsPanel'
@@ -484,7 +485,20 @@ export function WritingView(props: {
   const togglePanel = (which: Panel) => openPanel(panel === which ? null : which)
 
   // New look: the panels in two groups, each one button with tabs inside.
-  const modern = settings.look === 'modern'
+  const look = settings.look
+  const margins = look === 'margins'
+  // Both new layouts group the panels and use the view and Beside switches.
+  const modern = look === 'refined' || margins
+  // The view and Beside switches can fold into one small button.
+  const [switchesFolded, setSwitchesFolded] = useState(
+    () => loadLocal('writing.switches') === 'folded',
+  )
+  const foldSwitches = (folded: boolean) => {
+    setSwitchesFolded(folded)
+    saveLocal('writing.switches', folded ? 'folded' : 'open')
+  }
+  const openPalette = useOpenPalette()
+  const pageArea = useRef<HTMLElement>(null)
   const chapterGroup: Panel[] = [
     'notes',
     'comments',
@@ -514,11 +528,11 @@ export function WritingView(props: {
   // New look: the bars fade back while typing on the page, and come back when the mouse moves.
   const [typing, setTyping] = useState(false)
   useEffect(() => {
-    if (!modern) return
+    if (!margins) return
     const onMove = () => setTyping(false)
     window.addEventListener('mousemove', onMove)
     return () => window.removeEventListener('mousemove', onMove)
-  }, [modern])
+  }, [margins])
 
   const renameOpenChapter = () => {
     if (!selectedId) return
@@ -900,6 +914,23 @@ export function WritingView(props: {
     void api.invoke('capture:context', { context: captureContext }).catch(() => {})
   }, [captureContext])
   useEffect(() => () => void api.invoke('capture:context', { context: null }).catch(() => {}), [])
+  // Margins: where a passage is on screen, and who's in this scene (the POV first).
+  const locateInChapter = useCallback((pos: number) => editor.current?.coordsAt(pos) ?? null, [])
+  const sceneCast = useMemo(() => {
+    if (!world || !margins) return []
+    const pov = povEntryId ? world.resolve(povEntryId) : undefined
+    const list = [
+      ...(pov ? [{ entry: pov, count: 0 }] : []),
+      ...chapterMentions.filter((m) => m.entry.id !== pov?.id),
+    ].filter((m) => isIndividualTemplate(templateOf(world, m.entry)))
+    return list.slice(0, 6).map((m) => ({
+      id: m.entry.id,
+      name: m.entry.name,
+      pov: m.entry.id === pov?.id,
+      detail: m.count ? `${m.count}× here` : '',
+    }))
+  }, [world, margins, povEntryId, chapterMentions])
+
   // The manuscript's chapters in reading order (kept the same array while the order is).
   const idsKey = view
     ? chapterOrder(toContainers(view.outline))
@@ -1148,7 +1179,7 @@ export function WritingView(props: {
 
   return (
     <div
-      className={`writing-view ${modern ? 'modern' : ''} ${modern && typing ? 'typing' : ''} ${aiOn ? '' : 'ai-off'} ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''} ${settings.typewriter ? 'typewriter' : ''}`}
+      className={`writing-view look-${look} ${modern ? 'modern' : ''} ${margins && typing ? 'typing' : ''} ${aiOn ? '' : 'ai-off'} ${panel ? 'panel-open' : ''} ${focusMode ? 'focus-mode' : ''} ${settings.typewriter ? 'typewriter' : ''}`}
     >
       {focusMode && (
         <button className="focus-exit small" onClick={leaveFocus}>
@@ -1159,6 +1190,28 @@ export function WritingView(props: {
         <button className="link" onClick={props.onBack} title="Back to the bookshelf">
           ← Bookshelf
         </button>
+        {margins && (
+          <span className="margins-panels">
+            <button
+              className={`icon ${groupOf(panel) === 'chapters' ? 'active' : ''}`}
+              title="Chapters (and Find)"
+              aria-label="Chapters"
+              aria-pressed={groupOf(panel) === 'chapters'}
+              onClick={() => toggleGroup('chapters')}
+            >
+              ☰
+            </button>
+            <button
+              className={`icon ${groupOf(panel) === 'chapter' ? 'active' : ''}`}
+              title="Details: notes, comments, history, stats"
+              aria-label="Details"
+              aria-pressed={groupOf(panel) === 'chapter'}
+              onClick={() => toggleGroup('chapter')}
+            >
+              ¶
+            </button>
+          </span>
+        )}
         <nav className="breadcrumb small" aria-label="Breadcrumb">
           {!book && (
             <>
@@ -1203,6 +1256,12 @@ export function WritingView(props: {
             </>
           )}
         </nav>
+        {margins && (
+          <button className="command-box" onClick={openPalette} title={`Command palette (${MOD}K)`}>
+            <span aria-hidden>⌕</span> Find, jump, or do anything
+            <kbd>{MOD}K</kbd>
+          </button>
+        )}
         <span className="status-spacer" />
         <button
           className="icon"
@@ -1322,7 +1381,19 @@ export function WritingView(props: {
         >
           ⋯
         </button>
-        {modern ? (
+        {modern && switchesFolded ? (
+          <button
+            className="switches-fold"
+            title="Show the view and Beside switches"
+            onClick={() => foldSwitches(false)}
+          >
+            {manuscriptOpen ? 'Manuscript' : 'Write'}
+            {props.beside
+              ? ` · ${props.beside === 'ai' ? 'AI' : word('world', 'World')} beside`
+              : ''}{' '}
+            ‹
+          </button>
+        ) : modern ? (
           <>
             <div className="segmented view-switch" role="radiogroup" aria-label="View">
               <button
@@ -1390,6 +1461,24 @@ export function WritingView(props: {
                 )}
               </div>
             )}
+            <button
+              className="icon switches-fold-button"
+              title="Fold these into one button"
+              aria-label="Fold the switches"
+              onClick={() => foldSwitches(true)}
+            >
+              ›
+            </button>
+            {margins && (
+              <button
+                className="icon"
+                title="Settings"
+                aria-label="Settings"
+                onClick={() => setSettingsOpen((open) => !open)}
+              >
+                ⚙
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -1441,19 +1530,17 @@ export function WritingView(props: {
         )}
       </header>
 
-      {modern ? (
+      {margins ? null : modern ? (
         <nav className="icon-rail" aria-label="Panels">
           <RailButton
             label="Chapters"
-            shown="Chapters"
             active={groupOf(panel) === 'chapters'}
             onClick={() => toggleGroup('chapters')}
           >
             <path d="M5 5h14M5 10h14M8 15h11M8 20h11" />
           </RailButton>
           <RailButton
-            label="This chapter: notes, comments, history, stats"
-            shown="Chapter"
+            label="Details: notes, comments, history, stats"
             active={groupOf(panel) === 'chapter'}
             onClick={() => toggleGroup('chapter')}
           >
@@ -1463,7 +1550,6 @@ export function WritingView(props: {
           <span className="rail-spacer" />
           <RailButton
             label="Settings"
-            shown="Settings"
             active={settingsOpen}
             onClick={() => setSettingsOpen((open) => !open)}
           >
@@ -1592,6 +1678,16 @@ export function WritingView(props: {
               onCreateChapter={(arcId) => void createChapter(arcId)}
               onCreateTest={(chapterId) => void createTest(chapterId)}
               onSetTest={(chapterId, testOf) => void setTest(chapterId, testOf)}
+              words={
+                modern
+                  ? Object.fromEntries(
+                      Object.keys(view.chapters).map((id) => [
+                        id,
+                        liveWords[id] ?? stats?.chapterWords[id] ?? 0,
+                      ]),
+                    )
+                  : undefined
+              }
               onCreateArc={(name) => api.invoke('arc:create', { ...ref, name })}
               renamingId={renamingId}
               onRenamingChange={setRenamingId}
@@ -1734,10 +1830,11 @@ export function WritingView(props: {
       )}
 
       <main
+        ref={pageArea}
         className="page-area"
         onKeyDown={(e) => {
           // New look: typing on the page fades the bars (not shortcuts, not arrows).
-          if (modern && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1)
+          if (margins && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1)
             setTyping(true)
         }}
       >
@@ -1811,6 +1908,20 @@ export function WritingView(props: {
           />
         )}
         {/* The editor stays loaded behind Settings, keeping undo history and scroll position. */}
+        {margins && !settingsOpen && !manuscriptOpen && (
+          <>
+            <MarginNotes
+              comments={aiOn ? comments : comments.filter((c) => c.by !== 'ai')}
+              locate={locateInChapter}
+              area={pageArea}
+              onOpen={(id) => {
+                switchTab('comments')
+                editor.current?.showComment(id)
+              }}
+            />
+            <SceneCast people={sceneCast} onOpen={(entryId) => props.onOpenWorld?.(entryId)} />
+          </>
+        )}
         <div className="page-area-inner" hidden={settingsOpen}>
           {manuscriptOpen && view ? (
             <ManuscriptView
@@ -1869,6 +1980,22 @@ export function WritingView(props: {
           style={bookStyle}
           author={settings.export.author}
           onClose={() => setBookOpen(false)}
+        />
+      )}
+      {margins && view && (
+        <ChapterStrip
+          chapters={manuscriptIds.map((id) => {
+            const m = liveMeta[id] ?? view.chapters[id]
+            return {
+              id,
+              title: m?.title ?? '',
+              words: liveWords[id] ?? stats?.chapterWords[id] ?? 0,
+              pov: m?.povs?.[0]?.name ?? m?.pov ?? null,
+            }
+          })}
+          selectedId={selectedId}
+          onSelect={select}
+          summary={`${volume.name} · ${projectWords.toLocaleString()} words${sessionWords > 0 ? ` · ${sessionWords.toLocaleString()} this session` : ''}`}
         />
       )}
       <StatusBar

@@ -80,7 +80,7 @@ export function SettingsProvider(props: { children: ReactNode }) {
     document.documentElement.style.setProperty('--text-width', `${settings.pageWidth}px`)
   }, [settings.pageWidth])
   useEffect(() => {
-    document.documentElement.dataset['look'] = settings.look === 'modern' ? 'modern' : 'classic'
+    document.documentElement.dataset['look'] = settings.look
   }, [settings.look])
 
   return (

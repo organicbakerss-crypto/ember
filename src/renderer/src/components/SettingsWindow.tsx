@@ -141,24 +141,23 @@ function AppearanceSettings() {
   return (
     <section className="settings-section">
       <h3>Layout</h3>
-      <label className="radio">
-        <input
-          type="radio"
-          name="look"
-          checked={settings.look !== 'modern'}
-          onChange={() => update({ look: 'classic' })}
-        />
-        Classic: every panel has its own button
-      </label>
-      <label className="radio">
-        <input
-          type="radio"
-          name="look"
-          checked={settings.look === 'modern'}
-          onChange={() => update({ look: 'modern' })}
-        />
-        New (preview): fewer buttons, panels grouped, the bars fade while you type
-      </label>
+      {(
+        [
+          ['classic', 'Classic: every panel has its own button'],
+          ['refined', 'Refined: the same layout, fewer buttons, panels with tabs'],
+          ['margins', 'Margins: no side bars; chapters along the bottom, notes in the margins'],
+        ] as const
+      ).map(([look, label]) => (
+        <label key={look} className="radio">
+          <input
+            type="radio"
+            name="look"
+            checked={settings.look === look}
+            onChange={() => update({ look })}
+          />
+          {label}
+        </label>
+      ))}
       <h3>Theme</h3>
       <fieldset className="plain-fieldset">
         <legend className="small muted">Everyday</legend>

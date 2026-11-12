@@ -24,6 +24,8 @@ export interface Command {
 interface Registry {
   set: (owner: string, commands: Command[]) => void
   remove: (owner: string) => void
+  /** Opens the command palette (as Ctrl/Cmd+K does). */
+  open: () => void
 }
 
 const RegistryContext = createContext<Registry | null>(null)
@@ -42,6 +44,7 @@ export function CommandProvider(props: { children: ReactNode }) {
   const registry = useMemo<Registry>(
     () => ({
       set: (owner, commands) => setSets((s) => ({ ...s, [owner]: commands })),
+      open: () => setOpen(true),
       remove: (owner) =>
         setSets((s) => {
           const next = { ...s }
@@ -72,6 +75,12 @@ export function CommandProvider(props: { children: ReactNode }) {
       {open && <Palette commands={commands} onClose={() => setOpen(false)} />}
     </RegistryContext.Provider>
   )
+}
+
+/** Opens the command palette (for a button that does what Ctrl/Cmd+K does). */
+export function useOpenPalette(): () => void {
+  const registry = useContext(RegistryContext)
+  return () => registry?.open()
 }
 
 /** Registers commands while the calling component is shown. */

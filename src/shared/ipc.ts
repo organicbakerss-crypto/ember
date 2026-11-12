@@ -743,7 +743,7 @@ export const ipcInputs = {
     theme: z.string().min(1).max(100).optional(),
     pageView: z.enum(['pages', 'continuous']).optional(),
     typewriter: z.boolean().optional(),
-    look: z.enum(['classic', 'modern']).optional(),
+    look: z.enum(['classic', 'refined', 'margins']).optional(),
     paperSize: z.enum(['a4', 'letter', 'trade']).optional(),
     spellcheck: z.boolean().optional(),
     spellLanguages: z.array(z.string().max(20)).max(10).optional(),

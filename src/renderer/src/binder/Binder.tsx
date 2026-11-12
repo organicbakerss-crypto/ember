@@ -114,6 +114,8 @@ interface BinderProps {
   onCreateTest: (chapterId: string) => void
   /** Keeps a chapter as a test scene of another, or (null) makes a test scene a chapter. */
   onSetTest: (chapterId: string, testOf: string | null) => void
+  /** Words per chapter: shown on each row, with a box to filter chapters by title (new layouts). */
+  words?: Record<string, number>
 }
 
 /** Drag data of a test scene (dropped on a chapter in the binder, or onto the page). */
@@ -125,6 +127,7 @@ export function Binder(props: BinderProps) {
   const [containers, setContainers] = useState<Containers>(() => toContainers(view.outline))
   const [activeId, setActiveId] = useState<string | null>(null)
   const [povFilter, setPovFilter] = useState<string>('')
+  const [titleFilter, setTitleFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const collapsed = useCollapsed()
   const { openMenu } = useOverlays()
@@ -176,8 +179,12 @@ export function Binder(props: BinderProps) {
     return [...new Set(all)].sort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.chapters, props.liveMeta, props.povPeople, props.scenes, props.selectedId])
-  const filtering = povFilter !== '' || statusFilter !== ''
+  const filtering = povFilter !== '' || statusFilter !== '' || titleFilter.trim() !== ''
   const visible = (id: string) =>
+    (!titleFilter.trim() ||
+      (meta(id).title || 'Untitled chapter')
+        .toLowerCase()
+        .includes(titleFilter.trim().toLowerCase())) &&
     (povFilter === '' || povsOf(id).includes(povFilter)) &&
     matchesStatus(view.chapters[id]?.status ?? null, statusFilter)
   const anyStatus = Object.values(view.chapters).some((c) => c.status)
@@ -452,6 +459,7 @@ export function Binder(props: BinderProps) {
         status={view.chapters[id]?.status ?? null}
         publish={props.onSetPublished ? (view.chapters[id]?.publish ?? null) : null}
         label={view.chapters[id]?.label ?? null}
+        words={props.words ? (props.words[id] ?? 0) : null}
         selected={id === props.selectedId}
         scenes={id === props.selectedId ? props.scenes : []}
         renaming={props.renamingId === id}
@@ -515,6 +523,16 @@ export function Binder(props: BinderProps) {
           </select>
         )}
       </header>
+      {props.words && (
+        <input
+          type="search"
+          className="binder-filter small"
+          aria-label="Filter chapters"
+          placeholder="Filter chapters…"
+          value={titleFilter}
+          onChange={(e) => setTitleFilter(e.target.value)}
+        />
+      )}
       {filtering && <p className="muted small">Clear the filter to rearrange chapters.</p>}
 
       <DndContext
@@ -726,6 +744,8 @@ function ChapterRow(props: {
   status: ChapterStatus | null
   label: ChapterLabel | null
   publish: PublishInfo | null
+  /** Shown at the end of the row when set. */
+  words?: number | null
   selected: boolean
   scenes: Scene[]
   renaming: boolean
@@ -783,6 +803,15 @@ function ChapterRow(props: {
         {props.povNames.length > 0 && (
           <span className="binder-pov" title={props.povNames.join(', ')}>
             {props.povNames.join(' · ')}
+          </span>
+        )}
+        {props.words != null && (
+          <span className="binder-words" title={`${props.words.toLocaleString()} words`}>
+            {props.words
+              ? props.words >= 1000
+                ? `${(props.words / 1000).toFixed(1)}k`
+                : props.words
+              : '—'}
           </span>
         )}
       </div>
