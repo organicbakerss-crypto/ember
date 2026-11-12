@@ -36,6 +36,10 @@ export function ChapterStrip(props: {
   onSelect: (id: string) => void
   /** "Book One · 41,280 words · today 340 / 550" */
   summary: string
+  /** A chapter's menu (right-click a bar). */
+  onMenu: (e: React.MouseEvent, id: string) => void
+  /** Adds a chapter at the end. */
+  onNew: () => void
 }) {
   const max = Math.max(1, ...props.chapters.map((c) => c.words))
   const povs = [...new Set(props.chapters.map((c) => c.pov).filter((p): p is string => !!p))]
@@ -71,6 +75,10 @@ export function ChapterStrip(props: {
               aria-label={`Chapter ${i + 1}: ${c.title || 'Untitled'}`}
               aria-current={on}
               onClick={() => props.onSelect(c.id)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                props.onMenu(e, c.id)
+              }}
             >
               <span
                 className="strip-fill"
@@ -83,6 +91,14 @@ export function ChapterStrip(props: {
             </button>
           )
         })}
+        <button
+          className="strip-new"
+          title="New chapter"
+          aria-label="New chapter"
+          onClick={props.onNew}
+        >
+          +
+        </button>
       </div>
     </nav>
   )

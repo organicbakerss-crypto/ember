@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CHAPTER_LABELS, CHAPTER_STATUSES } from '@shared/schema'
 import { ChapterStrip, MarginNotes, SceneCast } from './MarginsParts'
 import { isIndividualTemplate } from '@shared/world/templates'
 import { SelectionAiBox, type AiSelection } from '../ai/SelectionAiBox'
@@ -30,7 +31,7 @@ import type {
   RichTextDoc,
 } from '@shared/schema'
 import { api, describeError, useIpcEvent } from '../api'
-import { Binder, STATUS_NAMES } from '../binder/Binder'
+import { Binder, LABEL_NAMES, STATUS_NAMES } from '../binder/Binder'
 import { chapterOrder, toContainers } from '../binder/model'
 import {
   ChapterEditor,
@@ -65,7 +66,7 @@ import { WorldPanel, type ChapterMention } from '../world/WorldPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { SearchPanel } from './SearchPanel'
 import { SettingsWindow } from './SettingsWindow'
-import { useOverlays } from './overlays'
+import { useOverlays, type MenuItem } from './overlays'
 import { StatusBar } from './StatusBar'
 import { useLibraryActions } from './useLibraryActions'
 import { useWords } from '../skins/useWords'
@@ -489,6 +490,12 @@ export function WritingView(props: {
   const margins = look === 'margins'
   // Both new layouts group the panels and use the view and Beside switches.
   const modern = look === 'refined' || margins
+  // Margins starts with the drawer closed (adjusted while rendering, not in an effect).
+  const [marginsSeen, setMarginsSeen] = useState(false)
+  if (margins !== marginsSeen) {
+    setMarginsSeen(margins)
+    if (margins && panel) setPanel(null)
+  }
   // The view and Beside switches can fold into one small button.
   const [switchesFolded, setSwitchesFolded] = useState(
     () => loadLocal('writing.switches') === 'folded',
@@ -938,6 +945,88 @@ export function WritingView(props: {
         .join(',')
     : ''
   const manuscriptIds = useMemo(() => (idsKey ? idsKey.split(',') : []), [idsKey])
+
+  // Margins: a chapter's menu on the strip (reordering and arcs stay in the Chapters drawer).
+  const stripMenu = (id: string): MenuItem[] => {
+    const order = manuscriptIds
+    const stored = view?.chapters[id]
+    return [
+      {
+        label: 'Rename',
+        onSelect: () => {
+          if (id !== selectedId) select(id)
+          // The title on the page is the chapter's name.
+          setTimeout(
+            () => document.querySelector<HTMLInputElement>('.chapter-title')?.select(),
+            150,
+          )
+        },
+      },
+      {
+        label: 'Status',
+        submenu: [...CHAPTER_STATUSES, null].map((status) => ({
+          label: status ? STATUS_NAMES[status] : 'None',
+          checked: (stored?.status ?? null) === status,
+          onSelect: () => void markChapter(id, { status }),
+        })),
+      },
+      {
+        label: 'Colour label',
+        submenu: [...CHAPTER_LABELS, null].map((label) => ({
+          label: label ? LABEL_NAMES[label] : 'None',
+          checked: (stored?.label ?? null) === label,
+          onSelect: () => void markChapter(id, { label }),
+        })),
+      },
+      {
+        label: 'Split at the cursor',
+        disabled: id !== selectedId,
+        onSelect: () => void splitHere(),
+      },
+      {
+        label: 'Join the next chapter onto this one',
+        disabled: order[order.length - 1] === id,
+        onSelect: () => void mergeNext(id),
+      },
+      { label: 'Duplicate', onSelect: () => void duplicate(id) },
+      { label: 'New test scene kept with this one', onSelect: () => void createTest(id) },
+      {
+        label: 'Copy for Royal Road',
+        onSelect: () =>
+          void copyChapterForRoyalRoad(
+            { seriesId: series.id, volumeId: volume.id, chapterId: id },
+            actions.toast,
+          ),
+      },
+      { label: 'Export…', onSelect: () => setExporting({ chapterId: id, only: true }) },
+      { label: 'Move or put in an arc… (Chapters list)', onSelect: () => switchTab('binder') },
+      { label: 'Delete…', danger: true, onSelect: () => trashChapter(id) },
+    ]
+  }
+
+  // Margins: the drawer closes on Esc and on a click outside it.
+  useEffect(() => {
+    if (!margins || !panel) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') openPanel(null)
+    }
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Element | null
+      if (
+        !t?.closest('.side-panel, .margins-panels, .context-menu, [role=dialog], .modal-backdrop')
+      )
+        openPanel(null)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown)
+    }
+    // openPanel only sets state and remembers it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [margins, panel])
+
   const ownHeadings = volume.settings['headings']
   const headings =
     ownHeadings === 'both' || ownHeadings === 'number' || ownHeadings === 'title'
@@ -1646,7 +1735,7 @@ export function WritingView(props: {
         </nav>
       )}
 
-      {panel && (
+      {panel && !(margins && settingsOpen) && (
         <aside className="side-panel">
           {modern && groupOf(panel) && (
             <div className="panel-tabs" role="tablist">
@@ -1672,7 +1761,10 @@ export function WritingView(props: {
               povPeople={povPeople}
               selectedId={selectedId}
               scenes={scenes}
-              onSelect={select}
+              onSelect={(id) => {
+                select(id)
+                if (margins) openPanel(null)
+              }}
               onJump={(pos) => editor.current?.jumpTo(pos)}
               onSave={saveOutline}
               onCreateChapter={(arcId) => void createChapter(arcId)}
@@ -1982,8 +2074,10 @@ export function WritingView(props: {
           onClose={() => setBookOpen(false)}
         />
       )}
-      {margins && view && (
+      {margins && view && groupOf(panel) !== 'chapters' && (
         <ChapterStrip
+          onMenu={(e, id) => openMenu(e, stripMenu(id))}
+          onNew={() => void createChapter()}
           chapters={manuscriptIds.map((id) => {
             const m = liveMeta[id] ?? view.chapters[id]
             return {
