@@ -175,16 +175,19 @@ function Goals(props: {
       {goals.projectWords ? (
         <Progress label="Project" value={props.projectWords} goal={goals.projectWords} />
       ) : null}
-      <button className="link small" onClick={() => setEditing((v) => !v)}>
-        {goals.sessionWords || goals.projectWords ? 'Goals' : 'Set goals'}
-      </button>
-      {editing && (
-        <GoalsForm
-          seriesId={props.seriesId}
-          volume={props.volume}
-          onDone={() => setEditing(false)}
-        />
-      )}
+      {/* The form opens right above the button that opened it. */}
+      <span className="goal-button">
+        <button className="link small" onClick={() => setEditing((v) => !v)}>
+          {goals.sessionWords || goals.projectWords ? 'Goals' : 'Set goals'}
+        </button>
+        {editing && (
+          <GoalsForm
+            seriesId={props.seriesId}
+            volume={props.volume}
+            onDone={() => setEditing(false)}
+          />
+        )}
+      </span>
     </span>
   )
 }

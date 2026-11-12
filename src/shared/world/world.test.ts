@@ -188,3 +188,13 @@ describe('someone or a group', () => {
     expect(isIndividualTemplate({ id: 'person', name: 'Band member', lens: 'who' })).toBe(true)
   })
 })
+
+describe('name catcher and place words', () => {
+  it('never offers a direction or place word on its own', () => {
+    const p =
+      'Mara walked through Thornwick South and then Old Town, past Port Gull and Upper Vale.'
+    const found = catchNames([{ id: 'c1', paragraphs: [p, p, p] }], [], []).map((n) => n.name)
+    expect(found).toEqual(expect.arrayContaining(['Thornwick', 'Town', 'Gull', 'Vale']))
+    for (const w of ['South', 'Old', 'Port', 'Upper']) expect(found).not.toContain(w)
+  })
+})

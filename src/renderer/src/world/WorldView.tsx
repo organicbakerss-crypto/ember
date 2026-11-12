@@ -398,7 +398,7 @@ export function WorldView(props: {
               ])
             }
           >
-            ⋯
+            ⋯ World
           </button>
           {props.onWriteBeside && (
             <button

@@ -3497,8 +3497,9 @@ kbd {
   background: var(--accent);
   outline: none;
 }
+/* Same size as the other top-bar buttons (it used to be larger). */
 .side-by-side {
-  font-size: 1.1rem;
+  white-space: nowrap;
 }
 .read-only-note {
   display: flex;
@@ -3645,6 +3646,15 @@ kbd {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
   gap: 0.6rem 1rem;
+}
+/* In Settings, fields keep to their column (Settings makes selects 18rem wide elsewhere). */
+.export-style select,
+.export-style input {
+  min-width: 0;
+  width: 100%;
+}
+.export-style {
+  width: 100%;
 }
 .export-style label,
 .import-options label {
@@ -6018,4 +6028,76 @@ kbd {
   background: transparent;
   box-shadow: none;
   outline: none;
+}
+.goal-button {
+  position: relative;
+  display: inline-block;
+}
+.goal-button .goals-form {
+  left: -0.5rem;
+}
+/* Names under the side bar's icons (Settings → Appearance). */
+.icon-rail.labelled .rail-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.4rem 0.2rem;
+  min-width: 3.4rem;
+}
+.rail-label {
+  font-size: 0.62rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* A chapter's options, findable without right-clicking. */
+.binder-row-menu {
+  order: 99;
+  margin-left: 0.15rem;
+  opacity: 0;
+  color: inherit;
+  padding: 0 0.2rem;
+}
+.binder-row:hover .binder-row-menu,
+.binder-row.selected .binder-row-menu,
+.binder-row-menu:focus-visible {
+  opacity: 0.75;
+}
+.binder-words {
+  order: 98;
+}
+/* World: the sidebar never scrolls sideways, and search results scroll on their own
+   so Where, Who, When and How stay in view. */
+.world-view .side-panel {
+  overflow-x: hidden;
+}
+.world-view .world-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.world-search-results {
+  max-height: 42vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* Timeline: unplaced events as compact rows with a small "Place…". */
+.timeline-unplaced {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.2rem 1.2rem;
+}
+.timeline-unplaced .timeline-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.timeline-place {
+  flex: none;
+}
+/* Rulebook: what has nothing written yet, in one line. */
+.rule-empty {
+  margin-top: 0.5rem;
+  line-height: 1.8;
 }

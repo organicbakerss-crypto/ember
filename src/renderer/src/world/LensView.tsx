@@ -444,43 +444,62 @@ function Rulebook(props: {
   onOpenEntry: (entryId: string) => void
 }) {
   const { world } = props
+  // Systems with nothing written yet: one compact list at the end, not a big empty card each.
+  const written = (e: EntrySummary) =>
+    valuesAt({ multiple: true }, e.facts['rules'], world.at, world.positions).length > 0 ||
+    shownFacts(world, e, world.at).some((f) => f.field.id !== 'rules')
+  const sorted = [...props.entries].sort((a, b) => a.name.localeCompare(b.name))
+  const empty = sorted.filter((e) => !written(e))
   return (
     <div className="rulebook">
-      {[...props.entries]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((e) => {
-          const rules = valuesAt({ multiple: true }, e.facts['rules'], world.at, world.positions)
-          const facts = shownFacts(world, e, world.at).filter((f) => f.field.id !== 'rules')
-          return (
-            <article key={e.id} className="rule-page">
-              <h2>
+      {sorted.filter(written).map((e) => {
+        const rules = valuesAt({ multiple: true }, e.facts['rules'], world.at, world.positions)
+        const facts = shownFacts(world, e, world.at).filter((f) => f.field.id !== 'rules')
+        return (
+          <article key={e.id} className="rule-page">
+            <h2>
+              <button className="link" onClick={() => props.onOpenEntry(e.id)}>
+                {e.name}
+              </button>{' '}
+              <span className="muted small">{templateName(world, e.template)}</span>
+            </h2>
+            {rules.length > 0 ? (
+              <ol>
+                {rules.map((r) => (
+                  <li key={r.id}>{r.text}</li>
+                ))}
+              </ol>
+            ) : (
+              <p className="muted small">No rules written yet.</p>
+            )}
+            {facts.length > 0 && (
+              <p className="small">
+                {facts
+                  .map(
+                    (f) =>
+                      `${f.field.label}: ${f.values.map((v) => valueLabel(world, v)).join(', ')}`,
+                  )
+                  .join(' · ')}
+              </p>
+            )}
+          </article>
+        )
+      })}
+      {empty.length > 0 && (
+        <section className="rule-empty" aria-label="Nothing written yet">
+          <h3 className="small muted">Nothing written yet</h3>
+          <p>
+            {empty.map((e, i) => (
+              <span key={e.id}>
+                {i > 0 && ' · '}
                 <button className="link" onClick={() => props.onOpenEntry(e.id)}>
                   {e.name}
-                </button>{' '}
-                <span className="muted small">{templateName(world, e.template)}</span>
-              </h2>
-              {rules.length > 0 ? (
-                <ol>
-                  {rules.map((r) => (
-                    <li key={r.id}>{r.text}</li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="muted small">No rules written yet.</p>
-              )}
-              {facts.length > 0 && (
-                <p className="small">
-                  {facts
-                    .map(
-                      (f) =>
-                        `${f.field.label}: ${f.values.map((v) => valueLabel(world, v)).join(', ')}`,
-                    )
-                    .join(' · ')}
-                </p>
-              )}
-            </article>
-          )
-        })}
+                </button>
+              </span>
+            ))}
+          </p>
+        </section>
+      )}
     </div>
   )
 }

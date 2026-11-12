@@ -1694,9 +1694,10 @@ export function WritingView(props: {
       </header>
 
       {margins ? null : modern ? (
-        <nav className="icon-rail" aria-label="Panels">
+        <nav className={`icon-rail ${settings.railLabels ? 'labelled' : ''}`} aria-label="Panels">
           <RailButton
             label="Chapters"
+            shown={settings.railLabels ? 'Chapters' : undefined}
             active={groupOf(panel) === 'chapters'}
             onClick={() => toggleGroup('chapters')}
           >
@@ -1704,6 +1705,7 @@ export function WritingView(props: {
           </RailButton>
           <RailButton
             label="Details: notes, comments, history, stats"
+            shown={settings.railLabels ? 'Details' : undefined}
             active={groupOf(panel) === 'chapter'}
             onClick={() => toggleGroup('chapter')}
           >
@@ -1713,6 +1715,7 @@ export function WritingView(props: {
           <span className="rail-spacer" />
           <RailButton
             label="Settings"
+            shown={settings.railLabels ? 'Settings' : undefined}
             active={settingsOpen}
             onClick={() => setSettingsOpen((open) => !open)}
           >
@@ -1721,9 +1724,10 @@ export function WritingView(props: {
           </RailButton>
         </nav>
       ) : (
-        <nav className="icon-rail" aria-label="Panels">
+        <nav className={`icon-rail ${settings.railLabels ? 'labelled' : ''}`} aria-label="Panels">
           <RailButton
             label="Binder"
+            shown={settings.railLabels ? 'Chapters' : undefined}
             active={panel === 'binder'}
             onClick={() => togglePanel('binder')}
           >
@@ -1731,6 +1735,7 @@ export function WritingView(props: {
           </RailButton>
           <RailButton
             label={`Find in volume (${MOD}F)`}
+            shown={settings.railLabels ? 'Find' : undefined}
             active={panel === 'search'}
             onClick={() => (panel === 'search' ? togglePanel('search') : openSearch())}
           >
@@ -1739,6 +1744,7 @@ export function WritingView(props: {
           </RailButton>
           <RailButton
             label="Synopsis and notes"
+            shown={settings.railLabels ? 'Notes' : undefined}
             active={panel === 'notes'}
             onClick={() => togglePanel('notes')}
           >
@@ -1748,6 +1754,7 @@ export function WritingView(props: {
           {publishingOn && (
             <RailButton
               label="Publishing"
+              shown={settings.railLabels ? 'Publish' : undefined}
               active={panel === 'publishing'}
               onClick={() => togglePanel('publishing')}
             >
@@ -1757,6 +1764,7 @@ export function WritingView(props: {
           )}
           <RailButton
             label="Comments"
+            shown={settings.railLabels ? 'Comments' : undefined}
             active={panel === 'comments'}
             onClick={() => togglePanel('comments')}
           >
@@ -1764,6 +1772,7 @@ export function WritingView(props: {
           </RailButton>
           <RailButton
             label="History"
+            shown={settings.railLabels ? 'History' : undefined}
             active={panel === 'history'}
             onClick={() => togglePanel('history')}
           >
@@ -1772,6 +1781,7 @@ export function WritingView(props: {
           </RailButton>
           <RailButton
             label="Diagnostics: words, sentences, repeated words"
+            shown={settings.railLabels ? 'Stats' : undefined}
             active={panel === 'diagnostics'}
             onClick={() => togglePanel('diagnostics')}
           >
@@ -1780,6 +1790,7 @@ export function WritingView(props: {
           {aiOn && (
             <RailButton
               label={props.aiBeside ? 'Close the AI' : 'AI beside the page'}
+              shown={settings.railLabels ? 'AI' : undefined}
               active={!!props.aiBeside}
               onClick={() => props.onToggleAi?.()}
             >
@@ -1790,6 +1801,7 @@ export function WritingView(props: {
           {world && (
             <RailButton
               label="Who and where in this chapter"
+              shown={settings.railLabels ? "Who's here" : undefined}
               active={panel === 'world'}
               onClick={() => togglePanel('world')}
             >
@@ -1800,6 +1812,7 @@ export function WritingView(props: {
           <span className="rail-spacer" />
           <RailButton
             label="Settings"
+            shown={settings.railLabels ? 'Settings' : undefined}
             active={settingsOpen}
             onClick={() => setSettingsOpen((open) => !open)}
           >

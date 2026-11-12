@@ -746,6 +746,7 @@ export const ipcInputs = {
     pageView: z.enum(['pages', 'continuous']).optional(),
     typewriter: z.boolean().optional(),
     look: z.enum(['classic', 'refined', 'margins']).optional(),
+    railLabels: z.boolean().optional(),
     lookAi: z.enum(['classic', 'margins']).optional(),
     lookShelf: z.enum(['classic', 'margins']).optional(),
     paperSize: z.enum(['a4', 'letter', 'trade']).optional(),

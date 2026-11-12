@@ -153,6 +153,14 @@ function AppearanceSettings() {
           <option value="margins">Margins: chapters along the bottom, notes in the margins</option>
         </select>
       </label>
+      <label className="radio">
+        <input
+          type="checkbox"
+          checked={settings.railLabels}
+          onChange={(e) => update({ railLabels: e.target.checked })}
+        />
+        Show names under the side bar's icons (Classic and Refined)
+      </label>
       <label>
         AI
         <select

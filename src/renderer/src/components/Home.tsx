@@ -544,7 +544,14 @@ export function Home(props: { detached?: PaneRoute | null }) {
               }
         }
         onOpenWorld={series.worldId ? openWorldFrom(series, write) : undefined}
-        onOpenWorldBeside={place === 'alone' && series.worldId ? splitCurrent : undefined}
+        onOpenWorldBeside={
+          // With the AI beside, the world can still come in its place (Classic shows the button).
+          series.worldId && place === 'alone'
+            ? splitCurrent
+            : series.worldId && place === 'split' && route.view === 'splitAi'
+              ? toggleWorldBeside
+              : undefined
+        }
         onToggleAi={() => toggleAi(write, place)}
         aiBeside={route.view === 'splitAi'}
         hideModeSwitch={place !== 'alone'}

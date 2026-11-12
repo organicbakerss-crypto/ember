@@ -103,13 +103,8 @@ export function SeriesPage(props: {
           <button onClick={() => setImporting(true)} title="Bring chapters in from a .docx file">
             Import from Word…
           </button>
-          <button
-            className="icon"
-            aria-label="Settings"
-            title="Settings"
-            onClick={() => setSettingsOpen(true)}
-          >
-            ⚙
+          <button aria-label="Settings" title="Settings" onClick={() => setSettingsOpen(true)}>
+            ⚙ Settings
           </button>
         </div>
         <textarea

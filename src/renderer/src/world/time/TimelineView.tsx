@@ -27,7 +27,7 @@ export function TimelineView(props: {
 }) {
   const { world, record } = props
   const worldId = world.view.world.id
-  const { toast } = useOverlays()
+  const { toast, openMenu } = useOverlays()
   const { stop, setStop } = useTime()
   const [dropBefore, setDropBefore] = useState<string | null>(null)
   const { history, during, unplaced, stops } = world.timeline
@@ -194,7 +194,7 @@ export function TimelineView(props: {
       {unplaced.length > 0 && (
         <section aria-label="Not on the timeline yet">
           <h2>Not on the timeline yet</h2>
-          <ul className="timeline-list">
+          <ul className="timeline-list timeline-unplaced">
             {unplaced.map((id) => {
               const e = entry(id)
               if (!e) return null
@@ -208,30 +208,26 @@ export function TimelineView(props: {
                   <button className="link timeline-name" onClick={() => props.onOpenEntry(id)}>
                     {e.name}
                   </button>
-                  <select
+                  <button
+                    className="link small timeline-place"
                     aria-label={`Place ${e.name}`}
-                    value=""
-                    onChange={(ev) => {
-                      const v = ev.target.value
-                      if (v === 'history') putBefore(id, null)
-                      else if (v) {
-                        const c = chapters.find((x) => x.id === v)
-                        void place(
-                          e,
-                          { kind: 'chapter', chapterId: v },
-                          `Put ${e.name} during ${c?.label}`,
-                        )
-                      }
-                    }}
+                    onClick={(ev) =>
+                      openMenu(ev, [
+                        { label: 'Before the story', onSelect: () => putBefore(id, null) },
+                        ...chapters.map((c) => ({
+                          label: `During ${chapterName(c)}`,
+                          onSelect: () =>
+                            void place(
+                              e,
+                              { kind: 'chapter', chapterId: c.id },
+                              `Put ${e.name} during ${c.label}`,
+                            ),
+                        })),
+                      ])
+                    }
                   >
-                    <option value="">Place it…</option>
-                    <option value="history">Before the story</option>
-                    {chapters.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        During {chapterName(c)}
-                      </option>
-                    ))}
-                  </select>
+                    Place…
+                  </button>
                 </li>
               )
             })}

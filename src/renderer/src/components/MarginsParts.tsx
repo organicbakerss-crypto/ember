@@ -95,7 +95,7 @@ export function ChapterStrip(props: {
       <button
         key={c.id}
         className={`strip-bar ${on ? 'on' : ''} ${c.words ? '' : 'empty'}`}
-        title={`${i + 1}. ${c.title || 'Untitled chapter'}${c.pov ? ` · ${c.pov}` : ''} · ${c.words.toLocaleString()} words`}
+        title={`${i + 1}. ${c.title || 'Untitled chapter'}${c.pov ? ` · ${c.pov}` : ''} · ${c.words.toLocaleString()} words · right-click for options`}
         aria-label={`Chapter ${i + 1}: ${c.title || 'Untitled'}`}
         aria-current={on}
         onClick={() => props.onSelect(c.id)}

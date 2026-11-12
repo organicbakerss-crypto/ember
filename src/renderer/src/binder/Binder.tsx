@@ -812,6 +812,17 @@ function ChapterRow(props: {
             {props.povNames.join(' · ')}
           </span>
         )}
+        <button
+          className="icon binder-row-menu"
+          title="Chapter options"
+          aria-label={`Options for ${meta.title || 'this chapter'}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onContextMenu(e)
+          }}
+        >
+          ⋯
+        </button>
         {props.words != null && (
           <span className="binder-words" title={`${props.words.toLocaleString()} words`}>
             {props.words
