@@ -117,3 +117,39 @@ describe('find and replace across a whole story', () => {
     ).toBe(true)
   })
 })
+
+describe('find keeps chapter text in memory', () => {
+  it('sees every change: saves here, edits from outside, damaged and deleted files', async () => {
+    const series = await lib.createSeries({ name: 'S', world: { mode: 'none' } })
+    const v = await lib.createVolume({ seriesId: series.id, name: 'Book' })
+    const ch = await lib.createChapter({ seriesId: series.id, volumeId: v.id, title: 'One' })
+    await lib.saveChapter(series.id, v.id, ch.id, { content: para('Mara ran.') })
+    const count = async (q: string) => (await lib.searchVolume(series.id, v.id, q, opts)).total
+    expect(await count('mara')).toBe(1)
+
+    await lib.saveChapter(series.id, v.id, ch.id, { content: para('Lena ran.') })
+    expect(await count('mara')).toBe(0)
+    expect(await count('lena')).toBe(1)
+
+    // Changed by another program (or sync) with the same length.
+    const file = join(lib.paths.chaptersDir(series.id, v.id), `${ch.id}.json`)
+    const raw = await fs.promises.readFile(file, 'utf8')
+    await fs.promises.writeFile(file, raw.replace('Lena', 'Tova').replace('"One"', '"Uno"'))
+    expect(await count('tova')).toBe(1)
+    expect((await lib.getOutline(series.id, v.id)).chapters[ch.id]!.title).toBe('Uno')
+    expect(await count('lena')).toBe(0)
+
+    // Damaged: skipped, never a stale answer; the file is left alone.
+    await fs.promises.writeFile(file, '{ broken')
+    expect(await count('tova')).toBe(0)
+    const outline = await lib.getOutline(series.id, v.id)
+    expect(outline.chapters[ch.id]!.title).toBe('(unreadable chapter)')
+    expect(outline.problems.length).toBeGreaterThan(0)
+    expect(await fs.promises.readFile(file, 'utf8')).toBe('{ broken')
+
+    await fs.promises.writeFile(file, raw)
+    expect(await count('lena')).toBe(1)
+    await fs.promises.rm(file)
+    expect(await count('lena')).toBe(0)
+  })
+})

@@ -73,7 +73,7 @@ export function SearchPanel(props: {
         (r) => setResult(r),
         (err) => toast(describeError(err).message),
       )
-    }, 250)
+    }, 90)
     return () => clearTimeout(timer)
   }, [seriesId, volumeId, query, matchCase, wholeWord, story, version, toast])
   useIpcEvent('library:changed', (c) => {

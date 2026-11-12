@@ -105,6 +105,12 @@ export type ChapterPatch = Partial<
 >
 
 const MAX_SEARCH_HITS = 500
+
+interface ChapterDigest {
+  stamp: string
+  info: OutlineView['chapters'][string]
+  texts: string[]
+}
 const SNIPPET = 40
 
 /** A save that removes at least this many characters keeps the version before it. */
@@ -232,6 +238,8 @@ export const chapterTextHash = (paragraphs: string[]) => sha256(paragraphs.join(
 export class Library {
   readonly paths: LibraryPaths
   private readonly lock = new KeyedLock()
+  /** Chapter outline entries and text, by file path (see `chapterDigest`). */
+  private readonly digests = new Map<string, ChapterDigest>()
   private readonly onChange: (change: LibraryChange) => void
   /** Entries, templates, the inbox and derived world data. */
   readonly world: WorldStore
@@ -424,25 +432,10 @@ export class Library {
     const chapters: OutlineView['chapters'] = {}
     const chapterDir = this.paths.chaptersDir(seriesId, volumeId)
     for (const chapterId of await this.chapterIdsOnDisk(seriesId, volumeId)) {
-      const file = await this.tryRead(
-        join(chapterDir, `${chapterId}.json`),
-        chapterFileSchema,
-        problems,
-      )
+      const known = await this.chapterDigest(join(chapterDir, `${chapterId}.json`), problems)
       // Unreadable chapters still appear (by id) so they are never silently lost.
-      chapters[chapterId] = file
-        ? {
-            id: file.id,
-            title: file.title,
-            type: file.type,
-            pov: file.pov,
-            povEntryId: file.povEntryId ?? null,
-            povs: file.povs,
-            headings: docHeadings(file.content),
-            status: file.status,
-            label: file.label,
-            publish: file.publish,
-          }
+      chapters[chapterId] = known
+        ? { ...known.info }
         : {
             id: chapterId,
             title: '(unreadable chapter)',
@@ -2117,6 +2110,44 @@ export class Library {
     return series.volumes
   }
 
+  /**
+   * What the outline and Find need from a chapter (its outline entry and its
+   * text pieces, in `textNodes` order), kept in memory so opening a book or
+   * searching doesn't re-read every chapter. Each use checks the file on disk
+   * (file id, size, time), so a change from anywhere (this app, sync, another
+   * program) is always picked up. Null when unreadable (reported in `problems`).
+   */
+  private async chapterDigest(
+    path: string,
+    problems: LibraryProblem[] = [],
+  ): Promise<ChapterDigest | null> {
+    const stat = await fs.promises.stat(path).catch(() => null)
+    const stamp = stat ? `${stat.ino}:${stat.size}:${stat.mtimeMs}` : null
+    const known = this.digests.get(path)
+    if (known && known.stamp === stamp) return known
+    this.digests.delete(path)
+    const file = await this.tryRead(path, chapterFileSchema, problems)
+    if (!file || !stamp) return null
+    const digest: ChapterDigest = {
+      stamp,
+      info: {
+        id: file.id,
+        title: file.title,
+        type: file.type,
+        pov: file.pov,
+        povEntryId: file.povEntryId ?? null,
+        povs: file.povs,
+        headings: docHeadings(file.content),
+        status: file.status,
+        label: file.label,
+        publish: file.publish,
+      },
+      texts: textNodes(file.content).map((n) => n.text ?? ''),
+    }
+    this.digests.set(path, digest)
+    return digest
+  }
+
   private async searchInto(
     result: SearchResult,
     seriesId: string,
@@ -2125,16 +2156,12 @@ export class Library {
   ): Promise<void> {
     const volumeName = (await this.getVolume(seriesId, volumeId)).name
     for (const chapterId of await this.chaptersInOrder(seriesId, volumeId, { tests: true })) {
-      let chapter: ChapterFile
-      try {
-        chapter = await this.readChapter(seriesId, volumeId, chapterId)
-      } catch (err) {
-        if (err instanceof AppError) continue
-        throw err
-      }
+      const chapter = await this.chapterDigest(
+        join(this.paths.volumeDir(seriesId, volumeId), unitPaths.chapter(chapterId)),
+      )
+      if (!chapter) continue
       let found = false
-      textNodes(chapter.content).forEach((node, index) => {
-        const text = node.text ?? ''
+      chapter.texts.forEach((text, index) => {
         for (const range of findInText(text, pattern)) {
           found = true
           result.total++
@@ -2153,7 +2180,8 @@ export class Library {
           })
         }
       })
-      if (found) result.chapters.push({ id: chapterId, title: chapter.title, volumeId, volumeName })
+      if (found)
+        result.chapters.push({ id: chapterId, title: chapter.info.title, volumeId, volumeName })
     }
   }
 
