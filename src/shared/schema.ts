@@ -633,6 +633,16 @@ export const conversationFileSchema = z.looseObject({
   characterId: z.string().min(1).max(80).optional().catch(undefined),
   /** Structured Roundtable session, saved and synced alongside other AI conversations. */
   roundtable: roundtableSessionSchema.optional(),
+  /** Brought in from a ChatGPT share link: read-only, looked through when the AI answers. */
+  source: z
+    .looseObject({
+      kind: z.literal('chatgpt-share'),
+      shareId: z.string().min(1).max(80),
+      url: z.string().max(500),
+      importedAt: timestamp,
+    })
+    .optional()
+    .catch(undefined),
   title: z.string().max(200),
   createdAt: timestamp,
   updatedAt: timestamp,

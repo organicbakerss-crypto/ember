@@ -6141,3 +6141,43 @@ kbd {
   max-width: 100%;
   max-height: calc((var(--book-h) - 2 * var(--book-pad)) * 0.8);
 }
+
+/* Chats brought in from ChatGPT (AI pane). */
+.ai-import-open {
+  display: block;
+  margin: 0 0 0.5rem;
+}
+.ai-import {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.75rem;
+}
+.ai-import input {
+  width: 100%;
+  min-width: 0;
+}
+.imported-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  flex: 1;
+  padding: 0.75rem 1rem 0;
+}
+.imported-chat-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.imported-chat-note {
+  margin: 0;
+}
+.imported-chat-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 1rem;
+}
+.imported-chat-scroll .ai-message {
+  margin: 0.75rem 0;
+}

@@ -7,6 +7,7 @@ import { Library } from '../library/library'
 import type { LibraryHost } from '../libraryHost'
 import { AiService } from './service'
 import { startFakeOllama, type FakeOllama } from './testing/fakeOllama'
+import { sharePage, type TestMessage } from '@shared/ai/sharedChatTestPage'
 
 let dir: string
 let lib: Library
@@ -581,5 +582,119 @@ describe('the AI service', () => {
     expect(sent.length).toBeGreaterThan(2)
     expect(sent.at(-1)!.messages[0]!.content).toContain('NOTES: Mara at the harbour.')
     expect(r.lookedAt.join(' ')).toContain('parts')
+  })
+})
+
+describe('ChatGPT chats brought in by share link', () => {
+  const ID = '6af6d288-3d88-83e8-bbb5-72a95ca016f6'
+  const LINK = `https://chatgpt.com/share/${ID}`
+  const pages = new Map<string, Response | (() => Response)>()
+  const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.startsWith('https://chatgpt.com/')) {
+      const page = pages.get(url)
+      if (!page) return new Response('Not found', { status: 404 })
+      return typeof page === 'function' ? page() : page.clone()
+    }
+    return fetch(input, init)
+  }) as typeof fetch
+  const withPages = (settings: Partial<AiSettings>) =>
+    new AiService({
+      settings: async () => ({
+        ...DEFAULT_AI_SETTINGS,
+        enabled: true,
+        host: fake!.url,
+        ...settings,
+      }),
+      host: { current: lib } as unknown as LibraryHost,
+      chatgpt: { file: join(dir, 'chatgpt.json'), secrets: plain },
+      fetchImpl,
+    })
+  const page = (messages: TestMessage[]) =>
+    new Response(sharePage('Saga planning', messages), { headers: { 'content-type': 'text/html' } })
+
+  it('brings a chat in read-only, updates it from the same link, and refuses other links', async () => {
+    fake = await startFakeOllama(() => 'ok')
+    const ref = await story()
+    const ai = withPages({})
+    pages.set(
+      LINK,
+      page([
+        { role: 'user', text: 'Where did the curse start?' },
+        { role: 'assistant', text: 'It started at Kestrel Bay during the flood.' },
+      ]),
+    )
+    const first = await ai.importChat(ref.seriesId, `${LINK}?utm=x`)
+    expect(first).toMatchObject({ title: 'Saga planning', messages: 2, updated: false })
+    const list = await lib.listConversations(ref.seriesId)
+    expect(list).toHaveLength(1)
+    expect(list[0]!.imported?.url).toBe(LINK)
+    const saved = await lib.readConversation(ref.seriesId, first.conversationId)
+    expect(saved.source).toMatchObject({ kind: 'chatgpt-share', shareId: ID })
+
+    // The chat grew in ChatGPT and the link was updated: the same conversation is updated.
+    pages.set(
+      LINK,
+      page([
+        { role: 'user', text: 'Where did the curse start?' },
+        { role: 'assistant', text: 'It started at Kestrel Bay during the flood.' },
+        { role: 'user', text: 'And who carries it?' },
+        { role: 'assistant', text: 'Mara carries the curse now.' },
+      ]),
+    )
+    const again = await ai.importChat(ref.seriesId, LINK)
+    expect(again).toMatchObject({
+      conversationId: first.conversationId,
+      messages: 4,
+      updated: true,
+    })
+    expect(await lib.listConversations(ref.seriesId)).toHaveLength(1)
+
+    await expect(ai.importChat(ref.seriesId, 'https://example.com/share/x')).rejects.toThrow(
+      /isn’t a ChatGPT share link/,
+    )
+    await expect(
+      ai.importChat(ref.seriesId, 'https://chatgpt.com/share/00000000-0000-0000-0000-000000000000'),
+    ).rejects.toThrow(/gone/)
+    pages.set(LINK, new Response('<html>changed</html>'))
+    await expect(ai.importChat(ref.seriesId, LINK)).rejects.toThrow(/no conversation/)
+    // A failed read leaves the chat brought in before as it was.
+    expect((await lib.readConversation(ref.seriesId, first.conversationId)).messages).toHaveLength(
+      4,
+    )
+  })
+
+  it('looks through imported chats when answering, and says which chat it used', async () => {
+    fake = await startFakeOllama(() => 'From your notes: the flood.')
+    const ref = await story()
+    const ai = withPages({})
+    pages.set(
+      LINK,
+      page([
+        { role: 'user', text: 'Where did the curse start?' },
+        { role: 'assistant', text: 'It started at Kestrel Bay during the great flood.' },
+        { role: 'user', text: 'What does Odo eat?' },
+        { role: 'assistant', text: 'Odo eats bread and fish.' },
+      ]),
+    )
+    await ai.importChat(ref.seriesId, LINK)
+    const r = await ai.ask(
+      {
+        requestId: 'r-chats',
+        seriesId: ref.seriesId,
+        mode: 'chat',
+        messages: [{ role: 'user', content: 'Remind me where the curse started?' }],
+        scope: null,
+      },
+      () => {},
+    )
+    const system = fake.requests[0]!.messages[0]!.content
+    expect(system).toContain('earlier conversations with ChatGPT')
+    expect(system).toContain('Kestrel Bay during the great flood')
+    expect(system).toContain('“Saga planning”')
+    expect(system).not.toContain('bread and fish')
+    expect(r.lookedAt.join(' ')).toContain('your ChatGPT chat')
+    // The imported chat itself is never sent as the conversation.
+    expect(fake.requests[0]!.messages).toHaveLength(2)
   })
 })

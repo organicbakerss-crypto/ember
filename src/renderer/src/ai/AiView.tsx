@@ -14,6 +14,7 @@ import {
 } from '@shared/ai/personas'
 import { useOverlays } from '../components/overlays'
 import { RoundtableView } from './RoundtableView'
+import { ImportedChat } from './ImportedChat'
 import { QuestionFlow, QuestionRecord, type QuestionProgress } from './QuestionFlow'
 import { ANSWERS_INSTRUCTION_RE, answersMessage, findQuestions } from '@shared/ai/questions'
 import { loadLocal, saveLocal } from '../storage'
@@ -167,7 +168,7 @@ export function AiView(props: {
   const { settings, update } = useSettings()
   const provider = settings.ai.provider
   const [mode, setMode] = useState<Mode>('chat')
-  const { choose, openMenu } = useOverlays()
+  const { choose, openMenu, toast } = useOverlays()
   const [localRoundtableOpen, setLocalRoundtableOpen] = useState(false)
   const roundtableOpen = props.onRoundtableChange ? !!props.roundtableActive : localRoundtableOpen
   const setRoundtableOpen = props.onRoundtableChange ?? setLocalRoundtableOpen
@@ -298,6 +299,33 @@ export function AiView(props: {
     if (requestId === busy?.id || requestId === worldJob?.id) setProgress(text)
   })
 
+  // Chats brought in from ChatGPT: the add box, and the one open (read-only).
+  const [adding, setAdding] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [imported, setImported] = useState<ConversationFile | null>(null)
+  const importChat = async (url: string) => {
+    setImporting(true)
+    setImportError(null)
+    try {
+      const done = await api.invoke('ai:importChat', { seriesId, url })
+      setAdding(null)
+      refreshPast()
+      setImported(
+        await api.invoke('ai:conversation', { seriesId, conversationId: done.conversationId }),
+      )
+      setListOpen(false)
+      toast(
+        `${done.updated ? 'Updated' : 'Added'} “${done.title}”: ${done.messages.toLocaleString()} messages.`,
+      )
+    } catch (err) {
+      // Shown where the link was typed (or over the open chat, when updating it).
+      setImportError(describeError(err).message)
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const refreshPast = () => {
     api.invoke('ai:conversations', { seriesId }).then(
       (all) => setPast(all.filter((c) => !c.roundtable)),
@@ -364,6 +392,12 @@ export function AiView(props: {
   const open = async (id: string) => {
     try {
       const c = await api.invoke('ai:conversation', { seriesId, conversationId: id })
+      if (c.source) {
+        setImported(c)
+        setListOpen(false)
+        return
+      }
+      setImported(null)
       setMode(c.mode)
       // Opening a saved chat restores its original character, not the current global choice.
       update(({ ai }) => ({ ai: { ...ai, characterId: who(c.characterId).id } }))
@@ -411,6 +445,7 @@ export function AiView(props: {
       .invoke('ai:deleteConversation', { seriesId, conversationId: id })
       .catch((err) => setError(describeError(err).message))
     setPast((p) => p.filter((c) => c.id !== id))
+    setImported((c) => (c?.id === id ? null : c))
     setThreads((t) => {
       const next = { ...t }
       for (const m of Object.keys(next) as Mode[])
@@ -1078,12 +1113,60 @@ export function AiView(props: {
           className="link small"
           onClick={() => {
             setThreads((t) => ({ ...t, [mode]: empty(settings.ai.characterId) }))
+            setImported(null)
             setListOpen(false)
           }}
         >
           + New
         </button>
       </div>
+      {adding === null ? (
+        <button
+          className="link small ai-import-open"
+          title="Bring in a ChatGPT chat from its share link, so the AI can use it"
+          onClick={() => {
+            setAdding('')
+            setImportError(null)
+          }}
+        >
+          + Add a ChatGPT chat
+        </button>
+      ) : (
+        <form
+          className="ai-import"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (adding.trim()) void importChat(adding)
+          }}
+        >
+          <input
+            autoFocus
+            aria-label="ChatGPT share link"
+            placeholder="https://chatgpt.com/share/…"
+            value={adding}
+            disabled={importing}
+            onChange={(e) => setAdding(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && setAdding(null)}
+          />
+          <div className="row small">
+            <button type="submit" disabled={importing || !adding.trim()}>
+              {importing ? 'Reading the chat…' : 'Add'}
+            </button>
+            <button type="button" className="link" onClick={() => setAdding(null)}>
+              Cancel
+            </button>
+          </div>
+          {importError && (
+            <p className="error small" role="alert">
+              {importError}
+            </p>
+          )}
+          <p className="muted small">
+            In ChatGPT: Share → Copy link. The whole chat comes in, however long. You can delete the
+            link in ChatGPT afterwards.
+          </p>
+        </form>
+      )}
       {past.length === 0 && <p className="muted small">Your conversations are kept here.</p>}
       <ul>
         {past.map((c) => (
@@ -1091,7 +1174,7 @@ export function AiView(props: {
             <button className="ai-past-open" onClick={() => void open(c.id)}>
               <span className="ai-past-title">{c.title}</span>
               <span className="muted small">
-                {MODE_LABEL[c.mode]} · {formatWhen(c.updatedAt)}
+                {c.imported ? 'From ChatGPT' : MODE_LABEL[c.mode]} · {formatWhen(c.updatedAt)}
               </span>
             </button>
             <button
@@ -1128,7 +1211,33 @@ export function AiView(props: {
   return (
     <div className={`ai-view ${settings.lookAi === 'margins' ? 'ai-look-margins' : ''}`} ref={root}>
       {history}
-      <section className="ai-main">
+      {imported && (
+        <section className="ai-main">
+          <header className="ai-head">
+            <button
+              className="icon ai-history-toggle"
+              aria-label="Conversations"
+              aria-expanded={listOpen}
+              title="Past conversations"
+              onClick={() => setListOpen((o) => !o)}
+            >
+              ☰
+            </button>
+          </header>
+          {importError && adding === null && (
+            <p className="error small" role="alert">
+              {importError}
+            </p>
+          )}
+          <ImportedChat
+            chat={imported}
+            busy={importing}
+            onUpdate={() => void importChat(imported.source!.url)}
+            onClose={() => setImported(null)}
+          />
+        </section>
+      )}
+      <section className="ai-main" hidden={!!imported}>
         <header className="ai-head">
           <button
             className="icon ai-history-toggle"

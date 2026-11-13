@@ -2423,12 +2423,27 @@ export class Library {
           createdAt: c.createdAt,
           updatedAt: c.updatedAt,
           count: c.messages.length,
+          ...(c.source ? { imported: { url: c.source.url } } : {}),
         })
       } catch (err) {
         if (!(err instanceof AppError)) throw err
       }
     }
     return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
+  /** The chats brought in from ChatGPT for a story (unreadable ones are skipped). */
+  async importedChats(seriesId: string): Promise<ConversationFile[]> {
+    const out: ConversationFile[] = []
+    for (const c of await this.listConversations(seriesId)) {
+      if (!c.imported) continue
+      const file = await this.readConversation(seriesId, c.id).catch((err: unknown) => {
+        if (err instanceof AppError) return null
+        throw err
+      })
+      if (file) out.push(file)
+    }
+    return out
   }
 
   async readConversation(seriesId: string, conversationId: string): Promise<ConversationFile> {

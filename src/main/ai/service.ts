@@ -43,6 +43,17 @@ import {
   type RoundtableSession,
 } from '@shared/ai/roundtable'
 import { findPassages, pickSummaries, searchTerms, storyParts, type LookupChapter } from './lookup'
+import {
+  SharedChatError,
+  chatPieces,
+  pickChatPieces,
+  shareIdOf,
+  shareUrl,
+  sharedChatFromHtml,
+  type ChatPiece,
+} from '@shared/ai/sharedChat'
+import { newId } from '@shared/ids'
+import type { ConversationFile } from '@shared/schema'
 import { entryTerms, nameMatcher } from '@shared/names'
 import type { AiSettings } from '@shared/settings'
 import type { AiStatus } from '@shared/ipc'
@@ -148,6 +159,8 @@ const LIMITS = {
     beforeChapter: 1500,
     summaries: 8,
     passages: 6,
+    chatPieces: 4,
+    chatPieceChars: 1200,
   },
   chatgpt: {
     fullStory: 90000,
@@ -156,6 +169,8 @@ const LIMITS = {
     beforeChapter: 8000,
     summaries: 20,
     passages: 16,
+    chatPieces: 12,
+    chatPieceChars: 4000,
   },
 }
 
@@ -176,6 +191,8 @@ export interface WorldUpdateResult {
 
 export class AiService {
   private readonly running = new Map<string, AbortController>()
+  /** Imported chats cut into pieces, by conversation (redone when the chat changes). */
+  private readonly pieces = new Map<string, { updatedAt: string; pieces: ChatPiece[] }>()
 
   private readonly chatgpt: ChatGpt
 
@@ -311,6 +328,96 @@ export class AiService {
     } finally {
       if (this.running.get(requestId) === controller) this.running.delete(requestId)
     }
+  }
+
+  /**
+   * Brings in a ChatGPT chat from its share link, as a read-only conversation
+   * of the story. The same link again updates the chat brought in before.
+   */
+  async importChat(
+    seriesId: string,
+    url: string,
+  ): Promise<{ conversationId: string; title: string; messages: number; updated: boolean }> {
+    const shareId = shareIdOf(url)
+    if (!shareId) {
+      throw new AppError(
+        'invalid-input',
+        'That isn’t a ChatGPT share link. In ChatGPT, use Share → Copy link; it starts with https://chatgpt.com/share/.',
+      )
+    }
+    const library = this.options.host.current
+    await library.getSeries(seriesId)
+    const fetchImpl = this.options.fetchImpl ?? fetch
+    let html: string
+    try {
+      const res = await fetchImpl(shareUrl(shareId), {
+        headers: { accept: 'text/html', 'accept-language': 'en' },
+        signal: AbortSignal.timeout(60_000),
+      })
+      if (res.status === 404)
+        throw new AppError('not-found', 'That shared chat is gone (the link was deleted).')
+      if (!res.ok)
+        throw new AppError('internal', `ChatGPT didn’t send the chat (HTTP ${res.status}).`)
+      html = await res.text()
+    } catch (err) {
+      if (err instanceof AppError) throw err
+      throw new AppError('internal', 'Couldn’t reach ChatGPT. Check the internet connection.')
+    }
+    let chat
+    try {
+      chat = sharedChatFromHtml(html, shareId)
+    } catch (err) {
+      if (err instanceof SharedChatError) throw new AppError('invalid-input', err.message)
+      throw err
+    }
+    const existing = (await library.importedChats(seriesId)).find(
+      (c) => c.source?.shareId === shareId,
+    )
+    const now = new Date().toISOString()
+    const conversation: ConversationFile = {
+      ...(existing ?? {}),
+      formatVersion: 1,
+      id: existing?.id ?? newId('conversation'),
+      mode: 'chat',
+      title: chat.title,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+      source: { kind: 'chatgpt-share', shareId, url: shareUrl(shareId), importedAt: now },
+      messages: chat.messages.map((m) => ({
+        role: m.role,
+        content: m.text,
+        at: m.at,
+        read: null,
+      })),
+    }
+    await library.saveConversation(seriesId, conversation)
+    return {
+      conversationId: conversation.id,
+      title: chat.title,
+      messages: chat.messages.length,
+      updated: !!existing,
+    }
+  }
+
+  /** The pieces of a story's imported ChatGPT chats that touch the question. */
+  private async chatLookup(
+    seriesId: string,
+    terms: string[],
+    limit: (typeof LIMITS)[keyof typeof LIMITS],
+  ): Promise<{ pieces: ChatPiece[]; chats: number }> {
+    const chats = await this.options.host.current.importedChats(seriesId)
+    if (!chats.length || !terms.length) return { pieces: [], chats: 0 }
+    const all: ChatPiece[] = []
+    for (const c of chats) {
+      let known = this.pieces.get(c.id)
+      if (known?.updatedAt !== c.updatedAt) {
+        known = { updatedAt: c.updatedAt, pieces: chatPieces(c) }
+        this.pieces.set(c.id, known)
+      }
+      all.push(...known.pieces)
+    }
+    const pieces = pickChatPieces(all, terms, limit.chatPieces, limit.chatPieceChars)
+    return { pieces, chats: new Set(pieces.map((p) => p.where.split('”,')[0])).size }
   }
 
   /** Chat, brainstorm or ask the story; the answer streams to `onToken`. */
@@ -1267,6 +1374,17 @@ export class AiService {
       if (summaries.length)
         lookedAt.push(plural(summaries.length, 'chapter summary', 'chapter summaries'))
       if (passages.length) lookedAt.push(plural(passages.length, 'passage', 'passages'))
+    }
+
+    // The writer's earlier ChatGPT chats about this story, when any were brought in.
+    if (question.trim()) {
+      const chats = await this.chatLookup(seriesId, searchTerms(question, names), limit)
+      if (chats.pieces.length) {
+        context.chats = chats.pieces
+        lookedAt.push(
+          `${plural(chats.pieces.length, 'part', 'parts')} of your ChatGPT ${chats.chats === 1 ? 'chat' : 'chats'}`,
+        )
+      }
     }
     return context
   }

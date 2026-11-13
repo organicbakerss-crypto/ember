@@ -1123,6 +1123,8 @@ export const ipcInputs = {
   'ai:conversations': z.object({ seriesId: id('series') }),
   'ai:conversation': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
   'ai:saveConversation': z.object({ seriesId: id('series'), conversation: conversationFileSchema }),
+  /** Brings in a ChatGPT chat from its share link (again: updates the one brought in before). */
+  'ai:importChat': z.object({ seriesId: id('series'), url: z.string().trim().min(1).max(500) }),
   'ai:deleteConversation': z.object({
     seriesId: id('series'),
     conversationId: id('conversation'),
@@ -1353,6 +1355,7 @@ export interface IpcResults {
   'ai:conversations': ConversationSummary[]
   'ai:conversation': ConversationFile
   'ai:saveConversation': null
+  'ai:importChat': { conversationId: string; title: string; messages: number; updated: boolean }
   'ai:deleteConversation': null
   'ai:chatgptSignIn': null
   'ai:chatgptSignOut': null
@@ -1452,6 +1455,8 @@ export interface ConversationSummary {
   updatedAt: string
   /** How many messages. */
   count: number
+  /** Brought in from ChatGPT (read-only), with its share link. */
+  imported?: { url: string }
 }
 
 export interface AiStatus {

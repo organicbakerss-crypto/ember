@@ -52,6 +52,8 @@ export interface PromptContext {
   before?: { title: string; text: string }[]
   /** Files the writer attached to the conversation (kept on this computer). */
   attachments?: { name: string; text: string }[]
+  /** Parts of the writer's earlier ChatGPT chats about the story that touch the question. */
+  chats?: { where: string; text: string }[]
 }
 
 const GROUNDED = `What you know about the writer's story comes only from what is given below. When it doesn't cover something, say so and say where it might be (a chapter, an entry), rather than guessing; never invent events, names or facts of the story.`
@@ -101,6 +103,13 @@ export function systemPrompt(context: PromptContext): string {
   if (context.lookup?.passages.length) {
     parts.push(
       `Passages from the story looked up for this question (the writer's own words, with where they are):\n\n${context.lookup.passages.join('\n\n')}`,
+    )
+  }
+  if (context.chats?.length) {
+    parts.push(
+      `Parts of the writer's earlier conversations with ChatGPT about this story, looked up for this question (each with which chat and when). They are past discussion, not the story itself: plans and decisions in them may have changed since, so prefer the story and the world where they disagree, and say which chat and date you're drawing on:\n\n${context.chats
+        .map((c) => `### ${c.where}\n<<<\n${c.text}\n>>>`)
+        .join('\n\n')}`,
     )
   }
   if (context.entries.length) {
