@@ -1129,8 +1129,13 @@ export const ipcInputs = {
   /** The story's memory: its nodes (and any files that can't be read). */
   'memory:list': z.object({ seriesId: id('series') }),
   /** Saves nodes the writer changed (states, wording, deleting points). */
-  'memory:save': z.object({ seriesId: id('series'), nodes: z.array(memoryNodeFileSchema).max(50) }),
+  'memory:save': z.object({
+    seriesId: id('series'),
+    nodes: z.array(memoryNodeFileSchema).max(2000),
+  }),
   'memory:delete': z.object({ seriesId: id('series'), nodeId: id('node') }),
+  /** The topics the last answer read (and when), for the map. */
+  'memory:lastUsed': z.object({ seriesId: id('series') }),
   /** "Make nodes": reads conversations into a draft of the memory, in the background. */
   'memory:make': z.object({
     seriesId: id('series'),
@@ -1407,6 +1412,7 @@ export interface IpcResults {
   'memory:list': { nodes: MemoryNodeFile[]; problems: LibraryProblem[] }
   'memory:save': null
   'memory:delete': null
+  'memory:lastUsed': { nodeIds: string[]; at: number } | null
   'memory:make': MemoryDraft
   'memory:draft': MemoryDraft | null
   'memory:read': MemoryDraft
@@ -1502,6 +1508,8 @@ export interface IpcEvents {
   'ai:scopeRequest': { requestId: string; seriesId: string }
   /** What a long AI job is doing now ("Reading part 2 of 3…"). */
   'ai:progress': { requestId: string; text: string }
+  /** An answer read these memory topics (the map glows them). */
+  'memory:used': { seriesId: string; nodeIds: string[] }
   /** A "Make nodes" draft changed (null: kept or discarded). */
   'memory:draft': { seriesId: string; draft: MemoryDraft | null }
   'ai:roundtableStatus': RoundtableRunStatus

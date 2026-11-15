@@ -187,6 +187,7 @@ void app.whenReady().then(async () => {
       broadcast('settings:changed', next)
     },
     onMemoryDraft: (seriesId, draft) => broadcast('memory:draft', { seriesId, draft }),
+    onMemoryUsed: (seriesId, nodeIds) => broadcast('memory:used', { seriesId, nodeIds }),
     host,
     fetchImpl: ((input: string, init?: RequestInit) => net.fetch(input, init)) as typeof fetch,
     chatgpt: {

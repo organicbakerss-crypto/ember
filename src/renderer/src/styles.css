@@ -6418,3 +6418,161 @@ kbd {
   padding: 0.5rem 0.7rem;
   border-left: 3px solid var(--accent);
 }
+
+/* Memory map. */
+.memory-mode {
+  align-self: flex-start;
+}
+.memory-map {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-height: 420px;
+}
+.memory-map-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+}
+.memory-map-bar input[type='search'] {
+  flex: 1;
+  min-width: 8rem;
+}
+.memory-map-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--muted);
+}
+.memory-map-key i {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  margin-left: 0.3rem;
+  background: var(--mem-colour);
+}
+.memory-map-svg {
+  flex: 1;
+  width: 100%;
+  min-height: 380px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--border) 12%, transparent);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.memory-map-svg:active {
+  cursor: grabbing;
+}
+.memory-map-bounds {
+  fill: none;
+}
+.state-fixed {
+  --mem-colour: #2e9d5f;
+}
+.state-unfixed {
+  --mem-colour: #d98a1c;
+}
+.state-whim {
+  --mem-colour: #7b68ee;
+}
+.state-rejected {
+  --mem-colour: #9a9a9a;
+}
+.memory-circle {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.memory-circle circle {
+  fill: color-mix(in srgb, var(--mem-colour) 28%, var(--bg, #fff));
+  stroke: var(--mem-colour);
+  stroke-width: 2.5;
+  transition:
+    stroke-width 0.15s,
+    filter 0.3s;
+}
+.memory-circle:hover circle {
+  stroke-width: 4;
+}
+.memory-circle.loose circle {
+  --mem-colour: #8a8a8a;
+  stroke-dasharray: 6 5;
+}
+.memory-circle.state-rejected circle {
+  opacity: 0.55;
+}
+.memory-circle-count {
+  text-anchor: middle;
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--text, #222);
+  pointer-events: none;
+}
+.memory-circle-title {
+  text-anchor: middle;
+  font-size: 12.5px;
+  fill: var(--text, #222);
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--bg, #fff);
+  stroke-width: 3px;
+}
+.memory-circle.dim,
+.memory-link.dim {
+  opacity: 0.15;
+}
+.memory-circle.glow circle {
+  animation: memory-glow 1.3s ease-in-out 3;
+}
+@keyframes memory-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 var(--mem-colour));
+  }
+  50% {
+    filter: drop-shadow(0 0 14px var(--mem-colour));
+    stroke-width: 5;
+  }
+}
+.memory-link {
+  stroke: color-mix(in srgb, var(--text, #222) 35%, transparent);
+  stroke-width: 2;
+}
+.memory-link.grew {
+  stroke-dasharray: 2 6;
+  stroke-linecap: round;
+  marker-end: url(#memory-arrow);
+}
+.memory-arrow {
+  fill: color-mix(in srgb, var(--text, #222) 35%, transparent);
+}
+.memory-map-card {
+  z-index: 50;
+  max-width: 280px;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg, #fff);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.15);
+  pointer-events: none;
+}
+.memory-map-card p {
+  margin: 0.35rem 0 0;
+}
+.memory-map-help {
+  margin: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .memory-circle.glow circle {
+    animation: none;
+    stroke-width: 5;
+  }
+}
+.memory-view .memory-map-bar select {
+  width: auto;
+  flex: 0 0 auto;
+}

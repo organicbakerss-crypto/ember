@@ -134,11 +134,10 @@ export function PeopleBoard(props: {
     return { x: (e.clientX - box.left) / box.width, y: (e.clientY - box.top) / box.height }
   }
 
-  const savePositions = async (next: Positions, label: string) => {
-    const before = world.view.board
+  // Moving people isn't an undo step (no Undo button pops up for it): drag them back instead.
+  const savePositions = async (next: Positions) => {
     try {
       await api.invoke('board:save', { worldId, positions: next, seen: world.view.syncGen })
-      record({ label, undo: () => api.invoke('board:save', { worldId, positions: before }) })
     } catch (err) {
       setDropped(null)
       toast(describeError(err).message)
@@ -213,10 +212,8 @@ export function PeopleBoard(props: {
         y: clamp(positions[id]!.y + at.y - from.y),
       }
     }
-    const what =
-      ids.length === 1 ? (world.resolve(ids[0]!)?.name ?? 'someone') : `${ids.length} people`
     setDropped({ base: world.view.board, at: next })
-    void savePositions(next, `Moved ${what} on the board`)
+    void savePositions(next)
   }
 
   const toggleType = (id: string) => {

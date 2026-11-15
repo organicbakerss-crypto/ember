@@ -98,6 +98,7 @@ describe('making nodes', () => {
       links: [],
       parentId: null,
       loose: false,
+      pos: null,
       points: [
         {
           id: 'pnt_aaaaaaaaaaaaaaaa',
@@ -154,6 +155,7 @@ describe('reading the memory', () => {
     links: [],
     parentId: null,
     loose: false,
+    pos: null,
     points: [
       {
         id: 'pnt_1aaaaaaaaaaaaaaa',

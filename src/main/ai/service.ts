@@ -219,12 +219,16 @@ export class AiService {
   private readonly chatgpt: ChatGpt
   /** "Make nodes" builds for the story memory. */
   readonly memory: MemoryBuilds
+  /** The memory topics the last answer read, per story (for the map's glow). */
+  readonly lastUsed = new Map<string, { ids: string[]; at: number }>()
 
   constructor(
     private readonly options: {
       settings: () => Promise<AiSettings>
       host: LibraryHost
       fetchImpl?: typeof fetch
+      /** An answer read these memory topics (for the map's glow). */
+      onMemoryUsed?: (seriesId: string, nodeIds: string[]) => void
       /** A "Make nodes" draft changed (null: gone). */
       onMemoryDraft?: (seriesId: string, draft: MemoryDraft | null) => void
       /** Give up on a request after this long with nothing arriving (tests make it short). */
@@ -515,6 +519,9 @@ export class AiService {
       }
     }
     if (!picks.length) picks = pickByWords(nodes, searchTerms(question, names), max)
+    const ids = picks.map((p) => p.id)
+    this.lastUsed.set(seriesId, { ids, at: Date.now() })
+    this.options.onMemoryUsed?.(seriesId, ids)
     return picks
       .map((p) =>
         nodeForAI(

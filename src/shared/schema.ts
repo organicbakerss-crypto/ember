@@ -711,6 +711,12 @@ export const memoryNodeFileSchema = z.looseObject({
   parentId: z.string().max(80).nullable().catch(null).default(null),
   /** The one "Loose ends" node: everything not filed elsewhere. */
   loose: z.boolean().catch(false).default(false),
+  /** Where the writer put it on the memory map (null: arranged automatically). */
+  pos: z
+    .object({ x: z.number().finite(), y: z.number().finite() })
+    .nullable()
+    .catch(null)
+    .default(null),
   // One bad point is dropped on its own, never the whole node.
   points: z
     .array(z.unknown())

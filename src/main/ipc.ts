@@ -412,6 +412,10 @@ export function registerIpc(
       await host.current.saveNodes(input.seriesId, input.nodes)
       return null
     },
+    'memory:lastUsed': (input) => {
+      const used = ai.lastUsed.get(input.seriesId)
+      return used ? { nodeIds: used.ids, at: used.at } : null
+    },
     'memory:delete': async (input) => {
       await host.current.deleteNode(input.seriesId, input.nodeId)
       return null

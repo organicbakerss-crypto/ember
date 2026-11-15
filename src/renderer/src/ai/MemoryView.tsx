@@ -3,6 +3,8 @@ import type { ConversationSummary, LibraryProblem } from '@shared/ipc'
 import type { MemoryNodeFile, MemoryState } from '@shared/schema'
 import { stretches, type MemoryDraft } from '@shared/memory/build'
 import { api, describeError, useIpcEvent } from '../api'
+import { loadLocal, saveLocal } from '../storage'
+import { MemoryMap } from './MemoryMap'
 import { useOverlays } from '../components/overlays'
 
 const STATE_LABEL: Record<MemoryState, string> = {
@@ -40,12 +42,43 @@ export function MemoryView(props: {
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [storyName, setStoryName] = useState('this story')
+  const [books, setBooks] = useState<{ id: string; name: string }[]>([])
+  const [mode, setMode] = useState<'list' | 'map'>(() =>
+    loadLocal('memory.view') === 'map' ? 'map' : 'list',
+  )
+  const pickMode = (m: 'list' | 'map') => {
+    setMode(m)
+    saveLocal('memory.view', m)
+  }
+  // The topics the last answer read glow on the map for a few seconds.
+  const [glow, setGlow] = useState<string[]>([])
+  const glowTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const shine = useCallback((ids: string[]) => {
+    setGlow(ids)
+    clearTimeout(glowTimer.current)
+    glowTimer.current = setTimeout(() => setGlow([]), 4000)
+  }, [])
+  useEffect(() => () => clearTimeout(glowTimer.current), [])
+  useEffect(() => {
+    api.invoke('memory:lastUsed', { seriesId }).then(
+      (used) => {
+        if (used && Date.now() - used.at < 10 * 60 * 1000) shine(used.nodeIds)
+      },
+      () => {},
+    )
+  }, [seriesId, shine])
+  useIpcEvent('memory:used', (e) => {
+    if (e.seriesId === seriesId) shine(e.nodeIds)
+  })
   useEffect(() => {
     let live = true
     api.invoke('library:snapshot').then(
       (snap) => {
-        const name = snap.series.find((s) => s.id === seriesId)?.name
-        if (live && name) setStoryName(name)
+        const series = snap.series.find((s) => s.id === seriesId)
+        if (live && series) {
+          setStoryName(series.name)
+          setBooks(series.volumes.map((v) => ({ id: v.id, name: v.name })))
+        }
       },
       () => {},
     )
@@ -100,6 +133,55 @@ export function MemoryView(props: {
       toast(describeError(err).message)
       load()
     }
+  }
+
+  /** Saves a change that isn't worth listing (where a circle sits on the map). */
+  const quietly = async (next: MemoryNodeFile[]) => {
+    setNodes((all) => all?.map((n) => next.find((x) => x.id === n.id) ?? n) ?? null)
+    try {
+      await api.invoke('memory:save', { seriesId, nodes: next })
+    } catch (err) {
+      toast(describeError(err).message)
+      load()
+    }
+  }
+  const moveNode = (
+    id: string,
+    pos: { x: number; y: number },
+    all: Map<string, { x: number; y: number }>,
+  ) => {
+    // The first move pins every circle where it is, so the others don't rearrange around it.
+    const changed = (nodes ?? [])
+      .filter((n) => n.id === id || (!n.pos && all.has(n.id)))
+      .map((n) => ({ ...n, pos: n.id === id ? pos : all.get(n.id)! }))
+    if (changed.length) void quietly(changed)
+  }
+  /** Drop one circle on another: link them, or unlink them if they were linked. */
+  const linkNodes = (aId: string, bId: string) => {
+    const a = nodes?.find((x) => x.id === aId)
+    const b = nodes?.find((x) => x.id === bId)
+    if (!a || !b) return
+    const at = new Date().toISOString()
+    const linked = a.links.includes(b.id) || b.links.includes(a.id)
+    const change = (n: MemoryNodeFile, other: MemoryNodeFile): MemoryNodeFile => ({
+      ...n,
+      links: linked
+        ? n.links.filter((l) => l !== other.id)
+        : n === a
+          ? [...n.links, other.id]
+          : n.links,
+      updatedAt: at,
+      history: [
+        ...n.history,
+        {
+          at,
+          by: 'writer' as const,
+          what: `${linked ? 'Unlinked from' : 'Linked to'} “${other.title}”`,
+        },
+      ],
+    })
+    void quietly([change(a, b), change(b, a)])
+    toast(`${linked ? 'Unlinked' : 'Linked'} “${a.title}” and “${b.title}”.`)
   }
 
   const shown = useMemo(() => {
@@ -190,58 +272,90 @@ export function MemoryView(props: {
         />
       ) : (
         <>
-          <div className="memory-filters">
-            <div className="segmented small" role="radiogroup" aria-label="Show">
-              {(['all', ...STATES] as const).map((s) => (
-                <button
-                  key={s}
-                  role="radio"
-                  aria-checked={filter === s}
-                  className={filter === s ? 'active' : ''}
-                  onClick={() => setFilter(s)}
-                >
-                  {s === 'all' ? 'All' : STATE_LABEL[s]}
-                </button>
-              ))}
-            </div>
-            <input
-              type="search"
-              aria-label="Find in the memory"
-              placeholder="Find…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-          {nodes?.length === 0 && (
-            <div className="memory-empty muted">
-              <p>Nothing in this story’s memory yet.</p>
-              <p className="small">
-                Use “Make nodes…” to read your conversations (including chats brought in from
-                ChatGPT) into topics, with what’s decided, what’s still a proposal, and your whims.
-              </p>
-            </div>
-          )}
-          <ul className="memory-list">
-            {shown.map((n) => (
-              <li key={n.id} className={`memory-node state-${n.state} ${n.loose ? 'loose' : ''}`}>
-                <button className="memory-node-open" onClick={() => setOpen(n.id)}>
-                  <span className="memory-node-title">{n.title}</span>
-                  {!n.loose && (
-                    <span className={`memory-chip state-${n.state}`}>{STATE_LABEL[n.state]}</span>
-                  )}
-                  <span className="muted small">
-                    {STATES.filter((s) => n.points.some((p) => p.state === s))
-                      .map(
-                        (s) =>
-                          `${n.points.filter((p) => p.state === s).length} ${STATE_LABEL[s].toLowerCase()}`,
-                      )
-                      .join(' · ') || 'no points'}
-                  </span>
-                  {n.summary && <span className="memory-node-summary small">{n.summary}</span>}
-                </button>
-              </li>
+          <div className="segmented small memory-mode" role="radiogroup" aria-label="View">
+            {(['list', 'map'] as const).map((m) => (
+              <button
+                key={m}
+                role="radio"
+                aria-checked={mode === m}
+                className={mode === m ? 'active' : ''}
+                onClick={() => pickMode(m)}
+              >
+                {m === 'list' ? 'List' : 'Map'}
+              </button>
             ))}
-          </ul>
+          </div>
+          {mode === 'map' ? (
+            <MemoryMap
+              nodes={nodes ?? []}
+              books={books}
+              glow={glow}
+              onOpen={setOpen}
+              onMove={moveNode}
+              onLink={linkNodes}
+            />
+          ) : (
+            <>
+              <div className="memory-filters">
+                <div className="segmented small" role="radiogroup" aria-label="Show">
+                  {(['all', ...STATES] as const).map((s) => (
+                    <button
+                      key={s}
+                      role="radio"
+                      aria-checked={filter === s}
+                      className={filter === s ? 'active' : ''}
+                      onClick={() => setFilter(s)}
+                    >
+                      {s === 'all' ? 'All' : STATE_LABEL[s]}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="search"
+                  aria-label="Find in the memory"
+                  placeholder="Find…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              {nodes?.length === 0 && (
+                <div className="memory-empty muted">
+                  <p>Nothing in this story’s memory yet.</p>
+                  <p className="small">
+                    Use “Make nodes…” to read your conversations (including chats brought in from
+                    ChatGPT) into topics, with what’s decided, what’s still a proposal, and your
+                    whims.
+                  </p>
+                </div>
+              )}
+              <ul className="memory-list">
+                {shown.map((n) => (
+                  <li
+                    key={n.id}
+                    className={`memory-node state-${n.state} ${n.loose ? 'loose' : ''}`}
+                  >
+                    <button className="memory-node-open" onClick={() => setOpen(n.id)}>
+                      <span className="memory-node-title">{n.title}</span>
+                      {!n.loose && (
+                        <span className={`memory-chip state-${n.state}`}>
+                          {STATE_LABEL[n.state]}
+                        </span>
+                      )}
+                      <span className="muted small">
+                        {STATES.filter((s) => n.points.some((p) => p.state === s))
+                          .map(
+                            (s) =>
+                              `${n.points.filter((p) => p.state === s).length} ${STATE_LABEL[s].toLowerCase()}`,
+                          )
+                          .join(' · ') || 'no points'}
+                      </span>
+                      {n.summary && <span className="memory-node-summary small">{n.summary}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </>
       )}
     </div>

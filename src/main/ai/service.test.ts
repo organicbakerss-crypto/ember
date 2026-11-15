@@ -999,6 +999,7 @@ describe('the story memory', () => {
           links: [],
           parentId: null,
           loose: false,
+          pos: null,
           points: [],
           history: [],
           createdAt: T0,
