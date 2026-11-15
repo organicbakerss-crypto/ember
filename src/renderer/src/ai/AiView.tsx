@@ -16,6 +16,7 @@ import {
 import { useOverlays } from '../components/overlays'
 import { RoundtableView } from './RoundtableView'
 import { ImportedChat } from './ImportedChat'
+import { MemoryView } from './MemoryView'
 import { QuestionFlow, QuestionRecord, type QuestionProgress } from './QuestionFlow'
 import { ANSWERS_INSTRUCTION_RE, answersMessage, findQuestions } from '@shared/ai/questions'
 import { loadLocal, saveLocal } from '../storage'
@@ -318,6 +319,8 @@ export function AiView(props: {
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [imported, setImported] = useState<ConversationFile | null>(null)
+  /** The story's memory, open in place of the chat (optionally making nodes from a chat). */
+  const [memory, setMemory] = useState<{ makeFrom: string | null } | null>(null)
   const importChat = async (from: { url: string } | { html: string }) => {
     setImporting(true)
     setImportError(null)
@@ -447,6 +450,7 @@ export function AiView(props: {
   const open = async (id: string) => {
     try {
       const c = await api.invoke('ai:conversation', { seriesId, conversationId: id })
+      setMemory(null)
       if (c.source) {
         setImported(c)
         setListOpen(false)
@@ -1179,12 +1183,24 @@ export function AiView(props: {
           onClick={() => {
             setThreads((t) => ({ ...t, [mode]: empty(settings.ai.characterId) }))
             setImported(null)
+            setMemory(null)
             setListOpen(false)
           }}
         >
           + New
         </button>
       </div>
+      <button
+        className="link small ai-memory-open"
+        title="Topics worked out in your conversations: what's fixed, unfixed, and your whims"
+        onClick={() => {
+          setMemory({ makeFrom: null })
+          setImported(null)
+          setListOpen(false)
+        }}
+      >
+        Story memory
+      </button>
       {adding === null ? (
         <button
           className="link small ai-import-open"
@@ -1300,6 +1316,31 @@ export function AiView(props: {
   return (
     <div className={`ai-view ${settings.lookAi === 'margins' ? 'ai-look-margins' : ''}`} ref={root}>
       {history}
+      {memory && !imported && (
+        <section className="ai-main">
+          <header className="ai-head">
+            <button
+              className="icon ai-history-toggle"
+              aria-label="Conversations"
+              aria-expanded={listOpen}
+              title="Past conversations"
+              onClick={() => setListOpen((o) => !o)}
+            >
+              ☰
+            </button>
+          </header>
+          <MemoryView
+            seriesId={seriesId}
+            conversations={past}
+            makeFrom={memory.makeFrom}
+            onClose={() => setMemory(null)}
+            onOpenConversation={(id) => {
+              setMemory(null)
+              void open(id)
+            }}
+          />
+        </section>
+      )}
       {imported && (
         <section className="ai-main">
           <header className="ai-head">
@@ -1323,6 +1364,10 @@ export function AiView(props: {
             busy={importing}
             onUpdate={(file) => void importFile(file)}
             onClose={() => setImported(null)}
+            onMakeNodes={() => {
+              setMemory({ makeFrom: imported.id })
+              setImported(null)
+            }}
             onContinue={() => {
               const chat = imported
               const going = past.find((c) => c.continues === chat.id)
@@ -1343,7 +1388,7 @@ export function AiView(props: {
           />
         </section>
       )}
-      <section className="ai-main" hidden={!!imported}>
+      <section className="ai-main" hidden={!!imported || !!memory}>
         <header className="ai-head">
           <button
             className="icon ai-history-toggle"

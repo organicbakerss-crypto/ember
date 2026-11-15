@@ -55,6 +55,15 @@ import {
   type ChatPiece,
 } from '@shared/ai/sharedChat'
 import { newId } from '@shared/ids'
+import { MemoryBuilds } from './memoryBuild'
+import type { MemoryDraft } from '@shared/memory/build'
+import {
+  memoryIndex,
+  nodeForAI,
+  parseRecall,
+  pickByWords,
+  recallMessages,
+} from '@shared/memory/recall'
 import type { ConversationFile } from '@shared/schema'
 import { entryTerms, nameMatcher } from '@shared/names'
 import type { AiSettings } from '@shared/settings'
@@ -140,6 +149,8 @@ interface Provider {
     onToken?: (text: string) => void
     /** An answer for the writer (AI pane): ChatGPT thinks as hard as the writer chose. */
     answer?: boolean
+    /** A small step before an answer (choosing what to read): ChatGPT thinks lightly. */
+    quick?: boolean
   }): Promise<string>
 }
 
@@ -169,6 +180,7 @@ const LIMITS = {
     chatPieceChars: 1200,
     /** Words of the ChatGPT chat being carried on, from its end, word for word. */
     continueWords: 1800,
+    memoryNodes: 4,
   },
   chatgpt: {
     fullStory: 90000,
@@ -180,6 +192,7 @@ const LIMITS = {
     chatPieces: 12,
     chatPieceChars: 4000,
     continueWords: 25000,
+    memoryNodes: 12,
   },
 }
 
@@ -204,12 +217,16 @@ export class AiService {
   private readonly pieces = new Map<string, { updatedAt: string; pieces: ChatPiece[] }>()
 
   private readonly chatgpt: ChatGpt
+  /** "Make nodes" builds for the story memory. */
+  readonly memory: MemoryBuilds
 
   constructor(
     private readonly options: {
       settings: () => Promise<AiSettings>
       host: LibraryHost
       fetchImpl?: typeof fetch
+      /** A "Make nodes" draft changed (null: gone). */
+      onMemoryDraft?: (seriesId: string, draft: MemoryDraft | null) => void
       /** Give up on a request after this long with nothing arriving (tests make it short). */
       idleMs?: number
       /** ChatGPT: where its login is kept, and how it's encrypted. */
@@ -218,6 +235,11 @@ export class AiService {
       saveLearned?: (characterId: string, notes: string[]) => Promise<void>
     },
   ) {
+    this.memory = new MemoryBuilds({
+      host: options.host,
+      client: () => this.client(),
+      onChange: (seriesId, draft) => options.onMemoryDraft?.(seriesId, draft),
+    })
     this.chatgpt = new ChatGpt({ ...options.chatgpt, fetchImpl: options.fetchImpl })
   }
 
@@ -236,14 +258,16 @@ export class AiService {
         settings.chatgptModel || (await this.chatgpt.models())[0] || DEFAULT_CHATGPT_MODEL
       return {
         kind: 'chatgpt',
-        chat: ({ answer, ...i }) =>
+        chat: ({ answer, quick, ...i }) =>
           this.chatgpt.chat({
             ...i,
             model,
             idleMs: this.options.idleMs,
-            ...(answer && settings.chatgptThinking !== 'auto'
-              ? { effort: settings.chatgptThinking }
-              : {}),
+            ...(quick
+              ? { effort: 'low' as const }
+              : answer && settings.chatgptThinking !== 'auto'
+                ? { effort: settings.chatgptThinking }
+                : {}),
           }),
       }
     }
@@ -455,6 +479,50 @@ export class AiService {
       throw new AppError('internal', `ChatGPT sent a page without the chat. ${instead}`)
     }
     return html
+  }
+
+  /**
+   * The story-memory topics for a question, as the AI should read them. With
+   * ChatGPT a quick first step picks the topics and depths; otherwise (or if
+   * that fails) the topics sharing the question's words are read.
+   */
+  private async recall(
+    seriesId: string,
+    question: string,
+    messages: { role: 'user' | 'assistant'; content: string }[],
+    names: string[],
+    provider: Provider,
+    signal: AbortSignal,
+    max: number,
+  ): Promise<string[]> {
+    const { nodes } = await this.options.host.current
+      .listNodes(seriesId)
+      .catch(() => ({ nodes: [] }))
+    if (!nodes.length) return []
+    let picks: ReturnType<typeof parseRecall> = []
+    if (provider.kind === 'chatgpt') {
+      const index = memoryIndex(nodes)
+      if (index) {
+        const reply = await provider
+          .chat({
+            messages: recallMessages(index, question, messages),
+            json: true,
+            signal,
+            quick: true,
+          })
+          .catch(() => '')
+        picks = parseRecall(reply, nodes, max)
+      }
+    }
+    if (!picks.length) picks = pickByWords(nodes, searchTerms(question, names), max)
+    return picks
+      .map((p) =>
+        nodeForAI(
+          nodes.find((n) => n.id === p.id)!,
+          p.depth,
+        ),
+      )
+      .filter(Boolean)
   }
 
   /** The pieces of a story's imported ChatGPT chats that touch the question. */
@@ -1455,6 +1523,23 @@ export class AiService {
           `the last ${plural(recent.length, 'message', 'messages')} of “${from.title}” from ChatGPT`,
         )
       } else lookedAt.push('(the ChatGPT chat this carries on is gone)')
+    }
+
+    // The story's memory: the AI picks the topics that help, and how deep to read each.
+    if (question.trim()) {
+      const memory = await this.recall(
+        seriesId,
+        question,
+        input.messages,
+        names,
+        provider,
+        signal,
+        limit.memoryNodes,
+      )
+      if (memory.length) {
+        context.memory = memory
+        lookedAt.push(`${plural(memory.length, 'memory topic', 'memory topics')}`)
+      }
     }
 
     // The writer's earlier ChatGPT chats about this story, when any were brought in.

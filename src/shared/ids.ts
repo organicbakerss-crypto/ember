@@ -31,6 +31,8 @@ export const ID_KINDS = {
   answer: 'ans',
   attachment: 'att',
   character: 'chr',
+  node: 'nod',
+  point: 'pnt',
 } as const
 
 export type IdKind = keyof typeof ID_KINDS

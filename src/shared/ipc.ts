@@ -47,6 +47,8 @@ import {
   pinSchema,
   relationshipFileSchema,
   conversationFileSchema,
+  memoryNodeFileSchema,
+  type MemoryNodeFile,
   type ConversationFile,
   relationshipTypeSchema,
   regionSchema,
@@ -77,6 +79,7 @@ import {
   type WorldFile,
   type AiCharacterFile,
 } from './schema'
+import type { MemoryDraft } from './memory/build'
 
 /* ---------- shared result types ---------- */
 
@@ -1123,6 +1126,38 @@ export const ipcInputs = {
   'ai:conversations': z.object({ seriesId: id('series') }),
   'ai:conversation': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
   'ai:saveConversation': z.object({ seriesId: id('series'), conversation: conversationFileSchema }),
+  /** The story's memory: its nodes (and any files that can't be read). */
+  'memory:list': z.object({ seriesId: id('series') }),
+  /** Saves nodes the writer changed (states, wording, deleting points). */
+  'memory:save': z.object({ seriesId: id('series'), nodes: z.array(memoryNodeFileSchema).max(50) }),
+  'memory:delete': z.object({ seriesId: id('series'), nodeId: id('node') }),
+  /** "Make nodes": reads conversations into a draft of the memory, in the background. */
+  'memory:make': z.object({
+    seriesId: id('series'),
+    conversationIds: z.array(id('conversation')).min(1).max(50),
+    instruction: z.string().max(2000),
+    from: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
+    to: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
+  }),
+  'memory:draft': z.object({ seriesId: id('series') }),
+  /** Carries on a stopped build, reading skipped parts the writer picked too. */
+  'memory:continue': z.object({
+    seriesId: id('series'),
+    include: z.array(z.number().int().min(0)).max(1000).default([]),
+  }),
+  'memory:stop': z.object({ seriesId: id('series') }),
+  /** Adds the draft (or only the topics named) to the memory. */
+  'memory:keep': z.object({
+    seriesId: id('series'),
+    only: z.array(z.string().max(300)).max(5000).optional(),
+  }),
+  'memory:discard': z.object({ seriesId: id('series') }),
   /** Brings in a ChatGPT chat from its share link (again: updates the one brought in before). */
   'ai:importChat': z
     .object({
@@ -1362,6 +1397,15 @@ export interface IpcResults {
   'ai:conversations': ConversationSummary[]
   'ai:conversation': ConversationFile
   'ai:saveConversation': null
+  'memory:list': { nodes: MemoryNodeFile[]; problems: LibraryProblem[] }
+  'memory:save': null
+  'memory:delete': null
+  'memory:make': MemoryDraft
+  'memory:draft': MemoryDraft | null
+  'memory:continue': MemoryDraft
+  'memory:stop': null
+  'memory:keep': { nodes: number }
+  'memory:discard': null
   'ai:importChat': {
     conversationId: string
     title: string
@@ -1450,6 +1494,8 @@ export interface IpcEvents {
   'ai:scopeRequest': { requestId: string; seriesId: string }
   /** What a long AI job is doing now ("Reading part 2 of 3…"). */
   'ai:progress': { requestId: string; text: string }
+  /** A "Make nodes" draft changed (null: kept or discarded). */
+  'memory:draft': { seriesId: string; draft: MemoryDraft | null }
   'ai:roundtableStatus': RoundtableRunStatus
   /** AI work started, finished, failed or stopped (to every window). */
   'ai:job': AiJobInfo

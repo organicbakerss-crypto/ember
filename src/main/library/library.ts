@@ -29,7 +29,9 @@ import {
   worldEntryFileSchema,
   worldFileSchema,
   conversationFileSchema,
+  memoryNodeFileSchema,
   type ConversationFile,
+  type MemoryNodeFile,
   type ChapterFile,
   type ChapterType,
   type LibraryFile,
@@ -40,7 +42,7 @@ import {
   type VolumeFile,
   type WorldFile,
 } from '@shared/schema'
-import { idPattern, newId } from '@shared/ids'
+import { idPattern, isId, newId } from '@shared/ids'
 import type {
   ConversationSummary,
   LibraryChange,
@@ -105,6 +107,14 @@ export type ChapterPatch = Partial<
 >
 
 const MAX_SEARCH_HITS = 500
+
+const parseJsonOrNull = (text: string): unknown => {
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return null
+  }
+}
 
 interface ChapterDigest {
   stamp: string
@@ -2478,6 +2488,82 @@ export class Library {
       })
     })
     this.onChange({ kind: 'series', seriesId })
+  }
+
+  /* ---------- story memory (nodes) ---------- */
+
+  private memoryDir(seriesId: string): string {
+    return join(this.paths.seriesDir(seriesId), 'memory')
+  }
+
+  /** A story's memory nodes. Unreadable ones are reported, never overwritten. */
+  async listNodes(
+    seriesId: string,
+  ): Promise<{ nodes: MemoryNodeFile[]; problems: LibraryProblem[] }> {
+    let names: string[]
+    try {
+      names = await fs.promises.readdir(this.memoryDir(seriesId))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { nodes: [], problems: [] }
+      throw err
+    }
+    const nodes: MemoryNodeFile[] = []
+    const problems: LibraryProblem[] = []
+    for (const name of names.sort()) {
+      if (!name.endsWith('.json') || isTempFileName(name)) continue
+      const node = await this.tryRead(
+        join(this.memoryDir(seriesId), name),
+        memoryNodeFileSchema,
+        problems,
+      )
+      if (node) nodes.push(node)
+    }
+    return { nodes, problems }
+  }
+
+  /** Saves memory nodes (one file each). A node whose file can't be read is left alone. */
+  async saveNodes(seriesId: string, nodes: MemoryNodeFile[]): Promise<void> {
+    if (!nodes.length) return
+    await this.getSeries(seriesId)
+    await this.lock.run(`series:${seriesId}`, async () => {
+      await fs.promises.mkdir(this.memoryDir(seriesId), { recursive: true })
+      for (const node of nodes) {
+        const file = join(this.memoryDir(seriesId), `${node.id}.json`)
+        const there = await fs.promises.readFile(file, 'utf8').catch(() => null)
+        if (there !== null && !memoryNodeFileSchema.safeParse(parseJsonOrNull(there)).success) {
+          throw new AppError(
+            'corrupt',
+            `The memory node file ${this.rel(file)} can't be read, so it wasn't changed.`,
+          )
+        }
+        await writeJsonFile(file, { ...node, formatVersion: FORMAT_VERSION })
+      }
+    })
+    this.onChange({ kind: 'series', seriesId })
+  }
+
+  /** Deleting a node moves it to this computer's trash folder. */
+  async deleteNode(seriesId: string, nodeId: string): Promise<void> {
+    if (!isId('node', nodeId)) throw new AppError('not-found', 'No such memory node.')
+    await this.lock.run(`series:${seriesId}`, async () => {
+      const from = join(this.memoryDir(seriesId), `${nodeId}.json`)
+      const dest = join(
+        this.paths.localDir,
+        'trash',
+        'memory',
+        `${seriesId}-${nodeId}-${Date.now()}.json`,
+      )
+      await fs.promises.mkdir(join(dest, '..'), { recursive: true })
+      await fs.promises.rename(from, dest).catch((err: NodeJS.ErrnoException) => {
+        if (err.code !== 'ENOENT') throw err
+      })
+    })
+    this.onChange({ kind: 'series', seriesId })
+  }
+
+  /** Where a "Make nodes" draft is kept while it's built (this computer only). */
+  memoryDraftFile(seriesId: string): string {
+    return join(this.paths.localDir, 'memory-drafts', `${seriesId}.json`)
   }
 
   /* ---------- sync ---------- */

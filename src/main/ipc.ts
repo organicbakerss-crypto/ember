@@ -407,6 +407,27 @@ export function registerIpc(
       await host.current.saveConversation(input.seriesId, input.conversation)
       return null
     },
+    'memory:list': (input) => host.current.listNodes(input.seriesId),
+    'memory:save': async (input) => {
+      await host.current.saveNodes(input.seriesId, input.nodes)
+      return null
+    },
+    'memory:delete': async (input) => {
+      await host.current.deleteNode(input.seriesId, input.nodeId)
+      return null
+    },
+    'memory:make': (input) => ai.memory.start(input),
+    'memory:draft': (input) => ai.memory.draft(input.seriesId),
+    'memory:continue': (input) => ai.memory.resume(input.seriesId, input.include),
+    'memory:stop': (input) => {
+      ai.memory.cancel(input.seriesId)
+      return null
+    },
+    'memory:keep': (input) => ai.memory.keep(input.seriesId, input.only),
+    'memory:discard': async (input) => {
+      await ai.memory.discard(input.seriesId)
+      return null
+    },
     'ai:importChat': (input) =>
       ai.importChat(input.seriesId, input.html ? { html: input.html } : { url: input.url! }),
     'ai:deleteConversation': async (input) => {

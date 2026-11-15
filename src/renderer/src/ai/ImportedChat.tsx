@@ -35,6 +35,8 @@ export function ImportedChat(props: {
   onClose: () => void
   /** Carry on talking, with this chat as the start. */
   onContinue: () => void
+  /** Read this chat into the story's memory. */
+  onMakeNodes: () => void
 }) {
   const { chat } = props
   const picker = useRef<HTMLInputElement>(null)
@@ -105,6 +107,12 @@ export function ImportedChat(props: {
           onClick={props.onContinue}
         >
           Continue this chat
+        </button>
+        <button
+          title="Read this chat into the story's memory, as topics with what's fixed, unfixed and your whims"
+          onClick={props.onMakeNodes}
+        >
+          Make nodes…
         </button>
         <button onClick={props.onClose}>Close</button>
       </header>

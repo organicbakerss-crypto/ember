@@ -652,6 +652,91 @@ export const conversationFileSchema = z.looseObject({
 })
 export type ConversationFile = z.infer<typeof conversationFileSchema>
 
+/* ---------- story memory: nodes (one file each, in the story) ---------- */
+
+/** Decided, a proposal, a thin idea kept anyway, or turned down (kept for the writer, hidden from the AI). */
+export const memoryStateSchema = z.enum(['fixed', 'unfixed', 'whim', 'rejected'])
+export type MemoryState = z.infer<typeof memoryStateSchema>
+
+/** Where a point came from: a conversation, when, and the words it came from. */
+export const memorySourceSchema = z.looseObject({
+  conversationId: z.string().max(80),
+  /** The conversation's title then (it may be gone later). */
+  title: z.string().max(200).catch(''),
+  at: timestamp,
+  quote: z.string().max(1000).catch(''),
+})
+export type MemorySource = z.infer<typeof memorySourceSchema>
+
+export const memoryPointSchema = z.looseObject({
+  id: id('point'),
+  text: z.string().trim().min(1).max(4000),
+  state: memoryStateSchema.catch('unfixed'),
+  sources: z
+    .array(z.unknown())
+    .catch([])
+    .default([])
+    .transform((all) =>
+      all.flatMap((x) => {
+        const r = memorySourceSchema.safeParse(x)
+        return r.success ? [r.data] : []
+      }),
+    ),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+})
+export type MemoryPoint = z.infer<typeof memoryPointSchema>
+
+/** One change to a node, by the AI or the writer (newest last). */
+export const memoryChangeSchema = z.looseObject({
+  at: timestamp,
+  by: z.enum(['ai', 'writer']).catch('ai'),
+  what: z.string().max(500),
+})
+
+export const memoryNodeFileSchema = z.looseObject({
+  formatVersion,
+  id: id('node'),
+  title: z.string().trim().min(1).max(200),
+  state: memoryStateSchema.catch('unfixed'),
+  /** The AI's short summary of where this topic stands (kept current). */
+  summary: z.string().max(4000).catch(''),
+  /** The book it belongs to (null: the whole story). */
+  volumeId: id('volume').nullable().catch(null).default(null),
+  /** "Check here for more": world entries about the same thing (never relied on). */
+  entryIds: z.array(z.string().max(80)).catch([]).default([]),
+  /** Related nodes. */
+  links: z.array(z.string().max(80)).catch([]).default([]),
+  /** The node this grew out of. */
+  parentId: z.string().max(80).nullable().catch(null).default(null),
+  /** The one "Loose ends" node: everything not filed elsewhere. */
+  loose: z.boolean().catch(false).default(false),
+  // One bad point is dropped on its own, never the whole node.
+  points: z
+    .array(z.unknown())
+    .catch([])
+    .default([])
+    .transform((all) =>
+      all.flatMap((x) => {
+        const r = memoryPointSchema.safeParse(x)
+        return r.success ? [r.data] : []
+      }),
+    ),
+  history: z
+    .array(z.unknown())
+    .catch([])
+    .default([])
+    .transform((all) =>
+      all.flatMap((x) => {
+        const r = memoryChangeSchema.safeParse(x)
+        return r.success ? [r.data] : []
+      }),
+    ),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+})
+export type MemoryNodeFile = z.infer<typeof memoryNodeFileSchema>
+
 /* ---------- AI characters from the story (one file each, in the world) ---------- */
 
 /** One thing an adaptive story character picked up from a chapter. */

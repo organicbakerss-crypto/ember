@@ -54,6 +54,8 @@ export interface PromptContext {
   attachments?: { name: string; text: string }[]
   /** Parts of the writer's earlier ChatGPT chats about the story that touch the question. */
   chats?: { where: string; text: string }[]
+  /** Topics from the story's memory that help with the question (as the AI reads them). */
+  memory?: string[]
   /** This conversation carries on a ChatGPT chat: its latest messages, word for word. */
   continuing?: {
     title: string
@@ -109,6 +111,11 @@ export function systemPrompt(context: PromptContext): string {
   if (context.lookup?.passages.length) {
     parts.push(
       `Passages from the story looked up for this question (the writer's own words, with where they are):\n\n${context.lookup.passages.join('\n\n')}`,
+    )
+  }
+  if (context.memory?.length) {
+    parts.push(
+      `From the story's memory (topics the writer and AI have worked out together, kept up to date). "Decided" points are settled: build on them and don't re-argue them. "Proposed" points are still open. Whims are thin ideas the writer wanted kept; don't treat them as plans. Prefer the memory over older chat passages where they disagree:\n\n${context.memory.join('\n\n')}`,
     )
   }
   if (context.continuing) {
