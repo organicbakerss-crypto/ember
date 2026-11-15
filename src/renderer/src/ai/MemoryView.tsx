@@ -293,6 +293,16 @@ export function MemoryView(props: {
               onOpen={setOpen}
               onMove={moveNode}
               onLink={linkNodes}
+              onArrange={() =>
+                void choose(
+                  'Arrange the map again?',
+                  [{ value: 'go', label: 'Arrange again', primary: true }],
+                  'Every circle goes to a fresh place (connected topics close together). Where you put circles yourself is forgotten.',
+                ).then((go) => {
+                  if (go && nodes?.some((n) => n.pos))
+                    void quietly(nodes.filter((n) => n.pos).map((n) => ({ ...n, pos: null })))
+                })
+              }
             />
           ) : (
             <>

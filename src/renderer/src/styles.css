@@ -6576,3 +6576,7 @@ kbd {
   width: auto;
   flex: 0 0 auto;
 }
+/* A long list scrolls; nothing above it gets squashed. */
+.memory-view > *:not(.memory-map) {
+  flex-shrink: 0;
+}
