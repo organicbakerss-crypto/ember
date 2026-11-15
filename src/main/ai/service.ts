@@ -114,6 +114,8 @@ export interface AskInput {
   attachments?: { name: string; text: string }[]
   /** The chapter the writer has open: a story character knows nothing after it. */
   cutoffChapterId?: string | null
+  /** This conversation carries on a chat brought in from ChatGPT (that conversation's id). */
+  continues?: string
   mode: AiMode
   messages: { role: 'user' | 'assistant'; content: string }[]
   scope: {
@@ -163,6 +165,8 @@ const LIMITS = {
     passages: 6,
     chatPieces: 4,
     chatPieceChars: 1200,
+    /** Words of the ChatGPT chat being carried on, from its end, word for word. */
+    continueWords: 1800,
   },
   chatgpt: {
     fullStory: 90000,
@@ -173,6 +177,7 @@ const LIMITS = {
     passages: 16,
     chatPieces: 12,
     chatPieceChars: 4000,
+    continueWords: 25000,
   },
 }
 
@@ -1407,6 +1412,28 @@ export class AiService {
       if (summaries.length)
         lookedAt.push(plural(summaries.length, 'chapter summary', 'chapter summaries'))
       if (passages.length) lookedAt.push(plural(passages.length, 'passage', 'passages'))
+    }
+
+    // Carrying on a ChatGPT chat: its latest messages, word for word.
+    if (input.continues) {
+      const from = await library.readConversation(seriesId, input.continues).catch(() => null)
+      if (from?.source) {
+        const recent: { role: 'user' | 'assistant'; content: string }[] = []
+        let budget = limit.continueWords
+        for (let i = from.messages.length - 1; i >= 0 && budget > 0; i--) {
+          const m = from.messages[i]!
+          const n = words(m.content)
+          // A very long last message is kept from its end.
+          const content =
+            n > budget ? `…${m.content.split(/\s+/).slice(-budget).join(' ')}` : m.content
+          recent.unshift({ role: m.role, content })
+          budget -= n
+        }
+        context.continuing = { title: from.title, recent, total: from.messages.length }
+        lookedAt.push(
+          `the last ${plural(recent.length, 'message', 'messages')} of “${from.title}” from ChatGPT`,
+        )
+      } else lookedAt.push('(the ChatGPT chat this carries on is gone)')
     }
 
     // The writer's earlier ChatGPT chats about this story, when any were brought in.

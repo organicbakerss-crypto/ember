@@ -210,6 +210,7 @@ export function registerIpc(
             {
               ...input,
               characterId: input.conversation.characterId,
+              continues: input.conversation.continues,
               attachments: input.attachmentIds?.length
                 ? await attachments.texts(input.conversation.id, input.attachmentIds)
                 : [],

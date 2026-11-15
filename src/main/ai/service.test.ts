@@ -725,4 +725,58 @@ describe('ChatGPT chats brought in by share link', () => {
     // The imported chat itself is never sent as the conversation.
     expect(fake.requests[0]!.messages).toHaveLength(2)
   })
+
+  it('carries on an imported chat: its latest messages word for word, the rest looked up', async () => {
+    fake = await startFakeOllama(() => 'Picking up from the eye.')
+    const ref = await story()
+    const ai = withPages({})
+    const long = 'filler '.repeat(400).trim()
+    pages.set(
+      LINK,
+      page([
+        { role: 'user', text: 'The vault holds the Saint’s Eye.' },
+        { role: 'assistant', text: 'Then everyone hunts for the Eye.' },
+        ...Array.from({ length: 10 }, (_, i) => ({
+          role: i % 2 ? ('assistant' as const) : ('user' as const),
+          text: `${long} middle ${i}`,
+        })),
+        { role: 'user', text: 'So whoever gets it has to pawn it off.' },
+        { role: 'assistant', text: 'Yes: the pawn shop is the next scene.' },
+      ]),
+    )
+    const imported = await ai.importChat(ref.seriesId, { url: LINK })
+    const r = await ai.ask(
+      {
+        requestId: 'r-cont',
+        seriesId: ref.seriesId,
+        continues: imported.conversationId,
+        mode: 'chat',
+        messages: [{ role: 'user', content: 'Where were we with the Eye?' }],
+        scope: null,
+      },
+      () => {},
+    )
+    const system = fake.requests[0]!.messages[0]!.content
+    expect(system).toContain('carries on the writer')
+    expect(system).toContain('Yes: the pawn shop is the next scene.')
+    expect(system).toContain('middle 9')
+    // Too far back for the local model's share word for word; found by the lookup instead.
+    expect(system).not.toContain('middle 2')
+    expect(system).toContain('The vault holds the Saint’s Eye.')
+    expect(r.lookedAt.join(' ')).toMatch(/the last \d+ messages of “Saga planning”/)
+
+    await lib.deleteConversation(ref.seriesId, imported.conversationId)
+    const gone = await ai.ask(
+      {
+        requestId: 'r-cont2',
+        seriesId: ref.seriesId,
+        continues: imported.conversationId,
+        mode: 'chat',
+        messages: [{ role: 'user', content: 'Hello?' }],
+        scope: null,
+      },
+      () => {},
+    )
+    expect(gone.lookedAt.join(' ')).toContain('is gone')
+  })
 })

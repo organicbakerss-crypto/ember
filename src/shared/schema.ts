@@ -643,6 +643,8 @@ export const conversationFileSchema = z.looseObject({
     })
     .optional()
     .catch(undefined),
+  /** Carries on a chat brought in from ChatGPT (that conversation's id). */
+  continues: z.string().min(1).max(80).optional().catch(undefined),
   title: z.string().max(200),
   createdAt: timestamp,
   updatedAt: timestamp,

@@ -54,6 +54,12 @@ export interface PromptContext {
   attachments?: { name: string; text: string }[]
   /** Parts of the writer's earlier ChatGPT chats about the story that touch the question. */
   chats?: { where: string; text: string }[]
+  /** This conversation carries on a ChatGPT chat: its latest messages, word for word. */
+  continuing?: {
+    title: string
+    recent: { role: 'user' | 'assistant'; content: string }[]
+    total: number
+  }
 }
 
 const GROUNDED = `What you know about the writer's story comes only from what is given below. When it doesn't cover something, say so and say where it might be (a chapter, an entry), rather than guessing; never invent events, names or facts of the story.`
@@ -103,6 +109,14 @@ export function systemPrompt(context: PromptContext): string {
   if (context.lookup?.passages.length) {
     parts.push(
       `Passages from the story looked up for this question (the writer's own words, with where they are):\n\n${context.lookup.passages.join('\n\n')}`,
+    )
+  }
+  if (context.continuing) {
+    const { title, recent, total } = context.continuing
+    parts.push(
+      `This conversation carries on the writer's long ChatGPT conversation “${title}” (${total} messages in all). Below are its latest ${recent.length} messages, word for word, oldest first; the writer's new messages in this conversation follow on from them. Pick up exactly where it left off: keep its decisions, open questions and the way the writer likes to work, and don't make the writer repeat themselves. Earlier parts of it that touch the writer's question, when found, are given further down.\n\n${recent
+        .map((m) => `${m.role === 'user' ? 'Writer' : 'ChatGPT'}:\n<<<\n${m.content}\n>>>`)
+        .join('\n\n')}`,
     )
   }
   if (context.chats?.length) {

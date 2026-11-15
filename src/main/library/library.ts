@@ -2424,6 +2424,7 @@ export class Library {
           updatedAt: c.updatedAt,
           count: c.messages.length,
           ...(c.source ? { imported: { url: c.source.url } } : {}),
+          ...(c.continues ? { continues: c.continues } : {}),
         })
       } catch (err) {
         if (!(err instanceof AppError)) throw err

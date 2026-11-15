@@ -33,6 +33,8 @@ export function ImportedChat(props: {
   /** A newer saved copy of the page (picked or dropped): replaces this chat. */
   onUpdate: (file: File) => void
   onClose: () => void
+  /** Carry on talking, with this chat as the start. */
+  onContinue: () => void
 }) {
   const { chat } = props
   const picker = useRef<HTMLInputElement>(null)
@@ -97,6 +99,13 @@ export function ImportedChat(props: {
             if (file) props.onUpdate(file)
           }}
         />
+        <button
+          className="primary"
+          title="Keep talking where this chat left off. The AI gets its latest messages word for word and looks back through the rest."
+          onClick={props.onContinue}
+        >
+          Continue this chat
+        </button>
         <button onClick={props.onClose}>Close</button>
       </header>
       <p className="muted small imported-chat-note">

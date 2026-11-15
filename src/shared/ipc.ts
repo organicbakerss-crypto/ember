@@ -1471,6 +1471,8 @@ export interface ConversationSummary {
   count: number
   /** Brought in from ChatGPT (read-only), with its share link. */
   imported?: { url: string }
+  /** Carries on that imported chat (its conversation id). */
+  continues?: string
 }
 
 export interface AiStatus {

@@ -52,6 +52,8 @@ interface Thread {
   messages: Message[]
   /** Files attached (their text stays on the computer they were attached on). */
   attachments?: Attached[]
+  /** Carries on an imported ChatGPT chat: its id and title. */
+  continues?: { id: string; title: string }
 }
 
 interface Attached {
@@ -137,6 +139,17 @@ const forModel = (msgs: Message[], nameOf: (id: string) => string) =>
     role: m.role,
     content: by(m) ? `(A second opinion from ${nameOf(by(m)!)}:)\n${m.content}` : m.content,
   }))
+
+/** The imported chat a conversation carries on, as kept in its file. */
+const continuesOf = (c: ConversationFile): Pick<Thread, 'continues'> =>
+  c.continues
+    ? {
+        continues: {
+          id: c.continues,
+          title: typeof c['continuesTitle'] === 'string' ? c['continuesTitle'] : 'a ChatGPT chat',
+        },
+      }
+    : {}
 
 const empty = (characterId = DEFAULT_PERSONA_ID): Thread => ({
   id: null,
@@ -452,6 +465,7 @@ export function AiView(props: {
           characterId: who(c.characterId).id,
           messages: c.messages,
           attachments: attachedOf(c),
+          ...continuesOf(c),
         },
       })
       // Attachments are kept on the computer they were attached on.
@@ -504,8 +518,12 @@ export function AiView(props: {
       id: current.id ?? newId('conversation'),
       mode: into,
       characterId: current.id ? current.characterId : settings.ai.characterId,
-      title:
-        first.replace(/^>.*$/gm, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Conversation',
+      title: current.continues
+        ? `Continuing: ${current.continues.title}`.slice(0, 200)
+        : first.replace(/^>.*$/gm, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Conversation',
+      ...(current.continues
+        ? { continues: current.continues.id, continuesTitle: current.continues.title }
+        : {}),
       createdAt: current.createdAt ?? now,
       updatedAt: now,
       messages: msgs,
@@ -518,6 +536,7 @@ export function AiView(props: {
     characterId: who(c.characterId).id,
     messages: c.messages,
     attachments: attachedOf(c),
+    ...continuesOf(c),
   })
 
   /** Attaches files to the current conversation (their text stays on this computer). */
@@ -1303,6 +1322,23 @@ export function AiView(props: {
             busy={importing}
             onUpdate={(file) => void importFile(file)}
             onClose={() => setImported(null)}
+            onContinue={() => {
+              const chat = imported
+              const going = past.find((c) => c.continues === chat.id)
+              setImported(null)
+              if (going) {
+                void open(going.id)
+                return
+              }
+              setMode('chat')
+              setThreads((t) => ({
+                ...t,
+                chat: {
+                  ...empty(settings.ai.characterId),
+                  continues: { id: chat.id, title: chat.title },
+                },
+              }))
+            }}
           />
         </section>
       )}
@@ -1403,7 +1439,16 @@ export function AiView(props: {
 
         <div className="ai-scroll" ref={scroller} onScroll={onScroll} onMouseUp={onMouseUp}>
           <div className="ai-column">
-            {messages.length === 0 && (
+            {thread.continues && (
+              <div className="ai-continues muted small">
+                Continuing “{thread.continues.title}” from ChatGPT. The AI has its latest messages
+                word for word and looks back through the rest when you ask.{' '}
+                <button className="link" onClick={() => void open(thread.continues!.id)}>
+                  Open the ChatGPT chat
+                </button>
+              </div>
+            )}
+            {messages.length === 0 && !thread.continues && (
               <div className="ai-empty muted">
                 <p>{MODES.find((m) => m.mode === mode)!.hint}</p>
                 <div className="ai-starters">
