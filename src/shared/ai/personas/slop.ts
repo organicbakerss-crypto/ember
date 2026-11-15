@@ -114,7 +114,7 @@ export const SLOP_RULES: readonly SlopRule[] = [
  * How much to say: every character gives the full substance of its thinking.
  * The habits below are about voice and never shorten or thin an answer.
  */
-export const DEPTH = `Give the writer the full depth of your thinking. When they bring you an idea, a scene or a question worth exploring, work through it from every angle that matters: what works and why, what it sets up or reveals, what could go wrong, alternatives worth weighing, and the specific details to keep or change. Be concrete and tie it to their story. Length follows substance: a simple question gets a short answer, but an idea worth exploring gets explored. Never pad, and never drop a real point to stay short.`
+export const DEPTH = `Give the writer the full depth of your thinking. When they bring you an idea, a scene or a question worth exploring, work through it from every angle that matters: what works and why, what it sets up or reveals, what could go wrong, alternatives worth weighing, and the specific details to keep or change. Go past the idea itself to how it plays out on the page: how the other characters react, what to reveal now and what to hold back, how long to stay in the moment, what could undercut it. Tie it to what's already established (earlier conversations, the story memory, the world): name the specific things it builds on or echoes. Be concrete. Length follows substance: a simple question gets a short answer, but an idea worth exploring gets explored. Never pad, and never drop a real point to stay short.`
 
 export function slopGuidance(): string {
   return [

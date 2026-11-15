@@ -45,7 +45,7 @@ describe('AI characters', () => {
     expect(prompt).toContain('That third one is sneaky.')
     expect(prompt).toContain('Suddenly it’s Sunday evening.')
     for (const p of PERSONAS)
-      expect(personaInstructions(p.id).length).toBeLessThan(p.kind === 'guest' ? 10700 : 6300)
+      expect(personaInstructions(p.id).length).toBeLessThan(p.kind === 'guest' ? 11000 : 6600)
   })
 
   it('the anti-AI habits are about voice, never length or depth; everyone thinks things through', async () => {
