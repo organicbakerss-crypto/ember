@@ -56,6 +56,8 @@ interface Thread {
   attachments?: Attached[]
   /** Carries on an imported ChatGPT chat: its id and title. */
   continues?: { id: string; title: string }
+  /** Versions replaced by an edit or resend, kept in the file. */
+  earlier?: ConversationFile['earlier']
 }
 
 interface Attached {
@@ -241,6 +243,8 @@ export function AiView(props: {
   const [past, setPast] = useState<ConversationSummary[]>([])
   const [listOpen, setListOpen] = useState(false)
   const [copied, setCopied] = useState<number | null>(null)
+  /** A message of yours being edited in place: send it and the chat goes on from there. */
+  const [editing, setEditing] = useState<{ i: number; text: string } | null>(null)
   const [replyAt, setReplyAt] = useState<{ x: number; y: number; text: string } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -263,6 +267,13 @@ export function AiView(props: {
     setDraft(asked.draft)
   }
   const thread = threads[mode]
+  // An edit in progress belongs to the conversation it was started in.
+  const editingIn = `${mode}:${thread.id ?? ''}`
+  const [editedIn, setEditedIn] = useState(editingIn)
+  if (editedIn !== editingIn) {
+    setEditedIn(editingIn)
+    setEditing(null)
+  }
   const messages = thread.messages
 
   // Settings can change from another window. Never reuse messages across personalities.
@@ -480,6 +491,7 @@ export function AiView(props: {
           messages: c.messages,
           attachments: attachedOf(c),
           ...continuesOf(c),
+          ...(c.earlier?.length ? { earlier: c.earlier } : {}),
         },
       })
       // Attachments are kept on the computer they were attached on.
@@ -542,6 +554,7 @@ export function AiView(props: {
       updatedAt: now,
       messages: msgs,
       attachments: current.attachments ?? [],
+      ...(current.earlier?.length ? { earlier: current.earlier } : {}),
     }
   }
   const threadOf = (c: ConversationFile): Thread => ({
@@ -551,6 +564,7 @@ export function AiView(props: {
     messages: c.messages,
     attachments: attachedOf(c),
     ...continuesOf(c),
+    ...(c.earlier?.length ? { earlier: c.earlier } : {}),
   })
 
   /** Attaches files to the current conversation (their text stays on this computer). */
@@ -785,7 +799,16 @@ export function AiView(props: {
   }
 
   /** Sends a message (a one-click prompt may pick the mode and how much is read). */
-  const send = async (text: string, as?: { mode?: Mode; reach?: Reach; messages?: Message[] }) => {
+  const send = async (
+    text: string,
+    as?: {
+      mode?: Mode
+      reach?: Reach
+      messages?: Message[]
+      /** Edit or resend: the conversation goes on from this message (what followed is kept aside). */
+      from?: number
+    },
+  ) => {
     const question = text.trim()
     if (!question || busy || worldJob) return
     if (editMode && !as) {
@@ -796,7 +819,21 @@ export function AiView(props: {
     const reads = as?.reach ?? reach
     if (into !== mode) setMode(into)
     if (as?.reach && as.reach !== reach) setReach(as.reach)
-    const current = as?.messages ? { ...threads[into], messages: as.messages } : threads[into]
+    const at = as?.from
+    const base = threads[into]
+    const current =
+      at !== undefined
+        ? {
+            ...base,
+            messages: base.messages.slice(0, at),
+            earlier: [
+              ...(base.earlier ?? []),
+              { at: new Date().toISOString(), from: at, messages: base.messages.slice(at) },
+            ].slice(-30),
+          }
+        : as?.messages
+          ? { ...base, messages: as.messages }
+          : base
     const requestId = newRequestId()
     const scope = await fetchScope(seriesId)
     const kind =
@@ -820,12 +857,13 @@ export function AiView(props: {
             : kind === 'chapter'
               ? `the whole chapter${where}`
               : `${kind === 'selection' ? 'your selection' : 'what was on screen'}${where}, ~${words(scopeText)} words`
-    const content = quote
-      ? `${quote
-          .split('\n')
-          .map((l) => `> ${l}`)
-          .join('\n')}\n\n${question}`
-      : question
+    const content =
+      quote && at === undefined
+        ? `${quote
+            .split('\n')
+            .map((l) => `> ${l}`)
+            .join('\n')}\n\n${question}`
+        : question
     const now = new Date().toISOString()
     const history: Message[] = [...current.messages, { role: 'user', content, at: now, read }]
     const conversation = asFile(into, current, history)
@@ -836,8 +874,11 @@ export function AiView(props: {
         messages: [...history, { role: 'assistant', content: '', at: now, read: null }],
       },
     }))
-    setDraft('')
-    setQuote(null)
+    if (at === undefined) {
+      setDraft('')
+      setQuote(null)
+    }
+    setEditing(null)
     setError(null)
     setBusy({ id: requestId, mode: into })
     stick.current = true
@@ -1164,6 +1205,13 @@ export function AiView(props: {
       j === i ? { ...x, qa: { answers, done: true } } : x,
     )
     void send(answersMessage(found.set, answers, true), { mode, messages: msgs })
+  }
+
+  /** The message of yours an answer replies to (-1 if none). */
+  const lastAsk = (i: number) => {
+    const msgs = threads[mode].messages
+    for (let j = i - 1; j >= 0; j--) if (msgs[j]?.role === 'user') return j
+    return -1
   }
 
   const replyTo = (text: string) => {
@@ -1526,7 +1574,37 @@ export function AiView(props: {
                     </div>
                   )
                 )}
-                {m.content ? (
+                {editing?.i === i ? (
+                  <div className="ai-edit-message">
+                    <textarea
+                      autoFocus
+                      aria-label="Edit your message"
+                      value={editing.text}
+                      rows={Math.min(12, Math.max(3, editing.text.split('\n').length + 1))}
+                      onChange={(e) => setEditing({ i, text: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setEditing(null)
+                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                          e.preventDefault()
+                          void send(editing.text, { mode, from: i })
+                        }
+                      }}
+                    />
+                    <div className="row small">
+                      <button
+                        className="primary"
+                        disabled={!editing.text.trim() || !!busy}
+                        onClick={() => void send(editing.text, { mode, from: i })}
+                      >
+                        Send
+                      </button>
+                      <button onClick={() => setEditing(null)}>Cancel</button>
+                      <span className="muted">
+                        The chat goes on from here; what came after is kept.
+                      </span>
+                    </div>
+                  </div>
+                ) : m.content ? (
                   <div className="ai-text">
                     {(() => {
                       const streaming = !!busy && i === messages.length - 1
@@ -1561,11 +1639,47 @@ export function AiView(props: {
                     {m.role === 'assistant' ? 'Looked at' : 'Read'} {m.read}
                   </div>
                 )}
+                {m.role === 'user' && m.content && editing?.i !== i && (
+                  <div className="ai-actions small">
+                    <button className="link" onClick={() => void copy(i, m.content)}>
+                      {copied === i ? 'Copied' : 'Copy'}
+                    </button>
+                    {!busy && (
+                      <>
+                        <button
+                          className="link"
+                          title="Send this again from here: a new answer (the old one is kept)"
+                          onClick={() => void send(m.content, { mode, from: i })}
+                        >
+                          Resend
+                        </button>
+                        <button
+                          className="link"
+                          title="Change this message and go on from here (what came after is kept)"
+                          onClick={() => setEditing({ i, text: m.content })}
+                        >
+                          Edit
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
                 {m.role === 'assistant' && m.content && !(busy && i === messages.length - 1) && (
                   <div className="ai-actions small">
                     <button className="link" onClick={() => void copy(i, m.content)}>
                       {copied === i ? 'Copied' : 'Copy'}
                     </button>
+                    {!busy && !by(m) && lastAsk(i) >= 0 && (
+                      <button
+                        className="link"
+                        title="Ask again for a new answer (this one is kept)"
+                        onClick={() =>
+                          void send(messages[lastAsk(i)]!.content, { mode, from: lastAsk(i) })
+                        }
+                      >
+                        Try again
+                      </button>
+                    )}
                     <button className="link" onClick={() => replyTo(m.content.slice(0, 400))}>
                       Reply to this
                     </button>

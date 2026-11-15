@@ -61,9 +61,19 @@ export function mergeFile(
 function mergeConversation(b: Json | undefined, m: Obj, t: Obj, from: { device: string }): Merged {
   const mm = Array.isArray(m['messages']) ? m['messages'] : []
   const tm = Array.isArray(t['messages']) ? t['messages'] : []
-  const longer = isPrefix(mm, tm) ? tm : isPrefix(tm, mm) ? mm : null
+  const bm = isObj(b) && Array.isArray(b['messages']) ? b['messages'] : null
+  const longer = isPrefix(mm, tm)
+    ? tm
+    : isPrefix(tm, mm)
+      ? mm
+      : // Edited or resent from a point on one side only (what it replaced is in `earlier`).
+        bm && same(bm, mm)
+        ? tm
+        : bm && same(bm, tm)
+          ? mm
+          : null
   if (longer) {
-    // One side just went further (and maybe the other renamed it).
+    // One side just went further or went another way (and maybe the other renamed it).
     const rest = (o: Obj) => ({ ...o, messages: [] as Json[] })
     const [value, clean] = merge3(isObj(b) ? rest(b) : undefined, rest(m), rest(t))
     return { bytes: encode({ ...(value as Obj), messages: longer }), clean }

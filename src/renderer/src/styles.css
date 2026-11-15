@@ -6598,3 +6598,21 @@ kbd {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   border-radius: 4px;
 }
+
+/* Editing one of your messages in place (the chat goes on from there). */
+.ai-edit-message {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.ai-edit-message textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+.ai-edit-message .row {
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

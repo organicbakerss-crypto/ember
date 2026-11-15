@@ -649,6 +649,18 @@ export const conversationFileSchema = z.looseObject({
   createdAt: timestamp,
   updatedAt: timestamp,
   messages: z.array(conversationMessageSchema),
+  /** Earlier versions, kept when the writer edits or resends from a point (newest last). */
+  earlier: z
+    .array(
+      z.looseObject({
+        at: timestamp,
+        /** Where the conversation went another way (the index of the message replaced). */
+        from: z.number().int().min(0),
+        messages: z.array(conversationMessageSchema),
+      }),
+    )
+    .optional()
+    .catch(undefined),
 })
 export type ConversationFile = z.infer<typeof conversationFileSchema>
 

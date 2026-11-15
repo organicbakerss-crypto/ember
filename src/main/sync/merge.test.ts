@@ -132,6 +132,19 @@ describe('merging a file changed on both computers', () => {
     expect(copy!.rel).toBe(`ai/${String(other['id'])}.json`)
   })
 
+  it('a conversation edited from a point on one computer only keeps the edit and what it replaced', () => {
+    const msg = (content: string) => ({ role: 'user', content, at: '2026-01-01', read: null })
+    const base = { id: 'cnv_1', title: 'Names', messages: [msg('hi'), msg('answer')] }
+    const earlier = [{ at: '2026-01-02', from: 0, messages: base.messages }]
+    const mine = { ...base, title: 'Renamed' }
+    const theirs = { ...base, messages: [msg('hello'), msg('new answer')], earlier }
+    const { value, copy } = merge('series/s1', 'ai/cnv_1.json', base, mine, theirs)
+    expect(copy).toBeUndefined()
+    expect(value['messages']).toEqual(theirs.messages)
+    expect(value['earlier']).toEqual(earlier)
+    expect(value['title']).toBe('Renamed')
+  })
+
   it('gives up on files that are not JSON', () => {
     expect(mergeFile(WORLD, 'board.json', null, enc({}), new Uint8Array([1, 2]), from)).toBeNull()
   })
