@@ -46,6 +46,8 @@ const draftSchema = z.looseObject({ seriesId: z.string(), parts: z.array(z.unkno
 
 export class MemoryBuilds {
   private readonly running = new Map<string, AbortController>()
+  /** Each running build, so a request that comes as it finishes can wait for it. */
+  private readonly runs = new Map<string, Promise<void>>()
 
   constructor(
     private readonly deps: {
@@ -179,7 +181,7 @@ export class MemoryBuilds {
         .slice(0, 280),
     }))
     await this.save(draft)
-    void this.run(draft)
+    this.track(draft)
     return draft
   }
 
@@ -188,6 +190,7 @@ export class MemoryBuilds {
    * (`mine`: the writer's marks; left out, the AI's).
    */
   async read(seriesId: string, mine?: number[]): Promise<MemoryDraft> {
+    await this.settled(seriesId)
     if (this.running.has(seriesId))
       throw new AppError('conflict', 'Still sorting; wait or stop it.')
     const draft = await this.draft(seriesId)
@@ -217,12 +220,13 @@ export class MemoryBuilds {
     draft.state = 'running'
     draft.error = null
     await this.save(draft)
-    void this.run(draft)
+    this.track(draft)
     return draft
   }
 
   /** Carries on a stopped build, or reads skipped parts the writer wants included. */
   async resume(seriesId: string, include: number[] = []): Promise<MemoryDraft> {
+    await this.settled(seriesId)
     if (this.running.has(seriesId)) return (await this.draft(seriesId))!
     const draft = await this.draft(seriesId)
     if (!draft) throw new AppError('not-found', 'There’s no “Make nodes” draft.')
@@ -236,12 +240,32 @@ export class MemoryBuilds {
     draft.state = 'running'
     draft.error = null
     await this.save(draft)
-    void this.run(draft)
+    this.track(draft)
     return draft
+  }
+
+  /**
+   * A build that has saved its result but not quite let go: wait for it, so
+   * a request made right then isn't turned away.
+   */
+  private async settled(seriesId: string): Promise<void> {
+    const run = this.runs.get(seriesId)
+    if (!run) return
+    const raw = await fs.promises
+      .readFile(this.library.memoryDraftFile(seriesId), 'utf8')
+      .catch(() => '')
+    if (!/"state":\s*"running"/.test(raw)) await run
   }
 
   cancel(seriesId: string): void {
     this.running.get(seriesId)?.abort()
+  }
+
+  private track(draft: MemoryDraft): void {
+    const run = this.run(draft).finally(() => {
+      if (this.runs.get(draft.seriesId) === run) this.runs.delete(draft.seriesId)
+    })
+    this.runs.set(draft.seriesId, run)
   }
 
   private async run(draft: MemoryDraft): Promise<void> {
@@ -256,7 +280,7 @@ export class MemoryBuilds {
       const names = await this.storyNames(draft.seriesId, series.worldId ?? null)
       const parts = cutParts(await this.messages(draft), PART_WORDS[provider.kind])
       if ((draft.phase ?? 'reading') === 'sorting') {
-        await this.sort(draft, parts, provider, controller.signal, {
+        await this.sort(draft, parts, provider, controller, {
           storyName: series.name,
           books,
           names,
@@ -336,7 +360,7 @@ export class MemoryBuilds {
       draft.error = err instanceof Error ? err.message : 'Something went wrong.'
       await this.save(draft).catch(() => {})
     } finally {
-      this.running.delete(draft.seriesId)
+      if (this.running.get(draft.seriesId) === controller) this.running.delete(draft.seriesId)
     }
   }
 
@@ -368,9 +392,10 @@ export class MemoryBuilds {
     draft: MemoryDraft,
     parts: SourceMessage[][],
     provider: MemoryProvider,
-    signal: AbortSignal,
+    controller: AbortController,
     story: { storyName: string; books: string[]; names: string[] },
   ): Promise<void> {
+    const signal = controller.signal
     for (const info of draft.parts) {
       if (info.label) continue
       if (signal.aborted) break
@@ -457,6 +482,7 @@ export class MemoryBuilds {
 
   /** Adds the draft (or the chosen topics of it) to the story's memory, then clears it. */
   async keep(seriesId: string, only?: string[]): Promise<{ nodes: number }> {
+    await this.settled(seriesId)
     if (this.running.has(seriesId)) throw new AppError('conflict', 'Stop the build first.')
     const draft = await this.draft(seriesId)
     if (!draft) throw new AppError('not-found', 'There’s no “Make nodes” draft.')
