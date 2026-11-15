@@ -406,7 +406,8 @@ export function registerIpc(
       await host.current.saveConversation(input.seriesId, input.conversation)
       return null
     },
-    'ai:importChat': (input) => ai.importChat(input.seriesId, input.url),
+    'ai:importChat': (input) =>
+      ai.importChat(input.seriesId, input.html ? { html: input.html } : { url: input.url! }),
     'ai:deleteConversation': async (input) => {
       await host.current.deleteConversation(input.seriesId, input.conversationId)
       return null

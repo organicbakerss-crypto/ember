@@ -34,6 +34,16 @@ export function shareIdOf(url: string): string | null {
   return SHARE_URL.exec(url.trim())?.[1]?.toLowerCase() ?? null
 }
 
+/** The share id a saved share page names (its own address is in it), or null. */
+export function shareIdInHtml(html: string): string | null {
+  const m =
+    /rel="canonical" href="https:\/\/chatgpt\.com\/share\/([0-9a-f-]{36})"/i.exec(html) ??
+    /https:\/\/chatgpt\.com\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(
+      html,
+    )
+  return m?.[1]?.toLowerCase() ?? null
+}
+
 /** The page address to read for a share id. */
 export const shareUrl = (shareId: string) => `https://chatgpt.com/share/${shareId}`
 
@@ -217,7 +227,8 @@ export function sharedChatFromHtml(html: string, shareId: string): SharedChat {
     shareId,
     title: title.trim().slice(0, 180),
     createdAt,
-    updatedAt: iso(data['update_time'], last),
+    // When the writer last talked in it (not when the link was made).
+    updatedAt: last,
     messages,
   }
 }

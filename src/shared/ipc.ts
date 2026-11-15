@@ -1124,7 +1124,14 @@ export const ipcInputs = {
   'ai:conversation': z.object({ seriesId: id('series'), conversationId: id('conversation') }),
   'ai:saveConversation': z.object({ seriesId: id('series'), conversation: conversationFileSchema }),
   /** Brings in a ChatGPT chat from its share link (again: updates the one brought in before). */
-  'ai:importChat': z.object({ seriesId: id('series'), url: z.string().trim().min(1).max(500) }),
+  'ai:importChat': z
+    .object({
+      seriesId: id('series'),
+      url: z.string().trim().min(1).max(500).optional(),
+      /** A share page the writer saved from their browser (read on this computer). */
+      html: z.string().max(150_000_000).optional(),
+    })
+    .refine((x) => !!x.url !== !!x.html, 'A link or a saved page'),
   'ai:deleteConversation': z.object({
     seriesId: id('series'),
     conversationId: id('conversation'),

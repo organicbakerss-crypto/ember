@@ -47,6 +47,7 @@ import {
   SharedChatError,
   chatPieces,
   pickChatPieces,
+  shareIdInHtml,
   shareIdOf,
   shareUrl,
   sharedChatFromHtml,
@@ -336,32 +337,31 @@ export class AiService {
    */
   async importChat(
     seriesId: string,
-    url: string,
+    from: { url: string } | { html: string },
   ): Promise<{ conversationId: string; title: string; messages: number; updated: boolean }> {
-    const shareId = shareIdOf(url)
-    if (!shareId) {
-      throw new AppError(
-        'invalid-input',
-        'That isn’t a ChatGPT share link. In ChatGPT, use Share → Copy link; it starts with https://chatgpt.com/share/.',
-      )
-    }
     const library = this.options.host.current
     await library.getSeries(seriesId)
-    const fetchImpl = this.options.fetchImpl ?? fetch
+    let shareId: string | null
     let html: string
-    try {
-      const res = await fetchImpl(shareUrl(shareId), {
-        headers: { accept: 'text/html', 'accept-language': 'en' },
-        signal: AbortSignal.timeout(60_000),
-      })
-      if (res.status === 404)
-        throw new AppError('not-found', 'That shared chat is gone (the link was deleted).')
-      if (!res.ok)
-        throw new AppError('internal', `ChatGPT didn’t send the chat (HTTP ${res.status}).`)
-      html = await res.text()
-    } catch (err) {
-      if (err instanceof AppError) throw err
-      throw new AppError('internal', 'Couldn’t reach ChatGPT. Check the internet connection.')
+    if ('html' in from) {
+      // A page the writer saved from their browser: nothing is fetched.
+      html = from.html
+      shareId = shareIdInHtml(html)
+      if (!shareId) {
+        throw new AppError(
+          'invalid-input',
+          'That file isn’t a saved ChatGPT shared chat. Open the share link in your browser, press Ctrl+S, and drop the saved file here.',
+        )
+      }
+    } else {
+      shareId = shareIdOf(from.url)
+      if (!shareId) {
+        throw new AppError(
+          'invalid-input',
+          'That isn’t a ChatGPT share link. In ChatGPT, use Share → Copy link; it starts with https://chatgpt.com/share/.',
+        )
+      }
+      html = await this.fetchSharePage(shareId)
     }
     let chat
     try {
@@ -397,6 +397,34 @@ export class AiService {
       messages: chat.messages.length,
       updated: !!existing,
     }
+  }
+
+  /** A share page from ChatGPT; when it won't send it, says how to bring the chat in instead. */
+  private async fetchSharePage(shareId: string): Promise<string> {
+    const instead =
+      'Instead: open the link in your browser, press Ctrl+S to save the page, and drop the saved file here (or use Choose file).'
+    const fetchImpl = this.options.fetchImpl ?? fetch
+    let res: Response
+    try {
+      res = await fetchImpl(shareUrl(shareId), {
+        headers: { accept: 'text/html', 'accept-language': 'en' },
+        signal: AbortSignal.timeout(60_000),
+      })
+    } catch {
+      throw new AppError('internal', `Couldn’t reach ChatGPT. ${instead}`)
+    }
+    if (!res.ok) {
+      throw new AppError(
+        res.status === 404 ? 'not-found' : 'internal',
+        `ChatGPT didn’t let the app read that link (the link may also have been deleted). ${instead}`,
+      )
+    }
+    const html = await res.text()
+    // An answer without the chat in it (a check page, a sign-in page): the same advice.
+    if (!html.includes('streamController.enqueue(')) {
+      throw new AppError('internal', `ChatGPT sent a page without the chat. ${instead}`)
+    }
+    return html
   }
 
   /** The pieces of a story's imported ChatGPT chats that touch the question. */

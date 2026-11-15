@@ -624,7 +624,7 @@ describe('ChatGPT chats brought in by share link', () => {
         { role: 'assistant', text: 'It started at Kestrel Bay during the flood.' },
       ]),
     )
-    const first = await ai.importChat(ref.seriesId, `${LINK}?utm=x`)
+    const first = await ai.importChat(ref.seriesId, { url: `${LINK}?utm=x` })
     expect(first).toMatchObject({ title: 'Saga planning', messages: 2, updated: false })
     const list = await lib.listConversations(ref.seriesId)
     expect(list).toHaveLength(1)
@@ -642,7 +642,7 @@ describe('ChatGPT chats brought in by share link', () => {
         { role: 'assistant', text: 'Mara carries the curse now.' },
       ]),
     )
-    const again = await ai.importChat(ref.seriesId, LINK)
+    const again = await ai.importChat(ref.seriesId, { url: LINK })
     expect(again).toMatchObject({
       conversationId: first.conversationId,
       messages: 4,
@@ -650,18 +650,46 @@ describe('ChatGPT chats brought in by share link', () => {
     })
     expect(await lib.listConversations(ref.seriesId)).toHaveLength(1)
 
-    await expect(ai.importChat(ref.seriesId, 'https://example.com/share/x')).rejects.toThrow(
-      /isn’t a ChatGPT share link/,
-    )
     await expect(
-      ai.importChat(ref.seriesId, 'https://chatgpt.com/share/00000000-0000-0000-0000-000000000000'),
-    ).rejects.toThrow(/gone/)
+      ai.importChat(ref.seriesId, { url: 'https://example.com/share/x' }),
+    ).rejects.toThrow(/isn’t a ChatGPT share link/)
+    await expect(
+      ai.importChat(ref.seriesId, {
+        url: 'https://chatgpt.com/share/00000000-0000-0000-0000-000000000000',
+      }),
+    ).rejects.toThrow(/save the page/)
     pages.set(LINK, new Response('<html>changed</html>'))
-    await expect(ai.importChat(ref.seriesId, LINK)).rejects.toThrow(/no conversation/)
+    await expect(ai.importChat(ref.seriesId, { url: LINK })).rejects.toThrow(/without the chat/)
     // A failed read leaves the chat brought in before as it was.
     expect((await lib.readConversation(ref.seriesId, first.conversationId)).messages).toHaveLength(
       4,
     )
+  })
+
+  it('brings a chat in from a page saved in the browser, and updates the same one later', async () => {
+    fake = await startFakeOllama(() => 'ok')
+    const ref = await story()
+    const ai = withPages({})
+    const saved = (n: number) =>
+      sharePage(
+        'Saga planning',
+        Array.from({ length: n }, (_, i) => ({
+          role: i % 2 ? ('assistant' as const) : ('user' as const),
+          text: `Message ${i}`,
+        })),
+      ).replace('<head>', `<head><link rel="canonical" href="${LINK}"/>`)
+    const first = await ai.importChat(ref.seriesId, { html: saved(4) })
+    expect(first).toMatchObject({ messages: 4, updated: false })
+    const again = await ai.importChat(ref.seriesId, { html: saved(10) })
+    expect(again).toMatchObject({
+      conversationId: first.conversationId,
+      messages: 10,
+      updated: true,
+    })
+    expect((await lib.readConversation(ref.seriesId, first.conversationId)).source?.url).toBe(LINK)
+    await expect(
+      ai.importChat(ref.seriesId, { html: '<html><body>My notes</body></html>' }),
+    ).rejects.toThrow(/isn’t a saved ChatGPT shared chat/)
   })
 
   it('looks through imported chats when answering, and says which chat it used', async () => {
@@ -677,7 +705,7 @@ describe('ChatGPT chats brought in by share link', () => {
         { role: 'assistant', text: 'Odo eats bread and fish.' },
       ]),
     )
-    await ai.importChat(ref.seriesId, LINK)
+    await ai.importChat(ref.seriesId, { url: LINK })
     const r = await ai.ask(
       {
         requestId: 'r-chats',

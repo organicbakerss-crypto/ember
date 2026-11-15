@@ -304,11 +304,11 @@ export function AiView(props: {
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [imported, setImported] = useState<ConversationFile | null>(null)
-  const importChat = async (url: string) => {
+  const importChat = async (from: { url: string } | { html: string }) => {
     setImporting(true)
     setImportError(null)
     try {
-      const done = await api.invoke('ai:importChat', { seriesId, url })
+      const done = await api.invoke('ai:importChat', { seriesId, ...from })
       setAdding(null)
       refreshPast()
       setImported(
@@ -324,6 +324,43 @@ export function AiView(props: {
     } finally {
       setImporting(false)
     }
+  }
+
+  /** A share page saved from the browser (dropped, or picked with Choose file). */
+  const importFile = async (file: File | undefined) => {
+    if (!file) return
+    if (!/\.(html?|htm)$/i.test(file.name) && !file.type.includes('html')) {
+      setImportError(
+        'That isn’t a saved web page. Open the share link in your browser, press Ctrl+S, and drop the .html file here.',
+      )
+      return
+    }
+    if (file.size > 150_000_000) {
+      setImportError('That file is too big to be a saved chat.')
+      return
+    }
+    await importChat({ html: await file.text() })
+  }
+  const filePicker = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const dropHandlers = {
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes('Files')) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      setDragging(true)
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false)
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!e.dataTransfer.files.length) return
+      e.preventDefault()
+      setDragging(false)
+      // The add box opens, so a problem with the file shows there.
+      setAdding((a) => a ?? '')
+      void importFile(e.dataTransfer.files[0])
+    },
   }
 
   const refreshPast = () => {
@@ -1106,7 +1143,11 @@ export function AiView(props: {
   }
 
   const history = (
-    <aside className={`ai-history ${listOpen ? 'open' : ''}`} aria-label="Past conversations">
+    <aside
+      className={`ai-history ${listOpen ? 'open' : ''}`}
+      aria-label="Past conversations"
+      {...dropHandlers}
+    >
       <div className="ai-history-head">
         <strong className="small">Conversations</strong>
         <button
@@ -1136,7 +1177,7 @@ export function AiView(props: {
           className="ai-import"
           onSubmit={(e) => {
             e.preventDefault()
-            if (adding.trim()) void importChat(adding)
+            if (adding.trim()) void importChat({ url: adding })
           }}
         >
           <input
@@ -1161,9 +1202,33 @@ export function AiView(props: {
               {importError}
             </p>
           )}
+          <div className={`ai-import-drop ${dragging ? 'over' : ''}`}>
+            <span>Or drop a saved page here</span>
+            <button
+              type="button"
+              className="link"
+              disabled={importing}
+              onClick={() => filePicker.current?.click()}
+            >
+              Choose file…
+            </button>
+            <input
+              ref={filePicker}
+              type="file"
+              accept=".html,.htm,text/html"
+              hidden
+              aria-label="Saved ChatGPT page"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                void importFile(file)
+              }}
+            />
+          </div>
           <p className="muted small">
-            In ChatGPT: Share → Copy link. The whole chat comes in, however long. You can delete the
-            link in ChatGPT afterwards.
+            In ChatGPT: Share → Copy link, and paste it above. If the app can’t get the chat that
+            way, open the link in your browser, press Ctrl+S to save the page, and drop the saved
+            file here. The whole chat comes in, however long.
           </p>
         </form>
       )}
@@ -1224,7 +1289,7 @@ export function AiView(props: {
               ☰
             </button>
           </header>
-          {importError && adding === null && (
+          {importError && (
             <p className="error small" role="alert">
               {importError}
             </p>
@@ -1232,7 +1297,7 @@ export function AiView(props: {
           <ImportedChat
             chat={imported}
             busy={importing}
-            onUpdate={() => void importChat(imported.source!.url)}
+            onUpdate={(file) => void importFile(file)}
             onClose={() => setImported(null)}
           />
         </section>

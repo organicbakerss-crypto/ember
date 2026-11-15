@@ -1,8 +1,23 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { ConversationFile } from '@shared/schema'
 import { parse } from './markdown'
 import { Blocks } from './FormattedAnswer'
 import { formatWhen } from '../components/TrashPage'
+
+/** "23 Oct – 6 Nov 2026": the dates of the first and last messages. */
+function span(first: string | undefined, last: string | undefined): string {
+  if (!first || !last) return ''
+  const a = new Date(first)
+  const b = new Date(last)
+  const day = (d: Date, year: boolean) =>
+    d.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      ...(year ? { year: 'numeric' } : {}),
+    })
+  if (a.toDateString() === b.toDateString()) return day(b, true)
+  return `${day(a, a.getFullYear() !== b.getFullYear())} – ${day(b, true)}`
+}
 
 /** Messages shown at first, and how many more each "Show earlier" adds. */
 const PAGE = 40
@@ -15,10 +30,12 @@ const PAGE = 40
 export function ImportedChat(props: {
   chat: ConversationFile
   busy: boolean
-  onUpdate: () => void
+  /** A newer saved copy of the page (picked or dropped): replaces this chat. */
+  onUpdate: (file: File) => void
   onClose: () => void
 }) {
   const { chat } = props
+  const picker = useRef<HTMLInputElement>(null)
   const [shown, setShown] = useState(PAGE)
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
@@ -40,23 +57,46 @@ export function ImportedChat(props: {
   const earlier = found ? 0 : Math.max(0, chat.messages.length - shown)
 
   return (
-    <div className="imported-chat">
+    <div
+      className="imported-chat"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+      }}
+      onDrop={(e) => {
+        const file = e.dataTransfer.files[0]
+        if (!file) return
+        e.preventDefault()
+        props.onUpdate(file)
+      }}
+    >
       <header className="imported-chat-head">
         <div>
           <strong>{chat.title}</strong>
           <div className="muted small">
-            From ChatGPT · {chat.messages.length.toLocaleString()} messages · last message{' '}
-            {formatWhen(chat.updatedAt)} · read-only
+            From ChatGPT · {chat.messages.length.toLocaleString()} messages,{' '}
+            {span(chat.messages[0]?.at, chat.messages.at(-1)?.at)} · read-only
           </div>
         </div>
         <span className="status-spacer" />
         <button
           disabled={props.busy}
-          title="Read the share link again (after you've updated it in ChatGPT)"
-          onClick={props.onUpdate}
+          title="After more chatting: in ChatGPT use Share → Update link, open the link in your browser, save the page (Ctrl+S), and pick that file. You can also drop it here."
+          onClick={() => picker.current?.click()}
         >
-          {props.busy ? 'Updating…' : 'Update from link'}
+          {props.busy ? 'Updating…' : 'Update…'}
         </button>
+        <input
+          ref={picker}
+          type="file"
+          accept=".html,.htm,text/html"
+          hidden
+          aria-label="Newer saved page"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (file) props.onUpdate(file)
+          }}
+        />
         <button onClick={props.onClose}>Close</button>
       </header>
       <p className="muted small imported-chat-note">

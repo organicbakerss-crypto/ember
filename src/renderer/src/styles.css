@@ -6181,3 +6181,22 @@ kbd {
 .imported-chat-scroll .ai-message {
   margin: 0.75rem 0;
 }
+.ai-import-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.6rem;
+  border: 1px dashed var(--border, currentColor);
+  border-radius: 6px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.ai-import-drop.over {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.ai-main[hidden] {
+  display: none;
+}
