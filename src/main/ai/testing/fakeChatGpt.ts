@@ -26,13 +26,18 @@ export interface FakeChatGpt {
   expireTokens: boolean
   /** Answer 400 to a request that sets a thinking level (a model that can't choose). */
   rejectEffort: boolean
+  /** Answers by a rule instead (return null for the usual answer). */
+  answer: ((instructions: string, last: string) => string | null) | null
   close(): Promise<void>
 }
 
 export async function startFakeChatGpt(): Promise<FakeChatGpt> {
   const requests: FakeChatGpt['requests'] = []
   const state = { expire: false, refreshes: 0, nonce: '', clientId: 'oaiapp_test_client' }
-  const fake = { rejectEffort: false }
+  const fake: { rejectEffort: boolean; answer: FakeChatGpt['answer'] } = {
+    rejectEffort: false,
+    answer: null,
+  }
   const server = createServer((req, res) => {
     let raw = ''
     req.on('data', (chunk) => (raw += chunk))
@@ -116,9 +121,13 @@ export async function startFakeChatGpt(): Promise<FakeChatGpt> {
         const input = body.input as { role: string; content: string }[]
         const last = input[input.length - 1]?.content ?? ''
         const editing = String(body.instructions ?? '').includes('You edit one chapter')
-        const reply = editing
-          ? last.slice(last.indexOf('”:') + 4).replace(/teh/g, 'the')
-          : 'From ChatGPT: ' + last.slice(-40)
+        const custom = fake.answer?.(String(body.instructions ?? ''), last) ?? null
+        const reply =
+          custom !== null
+            ? custom
+            : editing
+              ? last.slice(last.indexOf('”:') + 4).replace(/teh/g, 'the')
+              : 'From ChatGPT: ' + last.slice(-40)
         res.writeHead(200, { 'content-type': 'text/event-stream' })
         for (let i = 0; i < reply.length; i += 8) {
           res.write(
@@ -145,6 +154,12 @@ export async function startFakeChatGpt(): Promise<FakeChatGpt> {
     },
     set expireTokens(value) {
       state.expire = value
+    },
+    get answer() {
+      return fake.answer
+    },
+    set answer(value) {
+      fake.answer = value
     },
     get rejectEffort() {
       return fake.rejectEffort

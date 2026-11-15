@@ -156,3 +156,104 @@ describe('ChatGPT, signed in directly', () => {
     expect(refresh.length).toBeGreaterThan(0)
   }, 10000)
 })
+
+describe('the story memory keeps up as you talk (ChatGPT)', () => {
+  it('adds what the exchange settled, links topics, and can be undone', async () => {
+    const { ai, browser, settings } = await setup()
+    await ai.chatgptSignIn(browser)
+    dir = dir || fs.mkdtempSync(join(os.tmpdir(), 'mem-'))
+    const { Library } = await import('../library/library')
+    const lib = await Library.open(join(dir, 'lib'), { create: true })
+    ;(ai as unknown as { options: { host: { current: unknown } } }).options.host.current = lib
+    const series = await lib.createSeries({ name: 'Casino', world: { mode: 'none' } })
+    const T0 = new Date().toISOString()
+    const mk = (
+      i: number,
+      title: string,
+      points: { text: string; state: 'fixed' | 'unfixed' }[],
+    ) => ({
+      formatVersion: 1,
+      id: `nod_${String(i).padStart(16, '0')}`,
+      title,
+      state: 'fixed' as const,
+      summary: '',
+      volumeId: null,
+      entryIds: [],
+      links: [],
+      parentId: null,
+      loose: false,
+      pos: null,
+      points: points.map((p, j) => ({
+        id: `pnt_${String(i * 10 + j).padStart(16, '0')}`,
+        ...p,
+        sources: [],
+        createdAt: T0,
+        updatedAt: T0,
+      })),
+      history: [],
+      createdAt: T0,
+      updatedAt: T0,
+    })
+    await lib.saveNodes(series.id, [
+      mk(1, 'The Saint’s Eye', [{ text: 'The dealer is the fence', state: 'unfixed' }]),
+      mk(2, 'Casino heist', [{ text: 'It happens on a holiday', state: 'fixed' }]),
+    ])
+    let asked = ''
+    fake!.answer = (instructions, last) => {
+      if (!instructions.includes('keep the story memory')) return null
+      asked = instructions
+      expect(last).toContain('yes, the dealer is the fence')
+      return JSON.stringify({
+        points: [
+          {
+            node: 'T1',
+            text: 'The Eye is hidden in a slot machine',
+            state: 'fixed',
+            quote: 'slot machine',
+          },
+          { node: 'LOOSE', text: 'A song plays during the heist', state: 'whim' },
+        ],
+        states: [{ point: 'P1', state: 'fixed', why: 'the writer agreed' }],
+        links: [{ a: 'T1', b: 'T2' }],
+      })
+    }
+    const change = await ai.updateMemory({
+      seriesId: series.id,
+      conversationId: 'cnv_aaaaaaaaaaaaaaaa',
+      conversationTitle: 'Planning',
+      question: 'Ok yes, the dealer is the fence. And the Eye is hidden in a slot machine.',
+      answer: 'Great: the dealer fences it, and the slot machine hides it.',
+    })
+    expect(asked).toContain('The dealer is the fence')
+    expect(change!.summary).toContain('linked “The Saint’s Eye” and “Casino heist”')
+    let nodes = (await lib.listNodes(series.id)).nodes
+    const eye = nodes.find((n) => n.title === 'The Saint’s Eye')!
+    expect(eye.points.map((p) => [p.text, p.state])).toEqual([
+      ['The dealer is the fence', 'fixed'],
+      ['The Eye is hidden in a slot machine', 'fixed'],
+    ])
+    expect(eye.links).toEqual([mk(2, '', []).id])
+    expect(eye.history.at(-1)!.what).toContain('From “Planning”')
+    expect(nodes.find((n) => n.loose)!.points[0]!.text).toBe('A song plays during the heist')
+    const call = fake!.requests.filter((r) => r.path === '/responses').at(-1)!
+    expect(call.body['reasoning']).toEqual({ effort: 'low' }) // a quick step, never in the way
+
+    // Undo puts everything back as it was (the new Loose ends goes too).
+    expect(await ai.memoryLog.undo(series.id, change!.id)).toEqual({ undone: 3, skipped: [] })
+    nodes = (await lib.listNodes(series.id)).nodes
+    expect(nodes.map((n) => n.title).sort()).toEqual(['Casino heist', 'The Saint’s Eye'])
+    expect(nodes.find((n) => n.title === 'The Saint’s Eye')!.points).toHaveLength(1)
+
+    // Turned off: nothing happens.
+    settings.memoryAuto = false
+    expect(
+      await ai.updateMemory({
+        seriesId: series.id,
+        conversationId: 'cnv_aaaaaaaaaaaaaaaa',
+        conversationTitle: 'Planning',
+        question: 'yes, the dealer is the fence',
+        answer: 'ok',
+      }),
+    ).toBeNull()
+  })
+})

@@ -957,6 +957,22 @@ function AiSettingsSection() {
               </span>
             </label>
           )}
+          {chatgpt && status?.account && (
+            <label className="radio">
+              <input
+                type="checkbox"
+                checked={ai.memoryAuto}
+                onChange={(e) => set({ memoryAuto: e.target.checked })}
+              />
+              Keep the story memory up to date as you talk
+              <span className="muted small">
+                {' '}
+                After each answer the AI adds what’s new to the story’s memory: ideas, decisions,
+                what you agreed to or turned down, and links between topics. A line under the chat
+                says what changed, with Undo.
+              </span>
+            </label>
+          )}
 
           {!chatgpt && (
             <>

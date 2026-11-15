@@ -223,6 +223,26 @@ export function registerIpc(
           // Adaptive characters pick up lasting views from the writer's message (when on).
           const said = [...input.messages].reverse().find((m) => m.role === 'user')?.content
           if (said) void ai.learn(said).catch(() => {})
+          // The story memory catches up with this exchange, in the background (never in the way).
+          if (said && !input.conversation.source)
+            void ai
+              .updateMemory({
+                seriesId: input.seriesId,
+                conversationId: input.conversation.id,
+                conversationTitle: input.conversation.title,
+                question: said,
+                answer: job.text,
+              })
+              .then((change) => {
+                if (change)
+                  broadcast('memory:updated', {
+                    seriesId: input.seriesId,
+                    conversationId: input.conversation.id,
+                    changeId: change.id,
+                    summary: change.summary,
+                  })
+              })
+              .catch(() => {})
           const now = new Date().toISOString()
           const looked = outcome.value?.lookedAt ?? []
           await host.current.saveConversation(input.seriesId, {
@@ -417,6 +437,7 @@ export function registerIpc(
         broadcast('ai:progress', { requestId: input.requestId, text }),
       ),
     'memory:tidyApply': (input) => ai.applyTidy(input.seriesId, input.kept),
+    'memory:undo': (input) => ai.memoryLog.undo(input.seriesId, input.changeId),
     'memory:lastUsed': (input) => {
       const used = ai.lastUsed.get(input.seriesId)
       return used ? { nodeIds: used.ids, at: used.at } : null

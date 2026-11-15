@@ -1137,6 +1137,8 @@ export const ipcInputs = {
   'memory:delete': z.object({ seriesId: id('series'), nodeId: id('node') }),
   /** The topics the last answer read (and when), for the map. */
   'memory:lastUsed': z.object({ seriesId: id('series') }),
+  /** Puts back the topics an automatic memory update changed. */
+  'memory:undo': z.object({ seriesId: id('series'), changeId: z.string().min(1).max(80) }),
   /** Tidy up: the AI suggests links, merges, moves, filing and splits (progress as ai:progress). */
   'memory:tidy': z.object({ seriesId: id('series'), requestId: z.string().min(1).max(80) }),
   /** Makes the tidy-up suggestions the writer kept. */
@@ -1458,6 +1460,7 @@ export interface IpcResults {
   'memory:save': null
   'memory:delete': null
   'memory:lastUsed': { nodeIds: string[]; at: number } | null
+  'memory:undo': { undone: number; skipped: string[] }
   'memory:tidy': { suggestions: TidySuggestion[]; topics: number }
   'memory:tidyApply': { changed: number; removed: number }
   'memory:make': MemoryDraft
@@ -1555,6 +1558,8 @@ export interface IpcEvents {
   'ai:scopeRequest': { requestId: string; seriesId: string }
   /** What a long AI job is doing now ("Reading part 2 of 3…"). */
   'ai:progress': { requestId: string; text: string }
+  /** The memory was brought up to date after an answer in this conversation. */
+  'memory:updated': { seriesId: string; conversationId: string; changeId: string; summary: string }
   /** An answer read these memory topics (the map glows them). */
   'memory:used': { seriesId: string; nodeIds: string[] }
   /** A "Make nodes" draft changed (null: kept or discarded). */

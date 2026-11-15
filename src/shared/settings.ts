@@ -143,6 +143,8 @@ export interface AiSettings {
   model: string
   /** The ChatGPT model ("" = the first it offers). */
   chatgptModel: string
+  /** Keep the story memory up to date after each answer (ChatGPT). */
+  memoryAuto: boolean
   /** How hard ChatGPT thinks before answering in the AI pane ('auto': the model decides). */
   chatgptThinking: 'auto' | 'low' | 'medium' | 'high'
   /** The AI character (a regular partner or a guest star); independent of the model. */
@@ -185,6 +187,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   model: '',
   chatgptModel: '',
   chatgptThinking: 'auto',
+  memoryAuto: true,
   characterId: 'nora',
   lastPartnerId: 'nora',
   worldChanges: 'apply',

@@ -38,6 +38,8 @@ export interface DraftNode {
   /** The book's name as the AI gave it (matched to a book when kept). */
   book: string | null
   points: DraftPoint[]
+  /** Topics it's related to (keys or titles, as the AI gave them): links when kept. */
+  related?: string[]
 }
 
 export interface DraftPart {
@@ -151,6 +153,7 @@ const replySchema = z.object({
             state: stateField,
             summary: z.string().max(2000).catch('').default(''),
             book: z.string().max(200).nullable().catch(null).default(null),
+            related: z.array(z.string().max(200)).max(20).catch([]).default([]),
             points: z
               .array(z.unknown())
               .catch([])
@@ -239,7 +242,7 @@ ${STATE_RULES}
 A topic is something you'd look up later: a character, a place, an object, a plot thread, a scene, a rule of the world, how the writer likes to work. Points are specific and self-contained (they make sense on their own, with names, not "he" or "that idea"). Don't repeat a point the topic already has unless its state changed. Keep the writer's own ideas and wording; don't invent anything. Things that fit the instruction but no topic go in "loose".
 
 Reply ONLY with JSON:
-{"relevant":true,"reason":"","nodes":[{"node":"existing key, or empty for new","title":"short topic name","state":"fixed|unfixed|whim|rejected","summary":"one or two sentences: where this topic stands now","book":"book name or null","points":[{"text":"…","state":"fixed|unfixed|whim|rejected","quote":"a few exact words from the part it comes from"}]}],"loose":[{"text":"…","state":"…","quote":"…"}]}`,
+{"relevant":true,"reason":"","nodes":[{"node":"existing key, or empty for new","title":"short topic name","state":"fixed|unfixed|whim|rejected","summary":"one or two sentences: where this topic stands now","book":"book name or null","related":["keys or titles of other topics it's connected to (the same characters, plot thread, object, scene)"],"points":[{"text":"…","state":"fixed|unfixed|whim|rejected","quote":"a few exact words from the part it comes from"}]}],"loose":[{"text":"…","state":"…","quote":"…"}]}`,
     },
     { role: 'user', content: partText(input.part) },
   ]
@@ -320,6 +323,7 @@ export function mergePart(
         summary: n.summary,
         book: n.book,
         points: [],
+        related: [],
       }
       draft.nodes.push(node)
     } else {
@@ -328,6 +332,11 @@ export function mergePart(
       if (n.book) node.book = n.book
     }
     addPoints(node.points, n.points, part)
+    for (const r of n.related) {
+      if (!r.trim() || norm(r) === norm(node.title) || r === node.key) continue
+      node.related ??= []
+      if (!node.related.some((x) => norm(x) === norm(r))) node.related.push(r.trim())
+    }
   }
   addPoints(draft.loose, reply.loose, part)
 }
@@ -416,6 +425,32 @@ export function keepDraft(
       createdAt: at,
       updatedAt: at,
     })
+  }
+  // Related topics become links (to topics kept now or already in the memory).
+  const idOf = new Map<string, string>()
+  for (const d of draft.nodes) {
+    const kept =
+      d.existingId ??
+      [...out.values()].find((n) => n.title === d.title.slice(0, 200) && !n.loose)?.id
+    if (!kept || !out.has(kept)) continue
+    idOf.set(d.key, kept)
+    idOf.set(norm(d.title), kept)
+  }
+  for (const e of existing) if (!e.loose && e.state !== 'rejected') idOf.set(e.id, e.id)
+  for (const e of existing)
+    if (!e.loose && e.state !== 'rejected' && !idOf.has(norm(e.title)))
+      idOf.set(norm(e.title), e.id)
+  for (const d of draft.nodes) {
+    const from = idOf.get(d.key)
+    const node = from ? out.get(from) : undefined
+    if (!node) continue
+    for (const r of d.related ?? []) {
+      const to = idOf.get(r) ?? idOf.get(norm(r))
+      if (!to || to === node.id) continue
+      const other = out.get(to) ?? existing.find((e) => e.id === to)
+      if (node.links.includes(to) || other?.links.includes(node.id)) continue
+      node.links.push(to)
+    }
   }
   if (draft.loose.length && (!only || only.has('loose'))) {
     const base = existing.find((e) => e.loose)

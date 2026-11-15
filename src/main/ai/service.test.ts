@@ -1046,6 +1046,46 @@ describe('the story memory', () => {
     expect(trash.some((f) => f.includes(mk(2, '').id))).toBe(true)
   })
 
+  it('undo leaves a topic alone if it changed since', async () => {
+    const ref = await story()
+    const { MemoryLog } = await import('./memoryLog')
+    const log = new MemoryLog({ current: lib } as unknown as LibraryHost)
+    const T0 = '2026-11-15T10:00:00.000Z'
+    const before = {
+      formatVersion: 1,
+      id: 'nod_aaaaaaaaaaaaaaaa',
+      title: 'Eye',
+      state: 'fixed' as const,
+      summary: 'old',
+      volumeId: null,
+      entryIds: [],
+      links: [],
+      parentId: null,
+      loose: false,
+      pos: null,
+      points: [],
+      history: [],
+      createdAt: T0,
+      updatedAt: T0,
+    }
+    const after = { ...before, summary: 'new', updatedAt: '2026-11-15T11:00:00.000Z' }
+    await lib.saveNodes(ref.seriesId, [after])
+    await log.add(ref.seriesId, {
+      id: 'c1',
+      at: T0,
+      conversationId: 'c',
+      summary: 's',
+      before: [{ id: before.id, node: before }],
+      after: [{ id: before.id, updatedAt: after.updatedAt }],
+    })
+    // The writer edits it afterwards.
+    await lib.saveNodes(ref.seriesId, [
+      { ...after, summary: 'mine', updatedAt: '2026-11-15T12:00:00.000Z' },
+    ])
+    expect(await log.undo(ref.seriesId, 'c1')).toEqual({ undone: 0, skipped: ['Eye'] })
+    expect((await lib.listNodes(ref.seriesId)).nodes[0]!.summary).toBe('mine')
+  })
+
   it('never overwrites a memory file it can’t read', async () => {
     const ref = await story()
     const dir = join(lib.paths.seriesDir(ref.seriesId), 'memory')

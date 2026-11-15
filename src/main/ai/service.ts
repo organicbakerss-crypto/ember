@@ -56,6 +56,8 @@ import {
 } from '@shared/ai/sharedChat'
 import { newId } from '@shared/ids'
 import { MemoryBuilds } from './memoryBuild'
+import { MemoryLog } from './memoryLog'
+import { applyUpdate, describeChanges, parseUpdate, updateMessages } from '@shared/memory/update'
 import {
   applyTidy as applyTidyChanges,
   parseTidy,
@@ -227,6 +229,8 @@ export class AiService {
   private readonly chatgpt: ChatGpt
   /** "Make nodes" builds for the story memory. */
   readonly memory: MemoryBuilds
+  /** Recent automatic memory changes, for undo (this computer only). */
+  readonly memoryLog: MemoryLog
   /** The memory topics the last answer read, per story (for the map's glow). */
   readonly lastUsed = new Map<string, { ids: string[]; at: number }>()
 
@@ -247,6 +251,7 @@ export class AiService {
       saveLearned?: (characterId: string, notes: string[]) => Promise<void>
     },
   ) {
+    this.memoryLog = new MemoryLog(options.host)
     this.memory = new MemoryBuilds({
       host: options.host,
       client: () => this.client(),
@@ -610,6 +615,75 @@ export class AiService {
     await library.saveNodes(seriesId, result.save)
     for (const id of result.remove) await library.deleteNode(seriesId, id)
     return { changed: result.save.length, removed: result.remove.length }
+  }
+
+  /**
+   * After an answer: brings the story's memory up to date with that exchange
+   * (ChatGPT only; when on). Changes are made straight away, listed on each
+   * topic and kept in the change log so they can be undone.
+   */
+  async updateMemory(input: {
+    seriesId: string
+    conversationId: string
+    conversationTitle: string
+    question: string
+    answer: string
+  }): Promise<{ id: string; summary: string } | null> {
+    const settings = await this.options.settings()
+    if (!settings.enabled || settings.provider !== 'chatgpt' || !settings.memoryAuto) return null
+    const library = this.options.host.current
+    const { nodes, problems } = await library.listNodes(input.seriesId)
+    // A memory file that can't be read is never written over: wait until it's fixed.
+    if (problems.length) return null
+    const provider = await this.client()
+    const series = await library.getSeries(input.seriesId)
+    // Topics this exchange touches show their points; the rest by title and summary.
+    const used = this.lastUsed.get(input.seriesId)?.ids ?? []
+    const terms = searchTerms(`${input.question}\n${input.answer}`)
+    const touched = new Set([
+      ...used,
+      ...pickByWords(nodes, terms, 10).map((p) => p.id),
+      ...nodes.filter((n) => n.loose).map((n) => n.id),
+    ])
+    const { text, keys } = tidyText(nodes, touched)
+    const reply = parseUpdate(
+      await provider.chat({
+        messages: updateMessages({
+          storyName: series.name,
+          memory: text,
+          question: input.question,
+          answer: input.answer,
+        }),
+        json: true,
+        temperature: 0.2,
+        quick: true,
+      }),
+    )
+    if (!reply) return null
+    const at = new Date().toISOString()
+    const result = applyUpdate(nodes, reply, keys, {
+      conversationId: input.conversationId,
+      title: input.conversationTitle,
+      at,
+      quote: '',
+    })
+    if (!result.save.length) return null
+    const before = result.save.map((n) => ({
+      id: n.id,
+      node: result.created.includes(n.id) ? null : (nodes.find((x) => x.id === n.id) ?? null),
+    }))
+    await library.saveNodes(input.seriesId, result.save)
+    const summary = describeChanges(result.what) || 'summaries brought up to date'
+    const id = `chg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    await this.memoryLog.add(input.seriesId, {
+      id,
+      at,
+      conversationId: input.conversationId,
+      summary,
+      before,
+      after: result.save.map((n) => ({ id: n.id, updatedAt: n.updatedAt })),
+    })
+    return { id, summary }
   }
 
   /** The pieces of a story's imported ChatGPT chats that touch the question. */

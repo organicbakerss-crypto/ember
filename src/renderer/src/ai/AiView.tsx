@@ -319,6 +319,15 @@ export function AiView(props: {
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [imported, setImported] = useState<ConversationFile | null>(null)
+  /** The memory's last automatic update for a conversation, shown under the chat with Undo. */
+  const [memoryNote, setMemoryNote] = useState<{
+    conversationId: string
+    changeId: string
+    summary: string
+  } | null>(null)
+  useIpcEvent('memory:updated', (e) => {
+    if (e.seriesId === seriesId) setMemoryNote(e)
+  })
   /** The story's memory, open in place of the chat (optionally making nodes from a chat). */
   const [memory, setMemory] = useState<{ makeFrom: string | null } | null>(null)
   const importChat = async (from: { url: string } | { html: string }) => {
@@ -1656,6 +1665,41 @@ export function AiView(props: {
             }}
           >
             {error && <p className="error small">{error}</p>}
+            {memoryNote && memoryNote.conversationId === thread.id && (
+              <p className="ai-memory-note muted small" role="status">
+                Memory: {memoryNote.summary}.{' '}
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => {
+                    const note = memoryNote
+                    setMemoryNote(null)
+                    void api
+                      .invoke('memory:undo', { seriesId, changeId: note.changeId })
+                      .then((r) =>
+                        toast(
+                          r.skipped.length
+                            ? `Undone, except ${r.skipped.map((t) => `“${t}”`).join(', ')} (changed since).`
+                            : 'Memory change undone.',
+                        ),
+                      )
+                      .catch((err: unknown) => toast(describeError(err).message))
+                  }}
+                >
+                  Undo
+                </button>{' '}
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => {
+                    setMemory({ makeFrom: null })
+                    setMemoryNote(null)
+                  }}
+                >
+                  See the memory
+                </button>
+              </p>
+            )}
             {quote && (
               <div className="ai-quote small">
                 <blockquote>{quote}</blockquote>
