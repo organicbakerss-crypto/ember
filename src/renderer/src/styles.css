@@ -6378,3 +6378,43 @@ kbd {
 .memory-head button {
   white-space: nowrap;
 }
+.memory-timeline {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.memory-timeline > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  margin: 0 0 0.3rem;
+  border-left: 4px solid var(--border);
+  background: color-mix(in srgb, var(--border) 18%, transparent);
+  border-radius: 4px;
+}
+.memory-timeline > li.mine {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.memory-timeline > li > label {
+  flex: 1;
+}
+.memory-label {
+  font-weight: 600;
+}
+.memory-timeline-parts {
+  flex-basis: 100%;
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0 0 0 1.6rem;
+}
+.memory-timeline-parts li {
+  padding: 0.3rem 0;
+}
+.memory-identity {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--accent);
+}

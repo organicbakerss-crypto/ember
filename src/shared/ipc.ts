@@ -1136,6 +1136,8 @@ export const ipcInputs = {
     seriesId: id('series'),
     conversationIds: z.array(id('conversation')).min(1).max(50),
     instruction: z.string().max(2000),
+    /** What the writer says about their story, to tell it apart in a chat about several. */
+    clues: z.string().max(4000).default(''),
     from: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -1146,6 +1148,11 @@ export const ipcInputs = {
       .nullable(),
   }),
   'memory:draft': z.object({ seriesId: id('series') }),
+  /** After sorting: makes nodes from the parts marked as the writer's story. */
+  'memory:read': z.object({
+    seriesId: id('series'),
+    mine: z.array(z.number().int().min(0)).max(100000).optional(),
+  }),
   /** Carries on a stopped build, reading skipped parts the writer picked too. */
   'memory:continue': z.object({
     seriesId: id('series'),
@@ -1402,6 +1409,7 @@ export interface IpcResults {
   'memory:delete': null
   'memory:make': MemoryDraft
   'memory:draft': MemoryDraft | null
+  'memory:read': MemoryDraft
   'memory:continue': MemoryDraft
   'memory:stop': null
   'memory:keep': { nodes: number }

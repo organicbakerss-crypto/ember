@@ -9,7 +9,13 @@ import { dirname } from 'node:path'
 import { z } from 'zod'
 import {
   cutParts,
+  identifyMessages,
   keepDraft,
+  knownLabels,
+  labelSummary,
+  parseIdentify,
+  parseSort,
+  sortMessages,
   mergePart,
   parsePartReply,
   partMessages,
@@ -115,6 +121,8 @@ export class MemoryBuilds {
     seriesId: string
     conversationIds: string[]
     instruction: string
+    /** What the writer says about their story, to tell it apart. */
+    clues?: string
     from: string | null
     to: string | null
   }): Promise<MemoryDraft> {
@@ -138,6 +146,9 @@ export class MemoryBuilds {
       from: input.from,
       to: input.to,
       forcedParts: [],
+      clues: (input.clues ?? '').trim(),
+      // First the whole conversation is sorted by story; nodes come after the writer checks it.
+      phase: 'sorting',
       parts: [],
       nodes: [],
       loose: [],
@@ -167,6 +178,44 @@ export class MemoryBuilds {
         .trim()
         .slice(0, 280),
     }))
+    await this.save(draft)
+    void this.run(draft)
+    return draft
+  }
+
+  /**
+   * After sorting: makes nodes from the parts marked as the writer's story
+   * (`mine`: the writer's marks; left out, the AI's).
+   */
+  async read(seriesId: string, mine?: number[]): Promise<MemoryDraft> {
+    if (this.running.has(seriesId))
+      throw new AppError('conflict', 'Still sorting; wait or stop it.')
+    const draft = await this.draft(seriesId)
+    if (!draft) throw new AppError('not-found', 'There’s no “Make nodes” draft.')
+    if (mine) {
+      const set = new Set(mine)
+      for (const part of draft.parts) {
+        const now = set.has(part.index)
+        if (now !== !!part.mine) part.mineByWriter = true
+        part.mine = now
+      }
+    }
+    for (const part of draft.parts) {
+      if (part.mine) {
+        part.status = 'pending'
+        part.reason = ''
+      } else {
+        part.status = 'skipped'
+        part.reason = part.label
+          ? `Sorted as “${part.label}”${part.about ? `: ${part.about}` : ''}`
+          : 'Not marked as your story.'
+      }
+    }
+    if (!draft.parts.some((p) => p.mine))
+      throw new AppError('invalid-input', 'Mark at least one stretch as your story first.')
+    draft.phase = 'reading'
+    draft.state = 'running'
+    draft.error = null
     await this.save(draft)
     void this.run(draft)
     return draft
@@ -204,12 +253,16 @@ export class MemoryBuilds {
       const snapshot = await this.library.snapshot()
       const books =
         snapshot.series.find((s) => s.id === series.id)?.volumes.map((v) => v.name) ?? []
-      const names = series.worldId
-        ? ((await this.library.world.view(series.worldId).catch(() => null))?.entries.map(
-            (e) => e.name,
-          ) ?? [])
-        : []
+      const names = await this.storyNames(draft.seriesId, series.worldId ?? null)
       const parts = cutParts(await this.messages(draft), PART_WORDS[provider.kind])
+      if ((draft.phase ?? 'reading') === 'sorting') {
+        await this.sort(draft, parts, provider, controller.signal, {
+          storyName: series.name,
+          books,
+          names,
+        })
+        return
+      }
       const existing = (await this.library.listNodes(draft.seriesId)).nodes
       for (const info of draft.parts) {
         if (info.status !== 'pending') continue
@@ -240,7 +293,9 @@ export class MemoryBuilds {
           part,
           index: info.index,
           total: draft.parts.length,
-          forced: draft.forcedParts.includes(info.index),
+          // Parts the writer's story was found in (or they marked) are read for it, never skipped.
+          forced: draft.forcedParts.includes(info.index) || !!info.mine,
+          identity: [draft.identity, draft.clues].filter(Boolean).join(' '),
         })
         let reply = null
         for (let attempt = 0; attempt < 2 && !reply; attempt++) {
@@ -262,7 +317,7 @@ export class MemoryBuilds {
         if (!reply) {
           info.status = 'failed'
           info.reason ||= 'The AI’s answer couldn’t be read.'
-        } else if (!reply.relevant && !draft.forcedParts.includes(info.index)) {
+        } else if (!reply.relevant && !draft.forcedParts.includes(info.index) && !info.mine) {
           info.status = 'skipped'
           info.reason = reply.reason || 'Didn’t fit what you asked for.'
         } else {
@@ -283,6 +338,121 @@ export class MemoryBuilds {
     } finally {
       this.running.delete(draft.seriesId)
     }
+  }
+
+  /** Names from the story's chapters (titles, POVs) and its world: clues for telling it apart. */
+  private async storyNames(seriesId: string, worldId: string | null): Promise<string[]> {
+    const names = new Set<string>()
+    if (worldId) {
+      const view = await this.library.world.view(worldId).catch(() => null)
+      for (const e of view?.entries ?? []) names.add(e.name)
+    }
+    const snapshot = await this.library.snapshot()
+    for (const v of snapshot.series.find((s) => s.id === seriesId)?.volumes ?? []) {
+      const outline = await this.library.getOutline(seriesId, v.id).catch(() => null)
+      for (const c of Object.values(outline?.chapters ?? {})) {
+        if (c.title) names.add(c.title)
+        for (const p of c.povs ?? []) if (p.name) names.add(p.name)
+        if (c.pov) names.add(c.pov)
+      }
+    }
+    return [...names].slice(0, 400)
+  }
+
+  /**
+   * Pass 1: labels every part by the story or project it's about, then (with
+   * the whole conversation in view) decides which labels are the writer's
+   * story. Stops for the writer to check.
+   */
+  private async sort(
+    draft: MemoryDraft,
+    parts: SourceMessage[][],
+    provider: MemoryProvider,
+    signal: AbortSignal,
+    story: { storyName: string; books: string[]; names: string[] },
+  ): Promise<void> {
+    for (const info of draft.parts) {
+      if (info.label) continue
+      if (signal.aborted) break
+      const part = parts[info.index]
+      if (!part) continue
+      let sorted = null
+      for (let attempt = 0; attempt < 2 && !sorted; attempt++) {
+        try {
+          sorted = parseSort(
+            await provider.chat({
+              messages: sortMessages({
+                part,
+                index: info.index,
+                total: draft.parts.length,
+                labels: knownLabels(draft.parts),
+              }),
+              json: true,
+              temperature: 0.1,
+              signal,
+            }),
+          )
+        } catch (err) {
+          if (signal.aborted) break
+          info.reason = err instanceof Error ? err.message.slice(0, 300) : 'The AI didn’t answer.'
+        }
+      }
+      if (signal.aborted) break
+      if (sorted) {
+        info.label = sorted.label
+        info.about = sorted.about
+        info.names = sorted.names
+        info.reason = ''
+      } else {
+        info.label = 'not sorted'
+        info.reason ||= 'The AI’s answer couldn’t be read.'
+      }
+      await this.save(draft)
+    }
+    if (signal.aborted) {
+      draft.state = 'stopped'
+      draft.error = 'Stopped while sorting. Continue to finish it.'
+      await this.save(draft)
+      return
+    }
+    // The whole conversation in view: which labels are the writer's story.
+    const labels = labelSummary(draft.parts)
+    const found = await (async () => {
+      try {
+        return parseIdentify(
+          await provider.chat({
+            messages: identifyMessages({
+              instruction: draft.instruction,
+              clues: draft.clues ?? '',
+              ...story,
+              labels,
+            }),
+            json: true,
+            temperature: 0.1,
+            signal,
+          }),
+        )
+      } catch {
+        return null
+      }
+    })()
+    const story_ = story.storyName.toLowerCase()
+    const known = new Set(story.names.map((n) => n.toLowerCase()))
+    for (const part of draft.parts) {
+      if (part.mineByWriter) continue
+      const byAi = found?.labels[part.label ?? '']
+      // Without the AI's call: a label named like the story, or sharing its names.
+      part.mine =
+        byAi ??
+        (!!part.label &&
+          (part.label.toLowerCase().includes(story_) ||
+            (part.names ?? []).some((n) => known.has(n.toLowerCase()))))
+    }
+    draft.identity = found?.identity ?? ''
+    draft.phase = 'sorted'
+    draft.state = 'done'
+    draft.error = null
+    await this.save(draft)
   }
 
   /** Adds the draft (or the chosen topics of it) to the story's memory, then clears it. */

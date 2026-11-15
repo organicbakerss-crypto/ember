@@ -50,6 +50,13 @@ export interface DraftPart {
   reason: string
   /** The start of the part, for the writer to check a skip. */
   preview: string
+  /** Pass 1: which story or project the part is about (the AI's label), and what's in it. */
+  label?: string
+  about?: string
+  names?: string[]
+  /** Whether it's about the writer's story (the AI's call, or the writer's when they changed it). */
+  mine?: boolean
+  mineByWriter?: boolean
 }
 
 export interface MemoryDraft {
@@ -60,6 +67,15 @@ export interface MemoryDraft {
   to: string | null
   /** Parts the writer asked to include even though they were skipped. */
   forcedParts: number[]
+  /** What the writer said about their story, to tell it apart ("Josh, Rodney, a heist…"). */
+  clues?: string
+  /**
+   * sorting: pass 1 (what each part is about); sorted: waiting for the writer
+   * to check which parts are theirs; reading: pass 2 (making nodes).
+   */
+  phase?: 'sorting' | 'sorted' | 'reading'
+  /** Pass 1's picture of the writer's story, given to pass 2. */
+  identity?: string
   parts: DraftPart[]
   nodes: DraftNode[]
   loose: DraftPoint[]
@@ -195,6 +211,8 @@ export function partMessages(input: {
   total: number
   /** The writer asked for this part to be read even though it looked off-topic. */
   forced: boolean
+  /** Pass 1's picture of the writer's story (and their own clues). */
+  identity?: string
 }): { role: 'system' | 'user'; content: string }[] {
   const known = input.known.length
     ? input.known
@@ -210,6 +228,7 @@ The story: “${input.storyName}”${input.books.length > 1 ? ` (books: ${input.
 Names in its world: ${input.names.slice(0, 200).join(', ') || '(none listed)'}.
 
 The writer's instruction for what to take: «${input.instruction || 'everything about this story'}»
+${input.identity ? `What the writer's story is (worked out from the whole conversation): ${input.identity}\n` : ''}
 ${input.forced ? 'The writer asked for this part to be read even if it looks off-topic: take whatever in it fits the instruction.' : 'A conversation may cover other stories or other things entirely. If nothing in this part fits the instruction, reply {"relevant":false,"reason":"…one short sentence…","nodes":[],"loose":[]}.'}
 
 Topics already in the memory (key | title | state | summary). Add to one of these when the part is about it (use its key in "node"); make a new one only for a new topic:
@@ -423,4 +442,154 @@ export function keepDraft(
     out.set(node.id, node)
   }
   return [...out.values()]
+}
+
+/* ---------- pass 1: sorting the conversation by story ---------- */
+
+/** Labels seen so far, with a few of their names, so the AI keeps using the same ones. */
+export function knownLabels(parts: DraftPart[]): string {
+  const by = new Map<string, Set<string>>()
+  for (const p of parts) {
+    if (!p.label) continue
+    const names = by.get(p.label) ?? new Set<string>()
+    for (const n of p.names ?? []) if (names.size < 12) names.add(n)
+    by.set(p.label, names)
+  }
+  return [...by].map(([label, names]) => `- ${label}: ${[...names].join(', ')}`).join('\n')
+}
+
+/** Pass 1 for one part: which story or project it's about, and the names in it. */
+export function sortMessages(input: {
+  part: SourceMessage[]
+  index: number
+  total: number
+  labels: string
+}): { role: 'system' | 'user'; content: string }[] {
+  return [
+    {
+      role: 'system',
+      content: `You're sorting a long conversation between a writer and an assistant by what each part is about. A conversation like this can cover several of the writer's stories, other projects, or nothing in particular. This is part ${input.index + 1} of ${input.total}.
+
+Give the part a short label for the story or project it's about, reusing a label below when it's the same one (the same characters, places or plot, even if a title isn't mentioned). Make a new label only for something new. Use "general" for talk that isn't about any story (writing advice, the app, small talk).
+
+Labels so far (with names seen in them):
+${input.labels || '(none yet)'}
+
+Reply ONLY with JSON: {"label":"…","about":"one short line: what this part is about","names":["character, place and thing names in it"]}`,
+    },
+    { role: 'user', content: partText(input.part) },
+  ]
+}
+
+const sortSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  about: z.string().max(300).catch('').default(''),
+  names: z.array(z.string().trim().min(1).max(80)).max(40).catch([]).default([]),
+})
+
+export function parseSort(text: string): z.infer<typeof sortSchema> | null {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start < 0 || end <= start) return null
+  try {
+    const r = sortSchema.safeParse(JSON.parse(text.slice(start, end + 1)))
+    return r.success ? r.data : null
+  } catch {
+    return null
+  }
+}
+
+/** Pass 1, at the end: with the whole conversation sorted, which labels are the writer's story. */
+export function identifyMessages(input: {
+  instruction: string
+  clues: string
+  storyName: string
+  books: string[]
+  /** Names from the story's chapters and world. */
+  names: string[]
+  labels: { label: string; parts: number; names: string[]; about: string[] }[]
+}): { role: 'system' | 'user'; content: string }[] {
+  return [
+    {
+      role: 'system',
+      content: `A writer's long conversation has been sorted into labelled stretches. Decide which labels are about the story the writer wants: they may be the same story under different labels (one from before it had a name, say).
+
+The writer wants: «${input.instruction || 'everything about this story'}»
+The story in their writing app is called “${input.storyName}”${input.books.length > 1 ? ` (books: ${input.books.join(', ')})` : ''}.
+${input.clues ? `What the writer says about it: ${input.clues}\n` : ''}Names in its chapters and world: ${input.names.slice(0, 150).join(', ') || '(none yet)'}
+
+Reply ONLY with JSON: {"identity":"a few sentences: what the writer's story is, its main characters, places and things, so someone could recognise a passage about it","labels":{"label":true or false}}`,
+    },
+    {
+      role: 'user',
+      content: input.labels
+        .map(
+          (l) =>
+            `${l.label} (${l.parts} parts) — names: ${l.names.slice(0, 25).join(', ')} — about: ${l.about.slice(0, 6).join(' / ')}`,
+        )
+        .join('\n'),
+    },
+  ]
+}
+
+const identifySchema = z.object({
+  identity: z.string().max(3000).catch('').default(''),
+  labels: z.record(z.string(), z.boolean().catch(false)).catch({}),
+})
+
+export function parseIdentify(text: string): z.infer<typeof identifySchema> | null {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start < 0 || end <= start) return null
+  try {
+    const r = identifySchema.safeParse(JSON.parse(text.slice(start, end + 1)))
+    return r.success ? r.data : null
+  } catch {
+    return null
+  }
+}
+
+/** Every label with how many parts, its names and what it's about (for the identify step). */
+export function labelSummary(
+  parts: DraftPart[],
+): { label: string; parts: number; names: string[]; about: string[] }[] {
+  const by = new Map<
+    string,
+    { label: string; parts: number; names: Set<string>; about: string[] }
+  >()
+  for (const p of parts) {
+    if (!p.label) continue
+    const x = by.get(p.label) ?? { label: p.label, parts: 0, names: new Set(), about: [] }
+    x.parts++
+    for (const n of p.names ?? []) x.names.add(n)
+    if (p.about && x.about.length < 8) x.about.push(p.about)
+    by.set(p.label, x)
+  }
+  return [...by.values()]
+    .sort((a, b) => b.parts - a.parts)
+    .map((x) => ({ ...x, names: [...x.names] }))
+}
+
+/** Runs of neighbouring parts with the same label, for the writer to check as a timeline. */
+export function stretches(
+  parts: DraftPart[],
+): { label: string; mine: boolean; from: number; to: number; firstAt: string; lastAt: string }[] {
+  const out: ReturnType<typeof stretches> = []
+  for (const p of parts) {
+    const label = p.label ?? '(not sorted)'
+    const last = out[out.length - 1]
+    if (last && last.label === label && last.mine === !!p.mine) {
+      last.to = p.index
+      last.lastAt = p.lastAt
+    } else
+      out.push({
+        label,
+        mine: !!p.mine,
+        from: p.index,
+        to: p.index,
+        firstAt: p.firstAt,
+        lastAt: p.lastAt,
+      })
+  }
+  return out
 }

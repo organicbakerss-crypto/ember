@@ -418,6 +418,7 @@ export function registerIpc(
     },
     'memory:make': (input) => ai.memory.start(input),
     'memory:draft': (input) => ai.memory.draft(input.seriesId),
+    'memory:read': (input) => ai.memory.read(input.seriesId, input.mine),
     'memory:continue': (input) => ai.memory.resume(input.seriesId, input.include),
     'memory:stop': (input) => {
       ai.memory.cancel(input.seriesId)

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ConversationSummary, LibraryProblem } from '@shared/ipc'
 import type { MemoryNodeFile, MemoryState } from '@shared/schema'
-import type { MemoryDraft } from '@shared/memory/build'
+import { stretches, type MemoryDraft } from '@shared/memory/build'
 import { api, describeError, useIpcEvent } from '../api'
 import { useOverlays } from '../components/overlays'
 
@@ -144,16 +144,20 @@ export function MemoryView(props: {
       )}
 
       {draft ? (
-        <DraftPanel
-          draft={draft}
-          seriesId={seriesId}
-          onOpenConversation={props.onOpenConversation}
-          onDone={(kept) => {
-            if (kept) toast(kept)
-            setMaking(false)
-            load()
-          }}
-        />
+        draft.phase === 'sorting' || draft.phase === 'sorted' ? (
+          <SortPanel draft={draft} seriesId={seriesId} onDone={() => setMaking(false)} />
+        ) : (
+          <DraftPanel
+            draft={draft}
+            seriesId={seriesId}
+            onOpenConversation={props.onOpenConversation}
+            onDone={(kept) => {
+              if (kept) toast(kept)
+              setMaking(false)
+              load()
+            }}
+          />
+        )
       ) : making ? (
         <MakeForm
           key={storyName}
@@ -433,6 +437,7 @@ function MakeForm(props: {
       ),
   )
   const [instruction, setInstruction] = useState(`Only the ideas for “${props.storyName}”`)
+  const [clues, setClues] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [busy, setBusy] = useState(false)
@@ -450,6 +455,7 @@ function MakeForm(props: {
             seriesId: props.seriesId,
             conversationIds: [...picked],
             instruction,
+            clues,
             from: from || null,
             to: to || null,
           })
@@ -499,6 +505,21 @@ function MakeForm(props: {
           onChange={(e) => setInstruction(e.target.value)}
         />
       </label>
+      <label>
+        What your story has in it <span className="muted small">(optional)</span>
+        <textarea
+          aria-label="What your story has in it"
+          rows={2}
+          placeholder="Main characters, places, the plot in a line: helps tell it apart in a chat about several stories"
+          value={clues}
+          onChange={(e) => setClues(e.target.value)}
+        />
+      </label>
+      <p className="muted small">
+        First the whole chat is sorted by which story each part is about, so early parts are judged
+        with what comes later. You check the sorting, then nodes are made from your story’s parts
+        only.
+      </p>
       <div className="row small memory-dates">
         <label>
           From{' '}
@@ -710,6 +731,148 @@ function DraftPanel(props: {
             Read the ticked parts too
           </button>
         </details>
+      )}
+    </div>
+  )
+}
+
+/** Pass 1: sorting the conversation by story, then the writer checks which stretches are theirs. */
+function SortPanel(props: { draft: MemoryDraft; seriesId: string; onDone: () => void }) {
+  const { draft, seriesId } = props
+  const [mine, setMine] = useState<Set<number>>(
+    () => new Set(draft.parts.filter((p) => p.mine).map((p) => p.index)),
+  )
+  const [shown, setShown] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const sorting = draft.phase === 'sorting'
+  const running = draft.state === 'running'
+  const labelled = draft.parts.filter((p) => p.label).length
+  const run = (p: Promise<unknown>) =>
+    p.catch((err: unknown) => setError(describeError(err).message))
+  // The AI's marks, as the draft has them once sorting is done (until the writer changes them).
+  const [seen, setSeen] = useState(draft.phase)
+  if (seen !== draft.phase) {
+    setSeen(draft.phase)
+    setMine(new Set(draft.parts.filter((p) => p.mine).map((p) => p.index)))
+  }
+  const runs = stretches(draft.parts.map((p) => ({ ...p, mine: mine.has(p.index) })))
+  const setRange = (from: number, to: number, on: boolean) =>
+    setMine((s) => {
+      const next = new Set(s)
+      for (let i = from; i <= to; i++) {
+        if (on) next.add(i)
+        else next.delete(i)
+      }
+      return next
+    })
+  const words = draft.parts.filter((p) => mine.has(p.index)).reduce((n, p) => n + p.words, 0)
+  return (
+    <div className="memory-draft memory-sort">
+      <h3>Make nodes{draft.instruction ? `: ${draft.instruction}` : ''}</h3>
+      {sorting ? (
+        <>
+          <p className="small" role="status">
+            Step 1 of 2: sorting the chat by story · part {labelled} of {draft.parts.length}
+          </p>
+          <progress max={draft.parts.length} value={labelled} />
+        </>
+      ) : (
+        <p className="small" role="status">
+          Step 1 done. Check which parts are your story, then make nodes from them.
+        </p>
+      )}
+      {draft.error && <p className="muted small">{draft.error}</p>}
+      {error && <p className="error small">{error}</p>}
+      <div className="row">
+        {running ? (
+          <button onClick={() => void run(api.invoke('memory:stop', { seriesId }))}>Stop</button>
+        ) : sorting ? (
+          <button
+            onClick={() => void run(api.invoke('memory:continue', { seriesId, include: [] }))}
+          >
+            Continue
+          </button>
+        ) : (
+          <button
+            className="primary"
+            disabled={!mine.size}
+            onClick={() => void run(api.invoke('memory:read', { seriesId, mine: [...mine] }))}
+          >
+            Make nodes from {mine.size} {mine.size === 1 ? 'part' : 'parts'} (
+            {words.toLocaleString()} words)
+          </button>
+        )}
+        <button
+          className="link danger"
+          onClick={() => void run(api.invoke('memory:discard', { seriesId }).then(props.onDone))}
+        >
+          Discard
+        </button>
+      </div>
+      {!sorting && draft.identity && (
+        <p className="memory-identity small">
+          <b>Your story, as worked out from the whole chat:</b> {draft.identity}
+        </p>
+      )}
+      {labelled > 0 && (
+        <ol className="memory-timeline">
+          {runs.map((r) => {
+            const parts = draft.parts.slice(r.from, r.to + 1)
+            const about = parts.map((p) => p.about).filter(Boolean)
+            const open = shown === r.from
+            return (
+              <li key={`${r.from}-${r.label}`} className={r.mine ? 'mine' : ''}>
+                <label className="radio">
+                  <input
+                    type="checkbox"
+                    aria-label={`Your story: ${r.label}, ${day(r.firstAt)}`}
+                    checked={r.mine}
+                    disabled={sorting}
+                    onChange={(e) => setRange(r.from, r.to, e.target.checked)}
+                  />
+                  <span>
+                    <b>
+                      {day(r.firstAt)}
+                      {r.lastAt.slice(0, 10) !== r.firstAt.slice(0, 10)
+                        ? ` – ${day(r.lastAt)}`
+                        : ''}
+                    </b>{' '}
+                    <span className="memory-label">{r.label}</span>{' '}
+                    <span className="muted small">
+                      · {parts.length} {parts.length === 1 ? 'part' : 'parts'}
+                      {about[0] ? ` · ${about[0]}` : ''}
+                    </span>
+                  </span>
+                </label>
+                <button className="link small" onClick={() => setShown(open ? null : r.from)}>
+                  {open ? 'Hide' : 'Peek'}
+                </button>
+                {open && (
+                  <ul className="memory-timeline-parts small">
+                    {parts.map((p) => (
+                      <li key={p.index}>
+                        <label className="radio">
+                          <input
+                            type="checkbox"
+                            aria-label={`Part ${p.index + 1} is your story`}
+                            checked={mine.has(p.index)}
+                            disabled={sorting}
+                            onChange={(e) => setRange(p.index, p.index, e.target.checked)}
+                          />
+                          <span>
+                            {day(p.firstAt)} · {p.about || p.label}
+                            <br />
+                            <span className="muted">“{p.preview}…”</span>
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            )
+          })}
+        </ol>
       )}
     </div>
   )

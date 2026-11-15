@@ -783,6 +783,7 @@ describe('ChatGPT chats brought in by share link', () => {
 
 describe('the story memory', () => {
   const T = (d: number) => new Date(Date.UTC(2026, 2, d)).toISOString()
+  const long = (text: string) => `${text} ${'words '.repeat(2100)}`
   async function chatAboutTwoStories(seriesId: string) {
     const conversation = {
       formatVersion: 1,
@@ -792,17 +793,23 @@ describe('the story memory', () => {
       createdAt: T(1),
       updatedAt: T(9),
       messages: [
+        // Before the story had a name: only its characters.
         {
           role: 'user' as const,
-          // Long enough to be a part of its own.
-          content: `For the space opera: the ship is called Wren. ${'stars '.repeat(2100)}`,
+          content: long('Josh hides the Eye in his apartment.'),
           at: T(1),
           read: null,
         },
-        { role: 'assistant' as const, content: 'Wren it is.', at: T(1), read: null },
         {
           role: 'user' as const,
-          content: 'Casino: the vault holds the Saint’s Eye. Maybe the dealer is the fence?',
+          content: long('Space opera: the ship is called Wren.'),
+          at: T(2),
+          read: null,
+        },
+        {
+          role: 'user' as const,
+          content:
+            'Casino: Josh and Rodney rob the vault for the Saint’s Eye. Maybe the dealer is the fence?',
           at: T(5),
           read: null,
         },
@@ -818,75 +825,104 @@ describe('the story memory', () => {
     await lib.saveConversation(seriesId, conversation)
     return conversation
   }
-  const memoryAnswer = (system: string, part: string) => {
-    if (!part.includes('Casino'))
-      return '{"relevant":false,"reason":"About the space opera.","nodes":[],"loose":[]}'
-    return JSON.stringify({
-      relevant: true,
-      nodes: [
-        {
-          node: '',
-          title: 'The Saint’s Eye',
-          state: 'fixed',
-          summary: 'The relic in the vault.',
-          book: null,
-          points: [
-            { text: 'The dealer is the fence', state: 'fixed', quote: 'the dealer is the fence' },
-            { text: 'The Eye is fake', state: 'rejected', quote: 'Eye could be fake' },
-          ],
-        },
-      ],
-      loose: [{ text: 'A song in the casino', state: 'whim', quote: '' }],
-    })
+  /** A pretend AI for the three steps: sorting, deciding which labels are the story, making nodes. */
+  const ai3 = (r: { messages: { content: string }[] }) => {
+    const system = r.messages[0]!.content
+    const part = r.messages[1]?.content ?? ''
+    if (system.includes('sorting a long conversation'))
+      return JSON.stringify(
+        part.includes('Wren')
+          ? { label: 'space opera', about: 'The ship', names: ['Wren'] }
+          : part.includes('Casino')
+            ? {
+                label: 'casino story',
+                about: 'The vault job',
+                names: ['Josh', 'Rodney', 'Saint’s Eye'],
+              }
+            : { label: 'josh story', about: 'Josh and the Eye', names: ['Josh', 'Eye'] },
+      )
+    if (system.includes('Decide which labels'))
+      return JSON.stringify({
+        identity: 'A casino heist: Josh and Rodney rob a vault for the Saint’s Eye.',
+        // Seen whole, "josh story" is the same story as the casino one.
+        labels: { 'casino story': true, 'josh story': true, 'space opera': false },
+      })
+    if (system.includes('You keep the story memory')) {
+      if (part.includes('Wren'))
+        return '{"relevant":true,"nodes":[{"title":"Wren","state":"fixed","summary":"The ship.","points":[{"text":"The ship is called Wren","state":"fixed"}]}],"loose":[]}'
+      if (part.includes('apartment'))
+        return '{"relevant":true,"nodes":[{"title":"The Saint’s Eye","state":"fixed","summary":"The relic.","points":[{"text":"Josh hides the Eye in his apartment","state":"fixed","quote":"hides the Eye"}]}],"loose":[]}'
+      return JSON.stringify({
+        relevant: true,
+        nodes: [
+          {
+            node: '',
+            title: 'The Saint’s Eye',
+            state: 'fixed',
+            summary: 'The relic in the vault.',
+            book: null,
+            points: [
+              { text: 'The dealer is the fence', state: 'fixed', quote: 'the dealer is the fence' },
+              { text: 'The Eye is fake', state: 'rejected', quote: 'Eye could be fake' },
+            ],
+          },
+        ],
+        loose: [{ text: 'A song in the casino', state: 'whim', quote: '' }],
+      })
+    }
+    return 'An answer.'
+  }
+  const settle = async (ai: AiService, seriesId: string) => {
+    let d = await ai.memory.draft(seriesId)
+    for (let i = 0; i < 200 && d?.state === 'running'; i++) {
+      await new Promise((r) => setTimeout(r, 20))
+      d = await ai.memory.draft(seriesId)
+    }
+    return d!
   }
 
-  it('makes nodes from a chat about two stories, skipping the other one; kept only when asked', async () => {
-    fake = await startFakeOllama((r) => {
-      const system = r.messages[0]!.content
-      if (system.includes('You keep the story memory'))
-        return memoryAnswer(system, r.messages[1]!.content)
-      return 'An answer.'
-    })
+  it('sorts the whole chat by story first, so early parts are judged with what came later', async () => {
+    fake = await startFakeOllama(ai3)
     const ref = await story()
     const c = await chatAboutTwoStories(ref.seriesId)
     const ai = service({})
-    // Small parts, so the two stories land in different parts.
-    const started = await ai.memory.start({
+    await ai.memory.start({
       seriesId: ref.seriesId,
       conversationIds: [c.id],
       instruction: 'Only the casino story',
+      clues: 'Josh and Rodney, a heist',
       from: null,
       to: null,
     })
-    expect(started.parts.length).toBeGreaterThan(0)
-    let draft = await ai.memory.draft(ref.seriesId)
-    for (let i = 0; i < 100 && draft?.state === 'running'; i++) {
-      await new Promise((r) => setTimeout(r, 20))
-      draft = await ai.memory.draft(ref.seriesId)
-    }
-    expect(draft!.state).toBe('done')
-    expect(fake.requests[0]!.messages[0]!.content).toContain('Only the casino story')
-    // Nothing is in the memory until it's kept.
-    expect((await lib.listNodes(ref.seriesId)).nodes).toHaveLength(0)
-    expect(draft!.nodes[0]!.title).toBe('The Saint’s Eye')
-    expect(draft!.nodes[0]!.points.find((p) => p.text.includes('fence'))!.source.at).toBe(T(9))
+    let d = await settle(ai, ref.seriesId)
+    expect(d.phase).toBe('sorted')
+    expect(d.parts.map((p) => [p.label, p.mine])).toEqual([
+      ['josh story', true],
+      ['space opera', false],
+      ['casino story', true],
+    ])
+    expect(d.identity).toContain('casino heist')
+    expect(d.nodes).toHaveLength(0) // nothing is made until the writer has checked
+    const identify = fake.requests.find((r) =>
+      r.messages[0]!.content.includes('Decide which labels'),
+    )!
+    expect(identify.messages[0]!.content).toContain('Josh and Rodney, a heist')
 
-    await expect(
-      ai.memory.start({
-        seriesId: ref.seriesId,
-        conversationIds: [c.id],
-        instruction: '',
-        from: null,
-        to: null,
-      }),
-    ).rejects.toThrow(/draft .* waiting/)
+    await ai.memory.read(ref.seriesId)
+    d = await settle(ai, ref.seriesId)
+    expect(d.state).toBe('done')
+    expect(d.parts.map((p) => p.status)).toEqual(['used', 'skipped', 'used'])
+    expect(d.parts[1]!.reason).toContain('space opera')
+    const eye = d.nodes.find((n) => n.title === 'The Saint’s Eye')!
+    expect(eye.points.map((p) => p.text)).toContain('Josh hides the Eye in his apartment')
+    expect(d.nodes.map((n) => n.title)).not.toContain('Wren')
+    // Pass 2 knows the story from the start.
+    const making = fake.requests.find((r) =>
+      r.messages[0]!.content.includes('You keep the story memory'),
+    )!
+    expect(making.messages[0]!.content).toContain('A casino heist')
 
     expect(await ai.memory.keep(ref.seriesId)).toEqual({ nodes: 2 })
-    expect(await ai.memory.draft(ref.seriesId)).toBeNull()
-    const { nodes } = await lib.listNodes(ref.seriesId)
-    expect(nodes.map((n) => n.title).sort()).toEqual(['Loose ends', 'The Saint’s Eye'])
-
-    // Asking: the memory is read (without the rejected idea).
     const r = await ai.ask(
       {
         requestId: 'r-mem',
@@ -904,26 +940,11 @@ describe('the story memory', () => {
     expect(r.lookedAt.join(' ')).toContain('1 memory topic')
   })
 
-  it('a skipped part can be read after all; dates limit what is read; stopping keeps what was found', async () => {
-    fake = await startFakeOllama((r) => {
-      const system = r.messages[0]!.content
-      if (!system.includes('You keep the story memory')) return 'ok'
-      if (system.includes('asked for this part to be read'))
-        return '{"relevant":true,"nodes":[{"title":"Wren","state":"fixed","summary":"The ship.","points":[{"text":"The ship is called Wren","state":"fixed"}]}],"loose":[]}'
-      return memoryAnswer(system, r.messages[1]!.content)
-    })
+  it('the writer can change the sorting; a skipped part can be read after all; dates limit what is read', async () => {
+    fake = await startFakeOllama(ai3)
     const ref = await story()
     const c = await chatAboutTwoStories(ref.seriesId)
     const ai = service({})
-    const wait = async () => {
-      let d = await ai.memory.draft(ref.seriesId)
-      for (let i = 0; i < 100 && d?.state === 'running'; i++) {
-        await new Promise((r) => setTimeout(r, 20))
-        d = await ai.memory.draft(ref.seriesId)
-      }
-      return d!
-    }
-    // Only from 5 March: the space-opera message isn't read at all.
     await ai.memory.start({
       seriesId: ref.seriesId,
       conversationIds: [c.id],
@@ -931,7 +952,7 @@ describe('the story memory', () => {
       from: '2026-03-05',
       to: null,
     })
-    let d = await wait()
+    let d = await settle(ai, ref.seriesId)
     expect(d.parts.every((p) => p.firstAt >= T(5))).toBe(true)
     await ai.memory.discard(ref.seriesId)
 
@@ -942,18 +963,16 @@ describe('the story memory', () => {
       from: null,
       to: null,
     })
-    d = await wait()
-    const skipped = d.parts.filter((p) => p.status === 'skipped')
-    expect(skipped).toHaveLength(1)
-    expect(skipped[0]!.reason).toBe('About the space opera.')
-    expect(skipped[0]!.preview).toContain('the ship is called Wren')
-    await ai.memory.resume(
-      ref.seriesId,
-      skipped.map((p) => p.index),
-    )
-    d = await wait()
+    await settle(ai, ref.seriesId)
+    // The writer says the first stretch isn't theirs after all.
+    await ai.memory.read(ref.seriesId, [2])
+    d = await settle(ai, ref.seriesId)
+    expect(d.parts.map((p) => p.status)).toEqual(['skipped', 'skipped', 'used'])
+    expect(d.parts[0]!.mineByWriter).toBe(true)
+    // …then changes their mind about the space opera part: read it anyway.
+    await ai.memory.resume(ref.seriesId, [1])
+    d = await settle(ai, ref.seriesId)
     expect(d.nodes.map((n) => n.title)).toContain('Wren')
-    // Keeping only some topics.
     expect(await ai.memory.keep(ref.seriesId, ['loose'])).toEqual({ nodes: 1 })
     expect((await lib.listNodes(ref.seriesId)).nodes.map((n) => n.title)).toEqual(['Loose ends'])
   })
