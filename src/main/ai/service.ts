@@ -47,7 +47,8 @@ import {
   SharedChatError,
   chatPieces,
   pickChatPieces,
-  shareIdInHtml,
+  chatFromSavedPage,
+  type SharedChat,
   shareIdOf,
   shareUrl,
   sharedChatFromHtml,
@@ -338,41 +339,44 @@ export class AiService {
   async importChat(
     seriesId: string,
     from: { url: string } | { html: string },
-  ): Promise<{ conversationId: string; title: string; messages: number; updated: boolean }> {
+  ): Promise<{
+    conversationId: string
+    title: string
+    messages: number
+    updated: boolean
+    partial: boolean
+  }> {
     const library = this.options.host.current
     await library.getSeries(seriesId)
-    let shareId: string | null
-    let html: string
-    if ('html' in from) {
-      // A page the writer saved from their browser: nothing is fetched.
-      html = from.html
-      shareId = shareIdInHtml(html)
-      if (!shareId) {
-        throw new AppError(
-          'invalid-input',
-          'That file isn’t a saved ChatGPT shared chat. Open the share link in your browser, press Ctrl+S, and drop the saved file here.',
-        )
-      }
-    } else {
-      shareId = shareIdOf(from.url)
-      if (!shareId) {
-        throw new AppError(
-          'invalid-input',
-          'That isn’t a ChatGPT share link. In ChatGPT, use Share → Copy link; it starts with https://chatgpt.com/share/.',
-        )
-      }
-      html = await this.fetchSharePage(shareId)
-    }
-    let chat
+    let chat: SharedChat
+    let key: string
+    let url: string
+    let partial = false
     try {
-      chat = sharedChatFromHtml(html, shareId)
+      if ('html' in from) {
+        // A page the writer saved from their browser: nothing is fetched.
+        const saved = chatFromSavedPage(from.html)
+        chat = saved.chat
+        key = saved.key
+        url = saved.url
+        partial = saved.partial
+      } else {
+        const shareId = shareIdOf(from.url)
+        if (!shareId) {
+          throw new AppError(
+            'invalid-input',
+            'That isn’t a ChatGPT share link. In ChatGPT, use Share → Copy link; it starts with https://chatgpt.com/share/.',
+          )
+        }
+        chat = sharedChatFromHtml(await this.fetchSharePage(shareId), shareId)
+        key = shareId
+        url = shareUrl(shareId)
+      }
     } catch (err) {
       if (err instanceof SharedChatError) throw new AppError('invalid-input', err.message)
       throw err
     }
-    const existing = (await library.importedChats(seriesId)).find(
-      (c) => c.source?.shareId === shareId,
-    )
+    const existing = (await library.importedChats(seriesId)).find((c) => c.source?.shareId === key)
     const now = new Date().toISOString()
     const conversation: ConversationFile = {
       ...(existing ?? {}),
@@ -382,7 +386,7 @@ export class AiService {
       title: chat.title,
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
-      source: { kind: 'chatgpt-share', shareId, url: shareUrl(shareId), importedAt: now },
+      source: { kind: 'chatgpt-share', shareId: key, url, importedAt: now },
       messages: chat.messages.map((m) => ({
         role: m.role,
         content: m.text,
@@ -396,6 +400,7 @@ export class AiService {
       title: chat.title,
       messages: chat.messages.length,
       updated: !!existing,
+      partial,
     }
   }
 

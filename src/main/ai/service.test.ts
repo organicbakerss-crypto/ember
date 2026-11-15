@@ -689,7 +689,7 @@ describe('ChatGPT chats brought in by share link', () => {
     expect((await lib.readConversation(ref.seriesId, first.conversationId)).source?.url).toBe(LINK)
     await expect(
       ai.importChat(ref.seriesId, { html: '<html><body>My notes</body></html>' }),
-    ).rejects.toThrow(/isn’t a saved ChatGPT shared chat/)
+    ).rejects.toThrow(/No ChatGPT conversation was found/)
   })
 
   it('looks through imported chats when answering, and says which chat it used', async () => {

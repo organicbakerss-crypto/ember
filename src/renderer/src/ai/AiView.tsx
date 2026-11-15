@@ -316,7 +316,11 @@ export function AiView(props: {
       )
       setListOpen(false)
       toast(
-        `${done.updated ? 'Updated' : 'Added'} “${done.title}”: ${done.messages.toLocaleString()} messages.`,
+        `${done.updated ? 'Updated' : 'Added'} “${done.title}”: ${done.messages.toLocaleString()} messages.${
+          done.partial
+            ? ' That page only had what ChatGPT had shown on screen; for a long chat, save the Share link’s page instead to get all of it.'
+            : ''
+        }`,
       )
     } catch (err) {
       // Shown where the link was typed (or over the open chat, when updating it).

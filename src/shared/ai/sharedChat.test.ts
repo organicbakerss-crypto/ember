@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   SharedChatError,
+  chatFromSavedPage,
   chatPieces,
   decodeTurboStream,
   pickChatPieces,
@@ -99,5 +100,62 @@ describe('ChatGPT share links', () => {
     expect(picked).toHaveLength(1)
     expect(picked[0]!.text.length).toBeLessThanOrEqual(50)
     expect(pickChatPieces(pieces, [], 5, 100)).toEqual([])
+  })
+})
+
+describe('pages saved from the browser', () => {
+  const SHARE = '6af6d288-3d88-83e8-bbb5-72a95ca016f6'
+  const OWN = '11111111-2222-4333-8444-555555555555'
+  const OTHER = '99999999-8888-4777-8666-555555555555'
+  const msgs: TestMessage[] = [
+    { role: 'user', text: 'Who is Mara?' },
+    { role: 'assistant', text: 'The harbour pilot.' },
+  ]
+
+  it('reads a saved share page from its data, even without the canonical link', () => {
+    const page = sharePage('Plans', msgs).replace(
+      '<head>',
+      `<head><!-- saved from url=(0071)https://chatgpt.com/share/${SHARE} -->`,
+    )
+    const r = chatFromSavedPage(page)
+    expect(r).toMatchObject({
+      key: SHARE,
+      url: `https://chatgpt.com/share/${SHARE}`,
+      partial: false,
+    })
+    expect(r.chat.messages).toHaveLength(2)
+  })
+
+  it('reads the messages drawn on a chat page saved complete, ignoring other chats in the sidebar', () => {
+    const page = `<!DOCTYPE html><!-- saved from url=(0058)https://chatgpt.com/c/${OWN} --><html><head>
+      <title>ChatGPT - Curse notes</title></head><body>
+      <nav><a href="https://chatgpt.com/c/${OTHER}">Another chat</a></nav>
+      <div data-message-author-role="user" data-message-id="a"><div class="whitespace-pre-wrap">Where did the curse start &amp; why?</div></div>
+      <div data-message-author-role="assistant" data-message-id="b"><div class="markdown"><p>At <strong>Kestrel&nbsp;Bay</strong>.</p><ul><li>The flood</li><li>The bell</li></ul><button>Copy</button></div></div>
+      <div data-message-author-role="assistant" data-message-id="c"><p>It&#39;s old.</p></div>
+      </body></html>`
+    const r = chatFromSavedPage(page)
+    expect(r.key).toBe(`c:${OWN}`)
+    expect(r.partial).toBe(true)
+    expect(r.chat.title).toBe('Curse notes')
+    expect(r.chat.messages.map((m) => [m.role, m.text])).toEqual([
+      ['user', 'Where did the curse start & why?'],
+      ['assistant', "At Kestrel Bay.\n\n- The flood\n\n- The bell\n\nIt's old."],
+    ])
+  })
+
+  it('says what to do with a chat page saved without its messages, or a page with no chat', () => {
+    const empty = `<html><head><title>ChatGPT</title><meta property="og:url" content="https://chatgpt.com/c/${OWN}"></head><body><div id="root"></div></body></html>`
+    expect(() => chatFromSavedPage(empty)).toThrow(/normal chat page saved without its messages/)
+    expect(() => chatFromSavedPage('<html><head><title>My notes</title></head></html>')).toThrow(
+      /“My notes”/,
+    )
+  })
+
+  it('a chat page with no address is told apart by its title and first question', () => {
+    const page = (q: string) =>
+      `<title>Notes</title><div data-message-author-role="user">${q}</div><div data-message-author-role="assistant">ok</div>`
+    expect(chatFromSavedPage(page('One?')).key).toBe(chatFromSavedPage(page('One?')).key)
+    expect(chatFromSavedPage(page('One?')).key).not.toBe(chatFromSavedPage(page('Two?')).key)
   })
 })

@@ -1362,7 +1362,14 @@ export interface IpcResults {
   'ai:conversations': ConversationSummary[]
   'ai:conversation': ConversationFile
   'ai:saveConversation': null
-  'ai:importChat': { conversationId: string; title: string; messages: number; updated: boolean }
+  'ai:importChat': {
+    conversationId: string
+    title: string
+    messages: number
+    updated: boolean
+    /** Only what the browser had drawn on a saved chat page: a long chat may be missing parts. */
+    partial: boolean
+  }
   'ai:deleteConversation': null
   'ai:chatgptSignIn': null
   'ai:chatgptSignOut': null

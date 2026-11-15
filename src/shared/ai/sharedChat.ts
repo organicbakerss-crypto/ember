@@ -34,16 +34,6 @@ export function shareIdOf(url: string): string | null {
   return SHARE_URL.exec(url.trim())?.[1]?.toLowerCase() ?? null
 }
 
-/** The share id a saved share page names (its own address is in it), or null. */
-export function shareIdInHtml(html: string): string | null {
-  const m =
-    /rel="canonical" href="https:\/\/chatgpt\.com\/share\/([0-9a-f-]{36})"/i.exec(html) ??
-    /https:\/\/chatgpt\.com\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(
-      html,
-    )
-  return m?.[1]?.toLowerCase() ?? null
-}
-
 /** The page address to read for a share id. */
 export const shareUrl = (shareId: string) => `https://chatgpt.com/share/${shareId}`
 
@@ -230,6 +220,150 @@ export function sharedChatFromHtml(html: string, shareId: string): SharedChat {
     // When the writer last talked in it (not when the link was made).
     updatedAt: last,
     messages,
+  }
+}
+
+/* ---------- pages saved from the browser ---------- */
+
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+/**
+ * Which chat a saved page is, from the page's own address only (the browser's
+ * "saved from" note, the canonical link, og:url), never from links to other
+ * chats in the sidebar. The share id is also named all through a share page's data.
+ */
+function savedPageIds(html: string): { shareId: string | null; chatId: string | null } {
+  const own = [
+    /<!--\s*saved from url=\(\d+\)(\S+)\s*-->/i.exec(html)?.[1],
+    /<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i.exec(html)?.[1],
+    /<meta[^>]+property="og:url"[^>]+content="([^"]+)"/i.exec(html)?.[1],
+  ].filter((x): x is string => !!x)
+  const shareRe = new RegExp(`chatgpt\\.com\\\\?/share\\\\?/(?:e\\\\?/)?(${UUID})`, 'i')
+  const chatRe = new RegExp(`chatgpt\\.com/(?:g/[^/]+/)?c/(${UUID})`, 'i')
+  const shareId = own.map((u) => shareRe.exec(u)?.[1]).find(Boolean) ?? shareRe.exec(html)?.[1]
+  const chatId = own.map((u) => chatRe.exec(u)?.[1]).find(Boolean)
+  return { shareId: shareId?.toLowerCase() ?? null, chatId: chatId?.toLowerCase() ?? null }
+}
+
+/** A short fingerprint of a chat with no address: its title and first question. */
+function fingerprint(title: string, first: string): string {
+  let h = 5381
+  for (const ch of `${title}\n${first.slice(0, 2000)}`) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0
+  return `t:${h.toString(36)}`
+}
+
+const ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+}
+
+/** Plain text of a piece of HTML: block ends become line breaks, tags go, entities decode. */
+export function htmlText(html: string): string {
+  return html
+    .replace(/<(script|style|svg|button)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|pre|blockquote|tr|table|ul|ol)>/gi, '\n\n')
+    .replace(/<li\b[^>]*>/gi, '- ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+      if (e[0] === '#') {
+        const code =
+          e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)
+        return Number.isFinite(code) ? String.fromCodePoint(code) : m
+      }
+      return ENTITIES[e.toLowerCase()] ?? m
+    })
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** The messages a browser drew on a saved page (`data-message-author-role` blocks). */
+function drawnMessages(html: string): { role: 'user' | 'assistant'; text: string }[] {
+  const out: { role: 'user' | 'assistant'; text: string }[] = []
+  const parts = html.split(/<[a-z]+\b[^>]*\bdata-message-author-role="/i)
+  for (const part of parts.slice(1)) {
+    const role = part.slice(0, part.indexOf('"'))
+    if (role !== 'user' && role !== 'assistant') continue
+    const text = htmlText(part.slice(part.indexOf('>') + 1))
+    if (!text) continue
+    // ChatGPT draws one reply as several blocks sometimes: keep a turn together.
+    const last = out[out.length - 1]
+    if (last && last.role === role) last.text += `\n\n${text}`
+    else out.push({ role, text })
+  }
+  return out
+}
+
+export interface SavedPageChat {
+  chat: SharedChat
+  /** What identifies the chat, so bringing it in again updates it. */
+  key: string
+  /** Its address in ChatGPT, when the page names it. */
+  url: string
+  /** Only what the browser had drawn (a normal chat page): a long chat may be missing parts. */
+  partial: boolean
+}
+
+/**
+ * Reads a page saved from the browser: a share page (the whole chat, from its
+ * data) or the writer's own chat page saved complete (the messages drawn on it).
+ */
+export function chatFromSavedPage(html: string): SavedPageChat {
+  const ids = savedPageIds(html)
+  const title =
+    /<title>\s*(?:ChatGPT\s*-\s*)?([^<]*?)\s*<\/title>/i.exec(html)?.[1]?.trim() || 'Chat'
+  if (html.includes('streamController.enqueue(')) {
+    try {
+      const chat = sharedChatFromHtml(html, ids.shareId ?? ids.chatId ?? '')
+      const key =
+        ids.shareId ??
+        (ids.chatId ? `c:${ids.chatId}` : fingerprint(chat.title, chat.messages[0]?.text ?? ''))
+      return {
+        chat: { ...chat, shareId: key },
+        key,
+        url: ids.shareId
+          ? shareUrl(ids.shareId)
+          : ids.chatId
+            ? `https://chatgpt.com/c/${ids.chatId}`
+            : '',
+        partial: false,
+      }
+    } catch (err) {
+      if (!(err instanceof SharedChatError)) throw err
+      // Fall through to what the browser drew.
+    }
+  }
+  const drawn = drawnMessages(html)
+  if (!drawn.length) {
+    throw new SharedChatError(
+      ids.chatId && !ids.shareId
+        ? 'That’s your normal chat page saved without its messages. Easiest: in ChatGPT click Share → Copy link, open that link in your browser, and save that page (Ctrl+S). Or save this page again as “Webpage, Complete”.'
+        : `No ChatGPT conversation was found in that file (the page is “${title}”). In ChatGPT click Share → Copy link, open that link in your browser, press Ctrl+S, and drop the saved file here.`,
+    )
+  }
+  const now = new Date().toISOString()
+  const key =
+    ids.shareId ?? (ids.chatId ? `c:${ids.chatId}` : fingerprint(title, drawn[0]?.text ?? ''))
+  return {
+    chat: {
+      shareId: key,
+      title: title.slice(0, 180),
+      createdAt: now,
+      updatedAt: now,
+      messages: drawn.map((m) => ({ ...m, at: now })),
+    },
+    key,
+    url: ids.shareId
+      ? shareUrl(ids.shareId)
+      : ids.chatId
+        ? `https://chatgpt.com/c/${ids.chatId}`
+        : '',
+    partial: true,
   }
 }
 
