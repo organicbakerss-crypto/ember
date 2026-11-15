@@ -459,6 +459,8 @@ export class ChatGpt {
 
   /** Models that refused a thinking level (asked again without one). */
   private readonly noEffort = new Set<string>()
+  /** Models that refused a length setting (asked again without one). */
+  private readonly noVerbosity = new Set<string>()
 
   async models(): Promise<string[]> {
     const login = await this.fresh()
@@ -479,6 +481,8 @@ export class ChatGpt {
     onToken?: (text: string) => void
     /** How hard to think (models that can't choose ignore it). */
     effort?: 'low' | 'medium' | 'high'
+    /** How much to write (models that can't choose ignore it). */
+    verbosity?: 'low' | 'medium' | 'high'
   }): Promise<string> {
     const limit = idleLimit(input.signal, input.idleMs ?? 120000)
     try {
@@ -512,6 +516,9 @@ export class ChatGpt {
       ...(input.effort && !this.noEffort.has(input.model)
         ? { reasoning: { effort: input.effort } }
         : {}),
+      ...(input.verbosity && !this.noVerbosity.has(input.model)
+        ? { text: { verbosity: input.verbosity } }
+        : {}),
     }
     let response: Response
     try {
@@ -540,6 +547,16 @@ export class ChatGpt {
         diagnostic = data.error?.message ?? data.detail ?? raw
       } catch {
         /* non-JSON response */
+      }
+      // A model that can't be told how much to write: ask again without it, and remember.
+      if (
+        response.status === 400 &&
+        input.verbosity &&
+        !this.noVerbosity.has(input.model) &&
+        /verbosity/i.test(diagnostic)
+      ) {
+        this.noVerbosity.add(input.model)
+        return this.stream(input, limit)
       }
       // A model that can't be told how hard to think: ask again without it, and remember.
       if (

@@ -143,6 +143,8 @@ export interface AiSettings {
   model: string
   /** The ChatGPT model ("" = the first it offers). */
   chatgptModel: string
+  /** How long answers in the AI pane are ('normal': as long as the substance needs). */
+  answerLength: 'short' | 'normal' | 'deep'
   /** Keep the story memory up to date after each answer (ChatGPT). */
   memoryAuto: boolean
   /** How hard ChatGPT thinks before answering in the AI pane ('auto': the model decides). */
@@ -180,6 +182,14 @@ export const THINKING_CHOICES: {
   { value: 'high', label: 'Think: hard', long: 'Hard (slowest, most careful)' },
 ]
 
+/** Answer length, as the writer sees the choices. */
+export const LENGTH_CHOICES: { value: AiSettings['answerLength']; label: string; long: string }[] =
+  [
+    { value: 'short', label: 'Length: short', long: 'Short (the key points)' },
+    { value: 'normal', label: 'Length: normal', long: 'Normal (as long as the idea needs)' },
+    { value: 'deep', label: 'Length: in depth', long: 'In depth (every angle)' },
+  ]
+
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   enabled: false,
   provider: 'ollama',
@@ -188,6 +198,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   chatgptModel: '',
   chatgptThinking: 'auto',
   memoryAuto: true,
+  answerLength: 'normal',
   characterId: 'nora',
   lastPartnerId: 'nora',
   worldChanges: 'apply',

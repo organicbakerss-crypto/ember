@@ -6,6 +6,7 @@ import {
   PAPER_SIZES,
   STATUS_ITEMS,
   THINKING_CHOICES,
+  LENGTH_CHOICES,
   type AnalysisSettings,
   type PaperSize,
 } from '@shared/settings'
@@ -954,6 +955,25 @@ function AiSettingsSection() {
                 For answers in the AI pane. Harder thinking takes longer and uses more of your plan;
                 automatic lets the model decide. Background reading (the world, summaries) always
                 uses the normal setting.
+              </span>
+            </label>
+          )}
+          {(!chatgpt || status?.account) && (
+            <label>
+              Answer length
+              <select
+                value={ai.answerLength}
+                onChange={(e) => set({ answerLength: e.target.value as typeof ai.answerLength })}
+              >
+                {LENGTH_CHOICES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.long}
+                  </option>
+                ))}
+              </select>
+              <span className="muted small">
+                Also by the message box. Normal answers are as long as the idea needs; every
+                character still sounds like itself.
               </span>
             </label>
           )}

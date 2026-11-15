@@ -3,7 +3,7 @@ import type { AiJobInfo, ConversationSummary } from '@shared/ipc'
 import type { PaneRoute } from '@shared/panes'
 import type { AiCharacterFile, ConversationFile, ConversationMessage } from '@shared/schema'
 import { newId } from '@shared/ids'
-import { THINKING_CHOICES } from '@shared/settings'
+import { LENGTH_CHOICES, THINKING_CHOICES } from '@shared/settings'
 import {
   DEFAULT_PERSONA_ID,
   GUESTS,
@@ -1802,6 +1802,24 @@ export function AiView(props: {
                   <option value="full">Reads: whole story, word for word</option>
                 </select>
               )}
+              <select
+                className="ai-thinking"
+                aria-label="Answer length"
+                title="How long answers are (normal: as long as the idea needs)"
+                value={settings.ai.answerLength}
+                disabled={!!busy}
+                onChange={(e) =>
+                  update(({ ai }) => ({
+                    ai: { ...ai, answerLength: e.target.value as typeof ai.answerLength },
+                  }))
+                }
+              >
+                {LENGTH_CHOICES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
               {provider === 'chatgpt' && (
                 <select
                   className="ai-thinking"

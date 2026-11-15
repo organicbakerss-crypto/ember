@@ -141,6 +141,29 @@ describe('ChatGPT, signed in directly', () => {
     expect(calls().length).toBe(before + 3)
   })
 
+  it('answers as long as the writer chose: ChatGPT’s own length setting and an instruction', async () => {
+    const { ai, browser, settings } = await setup()
+    await ai.chatgptSignIn(browser)
+    const ask = {
+      requestId: 'l',
+      mode: 'chat' as const,
+      messages: [{ role: 'user' as const, content: 'What about Evander upside down?' }],
+      scope: null,
+    }
+    const calls = () => fake!.requests.filter((r) => r.path === '/responses')
+    await ai.ask(ask, () => {})
+    expect(calls().at(-1)!.body['text']).toBeUndefined() // normal: as the substance needs
+    expect(String(calls().at(-1)!.body['instructions'])).toContain('full depth of your thinking')
+    settings.answerLength = 'deep'
+    await ai.ask(ask, () => {})
+    expect(calls().at(-1)!.body['text']).toEqual({ verbosity: 'high' })
+    expect(String(calls().at(-1)!.body['instructions'])).toContain('The writer wants this in depth')
+    settings.answerLength = 'short'
+    await ai.ask(ask, () => {})
+    expect(calls().at(-1)!.body['text']).toEqual({ verbosity: 'low' })
+    expect(String(calls().at(-1)!.body['instructions'])).toContain('short answer this time')
+  })
+
   it('refreshes a login that has run out', async () => {
     const { ai, browser } = await setup()
     fake!.expireTokens = true

@@ -45,7 +45,18 @@ describe('AI characters', () => {
     expect(prompt).toContain('That third one is sneaky.')
     expect(prompt).toContain('Suddenly it’s Sunday evening.')
     for (const p of PERSONAS)
-      expect(personaInstructions(p.id).length).toBeLessThan(p.kind === 'guest' ? 10000 : 5500)
+      expect(personaInstructions(p.id).length).toBeLessThan(p.kind === 'guest' ? 10700 : 6300)
+  })
+
+  it('the anti-AI habits are about voice, never length or depth; everyone thinks things through', async () => {
+    const { personaReminder } = await import('.')
+    for (const p of PERSONAS) {
+      const prompt = personaInstructions(p.id)
+      expect(prompt).toContain('never how much')
+      expect(prompt).toContain('full depth of your thinking')
+    }
+    expect(personaReminder('john-ai')).toContain('thorough')
+    expect(personaReminder('john-ai')).not.toContain('plainly and helpfully')
   })
 })
 

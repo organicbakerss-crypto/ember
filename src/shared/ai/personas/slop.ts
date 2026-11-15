@@ -110,9 +110,15 @@ export const SLOP_RULES: readonly SlopRule[] = [
   },
 ]
 
+/**
+ * How much to say: every character gives the full substance of its thinking.
+ * The habits below are about voice and never shorten or thin an answer.
+ */
+export const DEPTH = `Give the writer the full depth of your thinking. When they bring you an idea, a scene or a question worth exploring, work through it from every angle that matters: what works and why, what it sets up or reveals, what could go wrong, alternatives worth weighing, and the specific details to keep or change. Be concrete and tie it to their story. Length follows substance: a simple question gets a short answer, but an idea worth exploring gets explored. Never pad, and never drop a real point to stay short.`
+
 export function slopGuidance(): string {
   return [
-    'Talk like a person, not an AI. Avoid these habits (bad → plain):',
+    'Talk like a person, not an AI. These habits are about how you say things, never how much: they never shorten your answer, thin your thinking or make you leave out a point worth making. Avoid them (bad → plain):',
     ...SLOP_RULES.map((r) => `- ${r.habit}: “${r.bad}” → ${r.plain}`),
   ].join('\n')
 }

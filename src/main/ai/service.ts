@@ -285,6 +285,12 @@ export class AiService {
               : answer && settings.chatgptThinking !== 'auto'
                 ? { effort: settings.chatgptThinking }
                 : {}),
+            ...(answer && settings.answerLength !== 'normal'
+              ? {
+                  verbosity:
+                    settings.answerLength === 'short' ? ('low' as const) : ('high' as const),
+                }
+              : {}),
           }),
       }
     }
@@ -749,6 +755,7 @@ export class AiService {
         if (settings.adaptive && persona(id).adaptive) context.learned = settings.learned[id] ?? []
       }
       onProgress('')
+      if (settings.answerLength !== 'normal') context.length = settings.answerLength
       const text = await provider.chat({
         messages: chatMessages(context, input.messages),
         signal,

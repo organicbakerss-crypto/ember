@@ -54,6 +54,8 @@ export interface PromptContext {
   attachments?: { name: string; text: string }[]
   /** Parts of the writer's earlier ChatGPT chats about the story that touch the question. */
   chats?: { where: string; text: string }[]
+  /** The writer asked for a short answer, or one in depth (normal: as the substance needs). */
+  length?: 'short' | 'deep'
   /** Topics from the story's memory that help with the question (as the AI reads them). */
   memory?: string[]
   /** This conversation carries on a ChatGPT chat: its latest messages, word for word. */
@@ -137,6 +139,12 @@ export function systemPrompt(context: PromptContext): string {
     parts.push(`World notes for names in that text:\n\n${context.entries.join('\n\n---\n\n')}`)
   }
   if (context.digest) parts.push(`The whole world, briefly:\n\n${context.digest}`)
+  if (context.length)
+    parts.push(
+      context.length === 'short'
+        ? 'The writer wants a short answer this time: the most important points only, in a few sentences.'
+        : 'The writer wants this in depth: go further than you usually would. Explore more angles, consequences, alternatives and specific details, even if you normally keep things brief.',
+    )
   parts.push(
     context.storyCharacter
       ? storyCharacterReminder(context.storyCharacter.name)

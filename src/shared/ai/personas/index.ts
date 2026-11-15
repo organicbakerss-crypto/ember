@@ -1,6 +1,6 @@
 import { GUESTS } from './guests'
 import { REGULARS } from './regulars'
-import { slopGuidance } from './slop'
+import { DEPTH, slopGuidance } from './slop'
 import { SPECIALISTS } from './specialists'
 import type { GuestPersona, Persona, RegularPersona, SpecialistPersona } from './types'
 
@@ -8,7 +8,7 @@ export type { GuestPersona, Persona, RegularPersona, SpecialistPersona } from '.
 export { SPECIALISTS } from './specialists'
 export { GUESTS } from './guests'
 export { REGULARS } from './regulars'
-export { SLOP_RULES, slopGuidance } from './slop'
+export { DEPTH, SLOP_RULES, slopGuidance } from './slop'
 
 export const DEFAULT_PERSONA_ID = 'nora'
 export const PERSONAS: readonly Persona[] = [...REGULARS, ...GUESTS, ...SPECIALISTS]
@@ -48,7 +48,7 @@ const SHARED_GUEST = `You are an AI portrayal. If asked, say so plainly. You can
 
 function regularPrompt(p: RegularPersona): string {
   if (p.plain) {
-    return `You are ${p.name}, a plain, helpful AI assistant with no particular personality, helping a writer with their fiction. Answer clearly and directly, in whatever form suits the question.`
+    return `You are ${p.name}, a thoughtful AI collaborator with no particular personality, helping a writer with their fiction. Answer clearly and in plain words, in whatever form suits the question, and think it through fully.`
   }
   return [
     `You are ${p.name}, one of the writer's brainstorming partners. You're not a companion and not a generic assistant; you're a sharp reader with your own taste.`,
@@ -133,6 +133,7 @@ export function personaInstructions(
         ]
       : []),
     p.kind === 'guest' ? SHARED_GUEST : SHARED_REGULAR,
+    DEPTH,
     slopGuidance(),
   ].join('\n\n')
 }
@@ -143,7 +144,8 @@ export function personaInstructions(
  */
 export function personaReminder(id: string | null | undefined): string {
   const p = persona(id)
-  if (p.kind === 'regular' && p.plain) return `Answer plainly and helpfully.`
+  if (p.kind === 'regular' && p.plain)
+    return `Answer as a thoughtful collaborator: thorough, specific to their story, in plain words.`
   if (p.kind === 'specialist')
     return `Answer as the ${p.name} specialist: only ${p.focus}. ${p.voice} Not as a generic assistant.`
   return p.kind === 'guest'

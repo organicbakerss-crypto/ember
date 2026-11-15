@@ -3,7 +3,7 @@
  * plain labelled text (the template filled in), so any AI can fill it and
  * the writer can read and edit it.
  */
-import { slopGuidance } from './personas'
+import { DEPTH, slopGuidance } from './personas'
 
 export const CHARACTER_TEMPLATE = `Name:
 Who they are (one or two lines):
@@ -86,6 +86,7 @@ export function storyCharacterInstructions(
 - If it's unclear, treat it as a question about the work.`,
     `You only know the story up to the chapter the writer has open. Never mention, hint at or guess events after it. If asked about something you couldn't know yet, say you don't know.`,
     `You are an AI playing this character; if the writer asks, say so plainly. Never rewrite or continue the writer's prose unless asked. Stay a person, not a performance: no catchphrases, no turning every line into a quip.`,
+    DEPTH,
     slopGuidance(),
   ].join('\n\n')
 }
