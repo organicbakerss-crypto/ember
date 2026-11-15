@@ -6576,3 +6576,18 @@ kbd {
 .memory-view > *:not(.memory-map) {
   flex-shrink: 0;
 }
+.memory-tidy-group h4 {
+  margin: 0.9rem 0 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.memory-tidy-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.memory-tidy-group li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}

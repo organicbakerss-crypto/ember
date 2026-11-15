@@ -80,6 +80,7 @@ import {
   type AiCharacterFile,
 } from './schema'
 import type { MemoryDraft } from './memory/build'
+import type { TidySuggestion } from './memory/tidy'
 
 /* ---------- shared result types ---------- */
 
@@ -1136,6 +1137,50 @@ export const ipcInputs = {
   'memory:delete': z.object({ seriesId: id('series'), nodeId: id('node') }),
   /** The topics the last answer read (and when), for the map. */
   'memory:lastUsed': z.object({ seriesId: id('series') }),
+  /** Tidy up: the AI suggests links, merges, moves, filing and splits (progress as ai:progress). */
+  'memory:tidy': z.object({ seriesId: id('series'), requestId: z.string().min(1).max(80) }),
+  /** Makes the tidy-up suggestions the writer kept. */
+  'memory:tidyApply': z.object({
+    seriesId: id('series'),
+    kept: z
+      .array(
+        z.discriminatedUnion('kind', [
+          z.object({
+            kind: z.literal('link'),
+            a: z.string().max(80),
+            b: z.string().max(80),
+            why: z.string().max(400),
+          }),
+          z.object({
+            kind: z.literal('merge'),
+            keep: z.string().max(80),
+            merge: z.array(z.string().max(80)).max(50),
+            title: z.string().max(200),
+            why: z.string().max(400),
+          }),
+          z.object({
+            kind: z.literal('move'),
+            point: z.string().max(80),
+            to: z.string().max(80),
+            why: z.string().max(400),
+          }),
+          z.object({
+            kind: z.literal('file'),
+            points: z.array(z.string().max(80)).max(200),
+            to: z.string().max(80).nullable(),
+            title: z.string().max(200),
+            why: z.string().max(400),
+          }),
+          z.object({
+            kind: z.literal('split'),
+            point: z.string().max(80),
+            title: z.string().max(200),
+            why: z.string().max(400),
+          }),
+        ]),
+      )
+      .max(2000),
+  }),
   /** "Make nodes": reads conversations into a draft of the memory, in the background. */
   'memory:make': z.object({
     seriesId: id('series'),
@@ -1413,6 +1458,8 @@ export interface IpcResults {
   'memory:save': null
   'memory:delete': null
   'memory:lastUsed': { nodeIds: string[]; at: number } | null
+  'memory:tidy': { suggestions: TidySuggestion[]; topics: number }
+  'memory:tidyApply': { changed: number; removed: number }
   'memory:make': MemoryDraft
   'memory:draft': MemoryDraft | null
   'memory:read': MemoryDraft

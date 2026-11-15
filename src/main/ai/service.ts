@@ -56,6 +56,14 @@ import {
 } from '@shared/ai/sharedChat'
 import { newId } from '@shared/ids'
 import { MemoryBuilds } from './memoryBuild'
+import {
+  applyTidy as applyTidyChanges,
+  parseTidy,
+  tidyBatches,
+  tidyMessages,
+  tidyText,
+  type TidySuggestion,
+} from '@shared/memory/tidy'
 import type { MemoryDraft } from '@shared/memory/build'
 import {
   memoryIndex,
@@ -530,6 +538,78 @@ export class AiService {
         ),
       )
       .filter(Boolean)
+  }
+
+  /**
+   * Tidy up: the AI reviews the story's memory and suggests links, merges,
+   * moves, filing loose ends and splits (nothing is changed here).
+   */
+  async tidyMemory(
+    seriesId: string,
+    requestId: string,
+    onProgress: (text: string) => void = () => {},
+  ): Promise<{ suggestions: TidySuggestion[]; topics: number }> {
+    const provider = await this.client()
+    const library = this.options.host.current
+    const series = await library.getSeries(seriesId)
+    const { nodes, problems } = await library.listNodes(seriesId)
+    if (problems.length)
+      throw new AppError(
+        'corrupt',
+        `A memory file can’t be read (${problems[0]!.path}); fix or remove it first.`,
+      )
+    const live = nodes.filter((n) => n.state !== 'rejected')
+    if (live.length < 2) return { suggestions: [], topics: live.length }
+    return this.track(requestId, async (signal) => {
+      const batches = tidyBatches(live, provider.kind === 'chatgpt' ? 30000 : 2500)
+      const all: TidySuggestion[] = []
+      for (const [i, batch] of batches.entries()) {
+        onProgress(
+          batches.length > 1
+            ? `Reviewing ${live.length} topics (part ${i + 1} of ${batches.length})…`
+            : `Reviewing ${live.length} topics…`,
+        )
+        const { text, keys } = tidyText(live, batches.length > 1 ? batch : undefined)
+        const reply = await provider.chat({
+          messages: tidyMessages(text, series.name),
+          json: true,
+          temperature: 0.2,
+          signal,
+        })
+        for (const s of parseTidy(reply, keys, live)) {
+          // The same suggestion from two batches counts once.
+          const key = JSON.stringify(s.kind === 'link' ? [s.kind, [s.a, s.b].sort()] : [s.kind, s])
+          if (
+            !all.some(
+              (x) =>
+                JSON.stringify(x.kind === 'link' ? [x.kind, [x.a, x.b].sort()] : [x.kind, x]) ===
+                key,
+            )
+          )
+            all.push(s)
+        }
+      }
+      onProgress('')
+      return { suggestions: all, topics: live.length }
+    })
+  }
+
+  /** Makes the tidy-up changes the writer kept. Merged-away topics go to this computer's trash. */
+  async applyTidy(
+    seriesId: string,
+    kept: TidySuggestion[],
+  ): Promise<{ changed: number; removed: number }> {
+    const library = this.options.host.current
+    const { nodes, problems } = await library.listNodes(seriesId)
+    if (problems.length)
+      throw new AppError(
+        'corrupt',
+        `A memory file can’t be read (${problems[0]!.path}); nothing was changed.`,
+      )
+    const result = applyTidyChanges(nodes, kept)
+    await library.saveNodes(seriesId, result.save)
+    for (const id of result.remove) await library.deleteNode(seriesId, id)
+    return { changed: result.save.length, removed: result.remove.length }
   }
 
   /** The pieces of a story's imported ChatGPT chats that touch the question. */

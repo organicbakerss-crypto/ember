@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ConversationSummary, LibraryProblem } from '@shared/ipc'
 import type { MemoryNodeFile, MemoryState } from '@shared/schema'
 import { stretches, type MemoryDraft } from '@shared/memory/build'
+import type { TidySuggestion } from '@shared/memory/tidy'
 import { api, describeError, useIpcEvent } from '../api'
 import { loadLocal, saveLocal } from '../storage'
 import { MemoryMap } from './MemoryMap'
@@ -41,6 +42,7 @@ export function MemoryView(props: {
   const [filter, setFilter] = useState<MemoryState | 'all'>('all')
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [tidying, setTidying] = useState(false)
   const [storyName, setStoryName] = useState('this story')
   const [books, setBooks] = useState<{ id: string; name: string }[]>([])
   const [mode, setMode] = useState<'list' | 'map'>(() =>
@@ -213,7 +215,18 @@ export function MemoryView(props: {
           </div>
         </div>
         <span className="status-spacer" />
-        {!draft && !making && <button onClick={() => setMaking(true)}>Make nodes…</button>}
+        {!draft && !making && !tidying && (
+          <>
+            <button
+              title="Have the AI look over the memory: link related topics, merge duplicates, move points, file loose ends"
+              disabled={(nodes?.length ?? 0) < 2}
+              onClick={() => setTidying(true)}
+            >
+              Tidy up…
+            </button>
+            <button onClick={() => setMaking(true)}>Make nodes…</button>
+          </>
+        )}
         <button onClick={props.onClose}>Close</button>
       </header>
       {error && <p className="error small">{error}</p>}
@@ -225,7 +238,17 @@ export function MemoryView(props: {
         </p>
       )}
 
-      {draft ? (
+      {tidying && !draft ? (
+        <TidyPanel
+          seriesId={seriesId}
+          nodes={nodes ?? []}
+          onDone={(message) => {
+            setTidying(false)
+            if (message) toast(message)
+            load()
+          }}
+        />
+      ) : draft ? (
         draft.phase === 'sorting' || draft.phase === 'sorted' ? (
           <SortPanel draft={draft} seriesId={seriesId} onDone={() => setMaking(false)} />
         ) : (
@@ -997,6 +1020,224 @@ function SortPanel(props: { draft: MemoryDraft; seriesId: string; onDone: () => 
             )
           })}
         </ol>
+      )}
+    </div>
+  )
+}
+
+const TIDY_GROUPS: { kind: TidySuggestion['kind']; label: string }[] = [
+  { kind: 'link', label: 'Connections' },
+  { kind: 'merge', label: 'Merge topics that are the same thing' },
+  { kind: 'move', label: 'Move points to where they belong' },
+  { kind: 'file', label: 'File loose ends' },
+  { kind: 'split', label: 'Points that are topics of their own' },
+]
+
+/** Tidy up: the AI reviews the memory; the writer ticks which suggestions to make. */
+function TidyPanel(props: {
+  seriesId: string
+  nodes: MemoryNodeFile[]
+  onDone: (message: string | null) => void
+}) {
+  const { seriesId, nodes } = props
+  const [requestId] = useState(() => `tidy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+  const [progress, setProgress] = useState('Reviewing the memory…')
+  const [found, setFound] = useState<TidySuggestion[] | null>(null)
+  const [off, setOff] = useState<Set<number>>(new Set())
+  const [arrange, setArrange] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useIpcEvent('ai:progress', (e) => {
+    if (e.requestId === requestId && e.text) setProgress(e.text)
+  })
+  useEffect(() => {
+    let live = true
+    api.invoke('memory:tidy', { seriesId, requestId }).then(
+      (r) => live && setFound(r.suggestions),
+      (err: unknown) => {
+        if (!live) return
+        const e = describeError(err)
+        if (e.code === 'cancelled') props.onDone(null)
+        else setError(e.message)
+      },
+    )
+    return () => {
+      live = false
+    }
+    // Once, when the panel opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const title = (id: string) => nodes.find((n) => n.id === id)?.title ?? '(gone)'
+  const pointText = (id: string) => {
+    for (const n of nodes) {
+      const p = n.points.find((x) => x.id === id)
+      if (p) return { text: p.text, from: n }
+    }
+    return null
+  }
+  const clip = (t: string, n = 90) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
+  const describe = (s: TidySuggestion) => {
+    switch (s.kind) {
+      case 'link':
+        return (
+          <>
+            Link <b>{title(s.a)}</b> and <b>{title(s.b)}</b>
+          </>
+        )
+      case 'merge':
+        return (
+          <>
+            Merge {s.merge.map((m) => `“${title(m)}”`).join(', ')} into <b>{title(s.keep)}</b>
+            {s.title && s.title !== title(s.keep) ? <> (as “{s.title}”)</> : null}
+          </>
+        )
+      case 'move': {
+        const p = pointText(s.point)
+        return (
+          <>
+            Move “{clip(p?.text ?? '')}” from <b>{p?.from.title}</b> to <b>{title(s.to)}</b>
+          </>
+        )
+      }
+      case 'file':
+        return (
+          <>
+            File {s.points.length === 1 ? 'a loose end' : `${s.points.length} loose ends`} into{' '}
+            {s.to ? (
+              <b>{title(s.to)}</b>
+            ) : (
+              <>
+                a new topic <b>{s.title}</b>
+              </>
+            )}
+            :{' '}
+            <span className="muted">
+              {s.points.map((p) => `“${clip(pointText(p)?.text ?? '', 50)}”`).join(', ')}
+            </span>
+          </>
+        )
+      case 'split': {
+        const p = pointText(s.point)
+        return (
+          <>
+            Make “{clip(p?.text ?? '')}” its own topic <b>{s.title}</b>, under{' '}
+            <b>{p?.from.title}</b>
+          </>
+        )
+      }
+    }
+  }
+  const kept = (found ?? []).filter((_, i) => !off.has(i))
+  const toggle = (i: number) =>
+    setOff((s) => {
+      const next = new Set(s)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
+
+  return (
+    <div className="memory-draft memory-tidy">
+      <h3>Tidy up</h3>
+      {error && <p className="error small">{error}</p>}
+      {!found && !error && (
+        <>
+          <p className="small" role="status">
+            {progress}
+          </p>
+          <progress />
+          <div className="row">
+            <button onClick={() => void api.invoke('ai:cancel', { requestId })}>Stop</button>
+          </div>
+        </>
+      )}
+      {error && (
+        <div className="row">
+          <button onClick={() => props.onDone(null)}>Close</button>
+        </div>
+      )}
+      {found && found.length === 0 && (
+        <>
+          <p className="small">Nothing to tidy: the AI found no changes worth making.</p>
+          <div className="row">
+            <button onClick={() => props.onDone(null)}>Close</button>
+          </div>
+        </>
+      )}
+      {found && found.length > 0 && (
+        <>
+          <p className="small muted">
+            Untick anything you don’t want. Nothing changes until you press the button; fixed,
+            unfixed and whim stay as they are. Every change is listed on its topic.
+          </p>
+          {TIDY_GROUPS.map((g) => {
+            const items = found.map((s, i) => ({ s, i })).filter((x) => x.s.kind === g.kind)
+            if (!items.length) return null
+            return (
+              <section key={g.kind} className="memory-tidy-group">
+                <h4 className="small">
+                  {g.label} ({items.length})
+                </h4>
+                <ul>
+                  {items.map(({ s, i }) => (
+                    <li key={i}>
+                      <label className="radio">
+                        <input type="checkbox" checked={!off.has(i)} onChange={() => toggle(i)} />
+                        <span>
+                          {describe(s)}
+                          {s.why && <span className="muted small"> · {s.why}</span>}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+          <label className="radio small">
+            <input
+              type="checkbox"
+              checked={arrange}
+              onChange={(e) => setArrange(e.target.checked)}
+            />
+            Arrange the map again afterwards (linked topics end up close together)
+          </label>
+          <div className="row">
+            <button
+              className="primary"
+              disabled={busy || !kept.length}
+              onClick={() => {
+                setBusy(true)
+                api
+                  .invoke('memory:tidyApply', { seriesId, kept })
+                  .then(async (r) => {
+                    if (arrange) {
+                      const fresh = await api.invoke('memory:list', { seriesId })
+                      const placed = fresh.nodes.filter((n) => n.pos)
+                      if (placed.length)
+                        await api.invoke('memory:save', {
+                          seriesId,
+                          nodes: placed.map((n) => ({ ...n, pos: null })),
+                        })
+                    }
+                    props.onDone(
+                      `Tidied up: ${r.changed} ${r.changed === 1 ? 'topic' : 'topics'} changed${r.removed ? `, ${r.removed} merged away` : ''}.`,
+                    )
+                  })
+                  .catch((err: unknown) => setError(describeError(err).message))
+                  .finally(() => setBusy(false))
+              }}
+            >
+              {busy
+                ? 'Making the changes…'
+                : `Make ${kept.length} ${kept.length === 1 ? 'change' : 'changes'}`}
+            </button>
+            <button className="link" onClick={() => props.onDone(null)}>
+              Cancel
+            </button>
+          </div>
+        </>
       )}
     </div>
   )

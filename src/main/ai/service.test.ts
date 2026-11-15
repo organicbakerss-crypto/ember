@@ -977,6 +977,75 @@ describe('the story memory', () => {
     expect((await lib.listNodes(ref.seriesId)).nodes.map((n) => n.title)).toEqual(['Loose ends'])
   })
 
+  it('tidies up: suggests from the whole memory, changes only what the writer keeps', async () => {
+    fake = await startFakeOllama((r) => {
+      const system = r.messages[0]!.content
+      if (!system.includes('You tidy up a writer')) return 'ok'
+      expect(r.messages[1]!.content).not.toContain('Second heist') // rejected: never shown
+      return JSON.stringify({
+        links: [{ a: 'T1', b: 'T3', why: 'The heist is for the Eye' }],
+        merges: [{ keep: 'T1', merge: ['T2'], title: '', why: 'Same relic' }],
+      })
+    })
+    const ref = await story()
+    const T0 = new Date().toISOString()
+    const mk = (i: number, title: string, state: 'fixed' | 'rejected' = 'fixed') => ({
+      formatVersion: 1,
+      id: `nod_${String(i).padStart(16, '0')}`,
+      title,
+      state,
+      summary: '',
+      volumeId: null,
+      entryIds: [],
+      links: [],
+      parentId: null,
+      loose: false,
+      pos: { x: 10 * i, y: 10 },
+      points: [
+        {
+          id: `pnt_${String(i).padStart(16, '0')}`,
+          text: `${title} point`,
+          state: 'fixed' as const,
+          sources: [],
+          createdAt: T0,
+          updatedAt: T0,
+        },
+      ],
+      history: [],
+      createdAt: T0,
+      updatedAt: T0,
+    })
+    await lib.saveNodes(ref.seriesId, [
+      mk(1, 'The Saint’s Eye'),
+      mk(2, 'The relic'),
+      mk(3, 'Casino heist'),
+      mk(4, 'Second heist', 'rejected'),
+    ])
+    const ai = service({})
+    const { suggestions, topics } = await ai.tidyMemory(ref.seriesId, 'r-tidy')
+    expect(topics).toBe(3)
+    expect(suggestions.map((x) => x.kind)).toEqual(['link', 'merge'])
+    // Nothing changed yet.
+    expect((await lib.listNodes(ref.seriesId)).nodes).toHaveLength(4)
+    // The writer keeps only the link.
+    expect(await ai.applyTidy(ref.seriesId, [suggestions[0]!])).toEqual({ changed: 2, removed: 0 })
+    let nodes = (await lib.listNodes(ref.seriesId)).nodes
+    expect(nodes.find((x) => x.title === 'The Saint’s Eye')!.links).toEqual([mk(3, '').id])
+    // Then the merge: the relic goes to this computer's trash, its point into the Eye.
+    expect(await ai.applyTidy(ref.seriesId, [suggestions[1]!])).toEqual({ changed: 1, removed: 1 })
+    nodes = (await lib.listNodes(ref.seriesId)).nodes
+    expect(nodes.map((x) => x.title).sort()).toEqual([
+      'Casino heist',
+      'Second heist',
+      'The Saint’s Eye',
+    ])
+    expect(nodes.find((x) => x.title === 'The Saint’s Eye')!.points.map((p) => p.text)).toContain(
+      'The relic point',
+    )
+    const trash = await fs.promises.readdir(join(lib.paths.localDir, 'trash', 'memory'))
+    expect(trash.some((f) => f.includes(mk(2, '').id))).toBe(true)
+  })
+
   it('never overwrites a memory file it can’t read', async () => {
     const ref = await story()
     const dir = join(lib.paths.seriesDir(ref.seriesId), 'memory')

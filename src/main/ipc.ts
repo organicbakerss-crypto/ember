@@ -412,6 +412,11 @@ export function registerIpc(
       await host.current.saveNodes(input.seriesId, input.nodes)
       return null
     },
+    'memory:tidy': (input) =>
+      ai.tidyMemory(input.seriesId, input.requestId, (text) =>
+        broadcast('ai:progress', { requestId: input.requestId, text }),
+      ),
+    'memory:tidyApply': (input) => ai.applyTidy(input.seriesId, input.kept),
     'memory:lastUsed': (input) => {
       const used = ai.lastUsed.get(input.seriesId)
       return used ? { nodeIds: used.ids, at: used.at } : null
