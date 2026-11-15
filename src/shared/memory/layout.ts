@@ -77,7 +77,7 @@ export function layout(nodes: MemoryNodeFile[]): Map<string, { x: number; y: num
             d = Math.hypot(dx, dy)
           }
           // Room for the circles and the names under them.
-          const room = a.r + b.r + 70
+          const room = a.r + b.r + 34
           const push = (d < room ? (room - d) * 0.5 : 0) + (2600 / (d * d)) * cool * 6
           const ux = dx / d
           const uy = dy / d

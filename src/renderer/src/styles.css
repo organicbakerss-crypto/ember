@@ -6507,19 +6507,15 @@ kbd {
 }
 .memory-circle-count {
   text-anchor: middle;
-  font-size: 13px;
-  font-weight: 600;
+  dominant-baseline: middle;
+  font-weight: 700;
   fill: var(--text, #222);
   pointer-events: none;
 }
 .memory-circle-title {
   text-anchor: middle;
-  font-size: 12.5px;
   fill: var(--text, #222);
   pointer-events: none;
-  paint-order: stroke;
-  stroke: var(--bg, #fff);
-  stroke-width: 3px;
 }
 .memory-circle.dim,
 .memory-link.dim {

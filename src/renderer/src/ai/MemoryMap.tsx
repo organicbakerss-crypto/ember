@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MemoryNodeFile, MemoryState } from '@shared/schema'
-import {
-  MAP_H,
-  MAP_W,
-  layout,
-  mapLinks,
-  radiusOf,
-  shortTitle,
-  visibleLabels,
-} from '@shared/memory/layout'
+import { MAP_H, MAP_W, layout, mapLinks, radiusOf } from '@shared/memory/layout'
 
 type Pt = { x: number; y: number }
 const STATE_LABEL: Record<MemoryState, string> = {
@@ -86,38 +78,52 @@ export function MemoryMap(props: {
     where.current = new Map(placed)
   }, [placed])
   const view = useRef({ x: 0, y: 0, k: 1 })
-  // The zoom the names were last worked out for (they're redone shortly after zooming stops).
-  const [zoom, setZoom] = useState(1)
-  const zoomTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  useEffect(() => () => clearTimeout(zoomTimer.current), [])
   const applyView = () => {
     const v = view.current
     viewport.current?.setAttribute('transform', `translate(${v.x} ${v.y}) scale(${v.k})`)
-    if (Math.abs(v.k - zoom) / zoom > 0.04) {
-      clearTimeout(zoomTimer.current)
-      zoomTimer.current = setTimeout(() => setZoom(view.current.k), 150)
-    }
   }
-  // Fit everything in view when the map opens.
-  useEffect(() => {
+  // Until the writer pans or zooms, the map keeps everything in view (also as the pane settles its size).
+  const touched = useRef(false)
+  const fit = () => {
     const box = svg.current?.getBoundingClientRect()
-    if (!box || !placed.size) return
-    const xs = [...placed.values()].map((p) => p.x)
-    const ys = [...placed.values()].map((p) => p.y)
+    if (!box || box.width < 50 || box.height < 50 || !where.current.size) return
+    const all = [...where.current.values()]
+    const xs = all.map((p) => p.x)
+    const ys = all.map((p) => p.y)
     const pad = 90
     const w = Math.max(...xs) - Math.min(...xs) + pad * 2
     const h = Math.max(...ys) - Math.min(...ys) + pad * 2
-    const k = Math.min(1.6, Math.max(0.25, Math.min(box.width / w, box.height / h)))
+    const k = Math.min(2.2, Math.max(0.2, Math.min(box.width / w, box.height / h)))
     view.current = {
       k,
       x: box.width / 2 - ((Math.min(...xs) + Math.max(...xs)) / 2) * k,
       y: box.height / 2 - ((Math.min(...ys) + Math.max(...ys)) / 2) * k,
     }
     applyView()
-    setZoom(k)
-    // When the map first has topics, or is laid out fresh (other changes keep the view).
+  }
+  useEffect(() => {
+    const el = svg.current
+    if (!el) return
+    const watch = new ResizeObserver(() => {
+      if (!touched.current) fit()
+    })
+    watch.observe(el)
+    return () => watch.disconnect()
+    // fit only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placed.size > 0, nodes.some((n) => n.pos)])
+  }, [])
+  // Fit when the map first has topics, or is laid out fresh.
+  const fresh = !nodes.some((n) => n.pos)
+  const fitted = useRef(false)
+  useEffect(() => {
+    // Pinning circles on the first move isn't a fresh layout: the view stays.
+    if (fitted.current && !fresh) return
+    touched.current = false
+    where.current = new Map(placed)
+    fit()
+    fitted.current = where.current.size > 0
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placed.size > 0, fresh])
 
   const toMap = (e: { clientX: number; clientY: number }): Pt => {
     const box = svg.current!.getBoundingClientRect()
@@ -162,6 +168,7 @@ export function MemoryMap(props: {
   }
   const onBackgroundDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return
+    touched.current = true
     svg.current?.setPointerCapture(e.pointerId)
     gesture.current = {
       kind: 'pan',
@@ -220,6 +227,7 @@ export function MemoryMap(props: {
     props.onMove(g.id, { x: Math.round(end.x), y: Math.round(end.y) }, new Map(where.current))
   }
   const onWheel = (e: React.WheelEvent) => {
+    touched.current = true
     const box = svg.current!.getBoundingClientRect()
     const v = view.current
     const k = Math.min(3, Math.max(0.2, v.k * Math.exp(-e.deltaY * 0.0015)))
@@ -238,25 +246,6 @@ export function MemoryMap(props: {
   }, [])
 
   const glowKey = props.glow.join(',')
-  // Names that fit without covering another name or a circle (wanted ones first).
-  const named = useMemo(() => {
-    const glowing = new Set(glowKey ? glowKey.split(',') : [])
-    return visibleLabels(
-      nodes.map((n) => {
-        const p = placed.get(n.id)!
-        return {
-          id: n.id,
-          title: n.title,
-          r: radiusOf(n),
-          x: p.x,
-          y: p.y,
-          first: glowing.has(n.id) || !!matches?.has(n.id),
-        }
-      }),
-      zoom,
-    )
-  }, [nodes, placed, zoom, matches, glowKey])
-  const fontPx = 12.5 / zoom
   // The circles and lines, drawn again only when they change (not when the hover card does).
   const drawing = useMemo(() => {
     const glow = new Set(glowKey ? glowKey.split(',') : [])
@@ -302,18 +291,17 @@ export function MemoryMap(props: {
               onPointerLeave={() => setHover((h) => (h?.id === n.id ? null : h))}
             >
               <circle r={r} />
-              <text className="memory-circle-count" dy="0.35em">
+              <text className="memory-circle-count" y={-r * 0.22} style={{ fontSize: r * 0.42 }}>
                 {n.points.length}
               </text>
-              {named.has(n.id) && (
-                <text
-                  className="memory-circle-title"
-                  y={r + 4 / zoom + fontPx}
-                  style={{ fontSize: fontPx, strokeWidth: 3 / zoom }}
-                >
-                  {shortTitle(n.title)}
-                </text>
-              )}
+              {/* The name inside, under the number: it grows and shrinks with everything else. */}
+              <text className="memory-circle-title" style={{ fontSize: Math.max(5, r * 0.24) }}>
+                {titleLines(n.title, r).map((line, i) => (
+                  <tspan key={i} x={0} y={r * 0.2 + i * Math.max(5, r * 0.24) * 1.15}>
+                    {line}
+                  </tspan>
+                ))}
+              </text>
             </g>
           )
         })}
@@ -321,7 +309,7 @@ export function MemoryMap(props: {
     )
     // onCircleDown and setHover are stable enough: they only read refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, placed, links, matches, glowKey, named, zoom])
+  }, [nodes, placed, links, matches, glowKey])
 
   const hovered = hover ? nodes.find((n) => n.id === hover.id) : null
   const count = (n: MemoryNodeFile, s: MemoryState) => n.points.filter((p) => p.state === s).length
@@ -413,4 +401,29 @@ export function MemoryMap(props: {
       </p>
     </div>
   )
+}
+
+/** A title in up to two lines that fit inside a circle (shortened if it must be). */
+function titleLines(title: string, r: number): string[] {
+  const size = Math.max(5, r * 0.24)
+  const per = Math.max(4, Math.floor((r * 1.6) / (size * 0.56)))
+  const lines: string[] = []
+  let line = ''
+  for (const word of title.split(/\s+/)) {
+    const next = line ? `${line} ${word}` : word
+    if (next.length <= per) line = next
+    else {
+      if (line) lines.push(line)
+      line = word
+    }
+    if (lines.length === 2) break
+  }
+  if (lines.length < 2 && line) lines.push(line)
+  const used = lines.join(' ').length
+  const out = lines.slice(0, 2).map((l) => (l.length > per ? `${l.slice(0, per - 1)}…` : l))
+  if (used < title.length && out.length) {
+    const last = out[out.length - 1]!
+    out[out.length - 1] = last.endsWith('…') ? last : `${last.slice(0, Math.max(1, per - 1))}…`
+  }
+  return out
 }
