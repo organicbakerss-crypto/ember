@@ -138,6 +138,8 @@ interface Provider {
     temperature?: number
     signal?: AbortSignal
     onToken?: (text: string) => void
+    /** An answer for the writer (AI pane): ChatGPT thinks as hard as the writer chose. */
+    answer?: boolean
   }): Promise<string>
 }
 
@@ -234,7 +236,15 @@ export class AiService {
         settings.chatgptModel || (await this.chatgpt.models())[0] || DEFAULT_CHATGPT_MODEL
       return {
         kind: 'chatgpt',
-        chat: (i) => this.chatgpt.chat({ ...i, model, idleMs: this.options.idleMs }),
+        chat: ({ answer, ...i }) =>
+          this.chatgpt.chat({
+            ...i,
+            model,
+            idleMs: this.options.idleMs,
+            ...(answer && settings.chatgptThinking !== 'auto'
+              ? { effort: settings.chatgptThinking }
+              : {}),
+          }),
       }
     }
     const ollama = new Ollama(settings.host, this.options.fetchImpl)
@@ -251,7 +261,17 @@ export class AiService {
     }
     return {
       kind: 'ollama',
-      chat: (i) => ollama.chat({ ...i, model, idleMs: this.options.idleMs }),
+      // The local model has no thinking setting: `answer` is ignored.
+      chat: (i) =>
+        ollama.chat({
+          messages: i.messages,
+          json: i.json,
+          temperature: i.temperature,
+          signal: i.signal,
+          onToken: i.onToken,
+          model,
+          idleMs: this.options.idleMs,
+        }),
     }
   }
 
@@ -504,6 +524,7 @@ export class AiService {
         messages: chatMessages(context, input.messages),
         signal,
         onToken,
+        answer: true,
       })
       return { text, lookedAt }
     })
@@ -1586,6 +1607,7 @@ export class AiService {
         temperature: 0.2,
         signal,
         onToken,
+        answer: true,
       })
       if (!text.trim()) throw new AppError('invalid-input', 'The AI sent back nothing. Try again.')
       return { text }

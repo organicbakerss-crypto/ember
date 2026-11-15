@@ -5,6 +5,7 @@ import {
   PAGE_WIDTH,
   PAPER_SIZES,
   STATUS_ITEMS,
+  THINKING_CHOICES,
   type AnalysisSettings,
   type PaperSize,
 } from '@shared/settings'
@@ -932,6 +933,28 @@ function AiSettingsSection() {
                   </option>
                 ))}
               </select>
+            </label>
+          )}
+          {chatgpt && status?.account && (
+            <label>
+              How hard it thinks
+              <select
+                value={ai.chatgptThinking}
+                onChange={(e) =>
+                  set({ chatgptThinking: e.target.value as typeof ai.chatgptThinking })
+                }
+              >
+                {THINKING_CHOICES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.long}
+                  </option>
+                ))}
+              </select>
+              <span className="muted small">
+                For answers in the AI pane. Harder thinking takes longer and uses more of your plan;
+                automatic lets the model decide. Background reading (the world, summaries) always
+                uses the normal setting.
+              </span>
             </label>
           )}
 

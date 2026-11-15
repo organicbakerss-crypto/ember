@@ -3,6 +3,7 @@ import type { AiJobInfo, ConversationSummary } from '@shared/ipc'
 import type { PaneRoute } from '@shared/panes'
 import type { AiCharacterFile, ConversationFile, ConversationMessage } from '@shared/schema'
 import { newId } from '@shared/ids'
+import { THINKING_CHOICES } from '@shared/settings'
 import {
   DEFAULT_PERSONA_ID,
   GUESTS,
@@ -1712,6 +1713,30 @@ export function AiView(props: {
                   <option value="full">Reads: whole story, word for word</option>
                 </select>
               )}
+              {provider === 'chatgpt' && (
+                <select
+                  className="ai-thinking"
+                  aria-label="How hard the AI thinks"
+                  title="How hard ChatGPT thinks before answering (harder is slower)"
+                  value={settings.ai.chatgptThinking}
+                  disabled={!!busy}
+                  onChange={(e) =>
+                    update(({ ai }) => ({
+                      ai: {
+                        ...ai,
+                        chatgptThinking: e.target.value as typeof ai.chatgptThinking,
+                      },
+                    }))
+                  }
+                >
+                  {THINKING_CHOICES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {!editMode && (
                 <label
                   className="icon ai-attach"

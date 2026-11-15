@@ -6207,3 +6207,7 @@ kbd {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   border-radius: 4px;
 }
+.ai-thinking {
+  max-width: 9.5rem;
+  margin-right: 0.4rem;
+}

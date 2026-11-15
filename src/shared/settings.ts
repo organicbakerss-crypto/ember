@@ -143,6 +143,8 @@ export interface AiSettings {
   model: string
   /** The ChatGPT model ("" = the first it offers). */
   chatgptModel: string
+  /** How hard ChatGPT thinks before answering in the AI pane ('auto': the model decides). */
+  chatgptThinking: 'auto' | 'low' | 'medium' | 'high'
   /** The AI character (a regular partner or a guest star); independent of the model. */
   characterId: string
   /** The partner last chosen (the Roundtable seats them even while a guest star is the main AI). */
@@ -162,12 +164,27 @@ export interface AiSettings {
   learned: Record<string, string[]>
 }
 
+/** How hard ChatGPT thinks, as the writer sees the choices. */
+export const THINKING_CHOICES: {
+  value: AiSettings['chatgptThinking']
+  /** In the AI pane (short). */
+  label: string
+  /** In Settings. */
+  long: string
+}[] = [
+  { value: 'auto', label: 'Think: auto', long: 'Automatic (the model decides)' },
+  { value: 'low', label: 'Think: light', long: 'Light (fastest)' },
+  { value: 'medium', label: 'Think: standard', long: 'Standard' },
+  { value: 'high', label: 'Think: hard', long: 'Hard (slowest, most careful)' },
+]
+
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   enabled: false,
   provider: 'ollama',
   host: 'http://127.0.0.1:11434',
   model: '',
   chatgptModel: '',
+  chatgptThinking: 'auto',
   characterId: 'nora',
   lastPartnerId: 'nora',
   worldChanges: 'apply',

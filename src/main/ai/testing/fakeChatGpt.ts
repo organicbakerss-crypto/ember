@@ -24,12 +24,15 @@ export interface FakeChatGpt {
     body: Record<string, unknown>
   }[]
   expireTokens: boolean
+  /** Answer 400 to a request that sets a thinking level (a model that can't choose). */
+  rejectEffort: boolean
   close(): Promise<void>
 }
 
 export async function startFakeChatGpt(): Promise<FakeChatGpt> {
   const requests: FakeChatGpt['requests'] = []
   const state = { expire: false, refreshes: 0, nonce: '', clientId: 'oaiapp_test_client' }
+  const fake = { rejectEffort: false }
   const server = createServer((req, res) => {
     let raw = ''
     req.on('data', (chunk) => (raw += chunk))
@@ -102,6 +105,14 @@ export async function startFakeChatGpt(): Promise<FakeChatGpt> {
           ],
         })
       if (url.pathname === '/responses') {
+        if (fake.rejectEffort && body['reasoning']) {
+          return json(400, {
+            error: {
+              message:
+                "Unsupported parameter: 'reasoning.effort' is not supported with this model.",
+            },
+          })
+        }
         const input = body.input as { role: string; content: string }[]
         const last = input[input.length - 1]?.content ?? ''
         const editing = String(body.instructions ?? '').includes('You edit one chapter')
@@ -134,6 +145,12 @@ export async function startFakeChatGpt(): Promise<FakeChatGpt> {
     },
     set expireTokens(value) {
       state.expire = value
+    },
+    get rejectEffort() {
+      return fake.rejectEffort
+    },
+    set rejectEffort(value) {
+      fake.rejectEffort = value
     },
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   }

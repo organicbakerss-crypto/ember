@@ -113,6 +113,34 @@ describe('ChatGPT, signed in directly', () => {
     expect((await ai.status()).account).toBeNull()
   })
 
+  it('thinks as hard as asked in the AI pane, and copes with a model that can’t choose', async () => {
+    const { ai, browser, settings } = await setup()
+    await ai.chatgptSignIn(browser)
+    const ask = {
+      requestId: 't',
+      mode: 'chat' as const,
+      messages: [{ role: 'user' as const, content: 'Is this scene working?' }],
+      scope: null,
+    }
+    const calls = () => fake!.requests.filter((r) => r.path === '/responses')
+    await ai.ask(ask, () => {})
+    expect(calls().at(-1)!.body['reasoning']).toBeUndefined() // automatic: the model decides
+
+    settings.chatgptThinking = 'high'
+    await ai.ask(ask, () => {})
+    expect(calls().at(-1)!.body['reasoning']).toEqual({ effort: 'high' })
+
+    // A model that refuses a thinking level: asked again without one, answered, remembered.
+    fake!.rejectEffort = true
+    const before = calls().length
+    const r = await ai.ask(ask, () => {})
+    expect(r.text).toContain('From ChatGPT')
+    expect(calls().length).toBe(before + 2)
+    expect(calls().at(-1)!.body['reasoning']).toBeUndefined()
+    await ai.ask(ask, () => {})
+    expect(calls().length).toBe(before + 3)
+  })
+
   it('refreshes a login that has run out', async () => {
     const { ai, browser } = await setup()
     fake!.expireTokens = true
