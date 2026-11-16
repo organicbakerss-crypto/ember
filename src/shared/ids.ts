@@ -33,6 +33,7 @@ export const ID_KINDS = {
   character: 'chr',
   node: 'nod',
   point: 'pnt',
+  check: 'chk',
 } as const
 
 export type IdKind = keyof typeof ID_KINDS

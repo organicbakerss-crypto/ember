@@ -3,6 +3,7 @@ import type { ConversationSummary, LibraryProblem } from '@shared/ipc'
 import type { MemoryNodeFile, MemoryState } from '@shared/schema'
 import { stretches, type MemoryDraft } from '@shared/memory/build'
 import type { TidySuggestion } from '@shared/memory/tidy'
+import type { IdeaCheck } from '@shared/memory/check'
 import { api, describeError, useIpcEvent } from '../api'
 import { loadLocal, saveLocal } from '../storage'
 import { MemoryMap } from './MemoryMap'
@@ -29,7 +30,10 @@ export function MemoryView(props: {
   conversations: ConversationSummary[]
   /** Open "Make nodes" with this conversation ticked. */
   makeFrom?: string | null
-  onClose: () => void
+  /** Shows Close (inside the AI pane); the General ideas screen has its own Back. */
+  onClose?: () => void
+  /** On the General ideas screen (its own heading). */
+  onPage?: boolean
   onOpenConversation: (id: string) => void
 }) {
   const { seriesId } = props
@@ -43,6 +47,19 @@ export function MemoryView(props: {
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [tidying, setTidying] = useState(false)
+  /** Checking against the chapters: null (not), 'review' (what's waiting), 'story' (read every chapter first). */
+  const [checking, setChecking] = useState<'review' | 'story' | null>(null)
+  const [waiting, setWaiting] = useState(0)
+  const countWaiting = useCallback(() => {
+    api.invoke('memory:checks', { seriesId }).then(
+      (list) => setWaiting(list.length),
+      () => {},
+    )
+  }, [seriesId])
+  useEffect(countWaiting, [countWaiting])
+  useIpcEvent('memory:checked', (e) => {
+    if (e.seriesId === seriesId) countWaiting()
+  })
   const [storyName, setStoryName] = useState('this story')
   const [books, setBooks] = useState<{ id: string; name: string }[]>([])
   const [mode, setMode] = useState<'list' | 'map'>(() =>
@@ -208,15 +225,31 @@ export function MemoryView(props: {
     <div className="memory-view">
       <header className="memory-head">
         <div>
-          <strong>Story memory</strong>
+          {!props.onPage && <strong>General ideas</strong>}
           <div className="muted small">
             {nodes ? `${nodes.length} ${nodes.length === 1 ? 'topic' : 'topics'}` : 'Loading…'} ·
             the AI reads what helps when you ask; rejected ideas are kept for you, hidden from it
           </div>
         </div>
         <span className="status-spacer" />
-        {!draft && !making && !tidying && (
+        {!draft && !making && !tidying && !checking && (
           <>
+            {waiting > 0 && (
+              <button
+                className="primary"
+                title="What checking your chapters found: ideas now on the page, ideas the page went against, new ideas"
+                onClick={() => setChecking('review')}
+              >
+                From the page ({waiting})
+              </button>
+            )}
+            <button
+              title="Have the AI read your chapters and check the ideas against them: what's now on the page, what the page went against, what's new"
+              disabled={!nodes?.length}
+              onClick={() => setChecking('story')}
+            >
+              Check against the story…
+            </button>
             <button
               title="Have the AI look over the memory: link related topics, merge duplicates, move points, file loose ends"
               disabled={(nodes?.length ?? 0) < 2}
@@ -227,7 +260,7 @@ export function MemoryView(props: {
             <button onClick={() => setMaking(true)}>Make nodes…</button>
           </>
         )}
-        <button onClick={props.onClose}>Close</button>
+        {props.onClose && <button onClick={props.onClose}>Close</button>}
       </header>
       {error && <p className="error small">{error}</p>}
       {problems.length > 0 && (
@@ -238,7 +271,18 @@ export function MemoryView(props: {
         </p>
       )}
 
-      {tidying && !draft ? (
+      {checking && !draft ? (
+        <ChecksPanel
+          seriesId={seriesId}
+          read={checking === 'story'}
+          onDone={(message) => {
+            setChecking(null)
+            if (message) toast(message)
+            countWaiting()
+            load()
+          }}
+        />
+      ) : tidying && !draft ? (
         <TidyPanel
           seriesId={seriesId}
           nodes={nodes ?? []}
@@ -514,15 +558,20 @@ function NodeDetail(props: {
                           )
                         }
                       />
-                      {src && (
-                        <button
-                          className="link muted"
-                          title={src.quote ? `“${src.quote}”` : undefined}
-                          onClick={() => props.onOpenConversation(src.conversationId)}
-                        >
-                          from “{src.title}”, {day(src.at)}
-                        </button>
-                      )}
+                      {src &&
+                        (src.conversationId ? (
+                          <button
+                            className="link muted"
+                            title={src.quote ? `“${src.quote}”` : undefined}
+                            onClick={() => props.onOpenConversation(src.conversationId)}
+                          >
+                            from “{src.title}”, {day(src.at)}
+                          </button>
+                        ) : (
+                          <span className="muted" title={src.quote ? `“${src.quote}”` : undefined}>
+                            from {src.title}, {day(src.at)}
+                          </span>
+                        ))}
                       <span className="status-spacer" />
                       <button
                         className="link"
@@ -1034,6 +1083,196 @@ const TIDY_GROUPS: { kind: TidySuggestion['kind']; label: string }[] = [
 ]
 
 /** Tidy up: the AI reviews the memory; the writer ticks which suggestions to make. */
+const CHECK_GROUPS: { kind: IdeaCheck['kind']; label: string; ticked: boolean }[] = [
+  { kind: 'onPage', label: 'Now on the page: mark fixed', ticked: true },
+  {
+    kind: 'contradicted',
+    label: 'The page went another way: mark rejected (kept for you, hidden from the AI)',
+    ticked: false,
+  },
+  { kind: 'fresh', label: 'New from the page: add as fixed ideas', ticked: true },
+]
+
+/** What checking chapters found, for the writer to tick (optionally reading every chapter first). */
+function ChecksPanel(props: {
+  seriesId: string
+  read: boolean
+  onDone: (message: string | null) => void
+}) {
+  const { seriesId } = props
+  const [requestId] = useState(
+    () => `check-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  )
+  const [progress, setProgress] = useState('Reading the chapters…')
+  const [checks, setChecks] = useState<IdeaCheck[] | null>(null)
+  const [ticked, setTicked] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useIpcEvent('ai:progress', (e) => {
+    if (e.requestId === requestId && e.text) setProgress(e.text)
+  })
+  useEffect(() => {
+    let live = true
+    const show = (list: IdeaCheck[]) => {
+      if (!live) return
+      setChecks(list)
+      setTicked(
+        new Set(
+          list.filter((c) => CHECK_GROUPS.find((g) => g.kind === c.kind)?.ticked).map((c) => c.id),
+        ),
+      )
+    }
+    const fail = (err: unknown) => {
+      if (!live) return
+      const e = describeError(err)
+      if (e.code === 'cancelled') props.onDone(null)
+      else setError(e.message)
+    }
+    ;(props.read ? api.invoke('memory:checkStory', { seriesId, requestId }) : Promise.resolve())
+      .then(() => api.invoke('memory:checks', { seriesId }))
+      .then(show, fail)
+    return () => {
+      live = false
+    }
+    // Once, when the panel opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const toggle = (id: string) =>
+    setTicked((s) => {
+      const next = new Set(s)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const describe = (c: IdeaCheck) =>
+    c.kind === 'fresh' ? (
+      <>
+        “{c.text}”{' '}
+        <span className="muted">
+          →{' '}
+          {c.nodeId ? (
+            <b>{c.topic}</b>
+          ) : (
+            <>
+              a new topic <b>{c.topic}</b>
+            </>
+          )}
+        </span>
+      </>
+    ) : (
+      <>
+        “{c.text}”{' '}
+        <span className="muted">
+          in <b>{c.topic}</b>
+        </span>
+        {c.kind === 'contradicted' && c.why && <span className="muted small"> · {c.why}</span>}
+      </>
+    )
+
+  return (
+    <div className="memory-draft memory-tidy memory-checks">
+      <h3>From the page</h3>
+      {error && <p className="error small">{error}</p>}
+      {!checks && !error && (
+        <>
+          <p className="small" role="status">
+            {progress}
+          </p>
+          <progress />
+          <div className="row">
+            <button onClick={() => void api.invoke('ai:cancel', { requestId })}>Stop</button>
+          </div>
+        </>
+      )}
+      {error && (
+        <div className="row">
+          <button onClick={() => props.onDone(null)}>Close</button>
+        </div>
+      )}
+      {checks && checks.length === 0 && (
+        <>
+          <p className="small">
+            Nothing to change: your ideas and your chapters agree, and the chapters set up nothing
+            new.
+          </p>
+          <div className="row">
+            <button onClick={() => props.onDone(null)}>Close</button>
+          </div>
+        </>
+      )}
+      {checks && checks.length > 0 && (
+        <>
+          <p className="small muted">
+            Your chapters checked against your ideas: the page is what’s true. Tick what to change;
+            nothing changes until you press the button, and every change is listed on its topic.
+          </p>
+          {CHECK_GROUPS.map((g) => {
+            const items = checks.filter((c) => c.kind === g.kind)
+            if (!items.length) return null
+            return (
+              <section key={g.kind} className="memory-tidy-group">
+                <h4 className="small">
+                  {g.label} ({items.length})
+                </h4>
+                <ul>
+                  {items.map((c) => (
+                    <li key={c.id}>
+                      <label className="radio">
+                        <input
+                          type="checkbox"
+                          checked={ticked.has(c.id)}
+                          onChange={() => toggle(c.id)}
+                        />
+                        <span>
+                          {describe(c)}
+                          <span className="muted small">
+                            {' '}
+                            · “{c.chapterTitle}”{c.quote ? `: “${c.quote}”` : ''}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+          <div className="row">
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true)
+                const apply = checks.filter((c) => ticked.has(c.id)).map((c) => c.id)
+                const dismiss = checks.filter((c) => !ticked.has(c.id)).map((c) => c.id)
+                api
+                  .invoke('memory:checksApply', { seriesId, apply, dismiss })
+                  .then((r) =>
+                    props.onDone(
+                      r.applied
+                        ? `${r.applied} ${r.applied === 1 ? 'change' : 'changes'} made from the page.`
+                        : 'Set aside; nothing changed.',
+                    ),
+                  )
+                  .catch((err: unknown) => setError(describeError(err).message))
+                  .finally(() => setBusy(false))
+              }}
+            >
+              {ticked.size
+                ? `Make ${ticked.size} ${ticked.size === 1 ? 'change' : 'changes'}`
+                : 'Set them all aside'}
+            </button>
+            <button disabled={busy} onClick={() => props.onDone(null)}>
+              Later
+            </button>
+          </div>
+          <p className="small muted">The unticked ones are set aside when you press the button.</p>
+        </>
+      )}
+    </div>
+  )
+}
+
 function TidyPanel(props: {
   seriesId: string
   nodes: MemoryNodeFile[]

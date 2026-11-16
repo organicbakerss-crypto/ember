@@ -57,6 +57,8 @@ import {
 import { newId } from '@shared/ids'
 import { MemoryBuilds } from './memoryBuild'
 import { MemoryLog } from './memoryLog'
+import { IdeaChecks } from './ideaChecks'
+import { applyChecks, checkMessages, parseCheck, type IdeaCheck } from '@shared/memory/check'
 import { applyUpdate, describeChanges, parseUpdate, updateMessages } from '@shared/memory/update'
 import {
   applyTidy as applyTidyChanges,
@@ -219,6 +221,8 @@ export interface WorldUpdateResult {
   suggestions: number
   continuity: number
   questions: number
+  /** New idea suggestions from checking General ideas against the chapter. */
+  ideas: number
 }
 
 export class AiService {
@@ -231,6 +235,8 @@ export class AiService {
   readonly memory: MemoryBuilds
   /** Recent automatic memory changes, for undo (this computer only). */
   readonly memoryLog: MemoryLog
+  /** Idea suggestions from checking chapters, waiting for the writer (this computer only). */
+  readonly ideaChecks: IdeaChecks
   /** The memory topics the last answer read, per story (for the map's glow). */
   readonly lastUsed = new Map<string, { ids: string[]; at: number }>()
 
@@ -252,6 +258,7 @@ export class AiService {
     },
   ) {
     this.memoryLog = new MemoryLog(options.host)
+    this.ideaChecks = new IdeaChecks(options.host)
     this.memory = new MemoryBuilds({
       host: options.host,
       client: () => this.client(),
@@ -603,6 +610,117 @@ export class AiService {
       onProgress('')
       return { suggestions: all, topics: live.length }
     })
+  }
+
+  /**
+   * Checks General ideas against chapters: what's now on the page, what the
+   * page went against, what it sets up that isn't an idea yet. Suggestions
+   * wait for the writer; returns how many are new.
+   */
+  private async checkIdeas(
+    seriesId: string,
+    chapters: { id: string; title: string; paragraphs: string[] }[],
+    provider: Provider,
+    signal: AbortSignal,
+    onProgress: (text: string, done: number) => void,
+  ): Promise<number> {
+    const library = this.options.host.current
+    const { nodes, problems } = await library.listNodes(seriesId)
+    if (problems.length)
+      throw new AppError(
+        'corrupt',
+        `A General ideas file can’t be read (${problems[0]!.path}); fix or remove it first.`,
+      )
+    const live = nodes.filter((n) => n.state !== 'rejected')
+    if (!live.length) return 0
+    const series = await library.getSeries(seriesId)
+    // Several chapters to a call (a long one in parts), in story order.
+    const limit = READ_WORDS[provider.kind]
+    const batches: { id: string; title: string; text: string; at: number }[][] = []
+    let batch: (typeof batches)[number] = []
+    let size = 0
+    for (const [i, chapter] of chapters.entries()) {
+      const title = chapter.title || 'Untitled'
+      for (const part of chapterParts(
+        chapter.paragraphs.filter((p) => p.trim()),
+        limit,
+      )) {
+        if (!part.trim()) continue
+        const n = part.split(/\s+/).length
+        if (size + n > limit && batch.length) {
+          batches.push(batch)
+          batch = []
+          size = 0
+        }
+        batch.push({ id: chapter.id, title, text: part, at: i })
+        size += n
+      }
+    }
+    if (batch.length) batches.push(batch)
+    const found: IdeaCheck[] = []
+    for (const group of batches) {
+      onProgress(group[0]!.title, group[0]!.at)
+      const all = group.map((c) => c.text).join('\n\n')
+      // The ideas these chapters touch show their points; the rest by title and summary.
+      const touched = new Set([
+        ...pickByWords(live, searchTerms(all), 15).map((p) => p.id),
+        ...live.filter((n) => n.loose).map((n) => n.id),
+      ])
+      const { text, keys } = tidyText(live, touched)
+      const reply = await provider.chat({
+        messages: checkMessages({ storyName: series.name, memory: text, chapters: group }),
+        json: true,
+        temperature: 0.2,
+        signal,
+      })
+      found.push(...parseCheck(reply, keys, live, group, new Date().toISOString()))
+    }
+    return this.ideaChecks.add(seriesId, found)
+  }
+
+  /** Tidy up, against the story: checks every chapter that has words in it. */
+  async checkStoryIdeas(
+    seriesId: string,
+    requestId: string,
+    onProgress: (text: string) => void = () => {},
+  ): Promise<{ added: number; chapters: number }> {
+    const provider = await this.client()
+    const library = this.options.host.current
+    const chapters = (await library.storySummaries(seriesId))
+      .filter((s) => s.paragraphs.some((p) => p.trim()))
+      .map((s) => ({ id: s.chapter.id, title: s.chapter.title, paragraphs: s.paragraphs }))
+    return this.track(requestId, async (signal) => {
+      const added = await this.checkIdeas(seriesId, chapters, provider, signal, (title, i) =>
+        onProgress(`Reading “${title || 'Untitled'}” (${i + 1} of ${chapters.length})…`),
+      )
+      onProgress('')
+      return { added, chapters: chapters.length }
+    })
+  }
+
+  /** Makes the idea suggestions the writer ticked; they (and the dismissed) leave the list. */
+  async applyIdeaChecks(
+    seriesId: string,
+    apply: string[],
+    dismiss: string[],
+  ): Promise<{ applied: number }> {
+    const library = this.options.host.current
+    const waiting = await this.ideaChecks.list(seriesId)
+    const picked = waiting.filter((c) => apply.includes(c.id))
+    let applied = 0
+    if (picked.length) {
+      const { nodes, problems } = await library.listNodes(seriesId)
+      if (problems.length)
+        throw new AppError(
+          'corrupt',
+          `A General ideas file can’t be read (${problems[0]!.path}); nothing was changed.`,
+        )
+      const result = applyChecks(nodes, picked, new Date().toISOString())
+      await library.saveNodes(seriesId, result.save)
+      applied = result.applied
+    }
+    await this.ideaChecks.remove(seriesId, [...apply, ...dismiss])
+    return { applied }
   }
 
   /** Makes the tidy-up changes the writer kept. Merged-away topics go to this computer's trash. */
@@ -2004,7 +2122,22 @@ export class AiService {
         )
       }
       await library.world.addFindings(worldId, source, findings)
+      // The page also checks General ideas (never the other way round). It never fails the update.
+      let ideas = 0
+      try {
+        onProgress('Checking your ideas against the chapter…')
+        ideas = await this.checkIdeas(
+          input.seriesId,
+          [{ id: input.chapterId, title: chapter.title, paragraphs }],
+          provider,
+          signal,
+          () => {},
+        )
+      } catch (err) {
+        if (signal.aborted) throw err
+      }
       return {
+        ideas,
         summary,
         applied,
         suggestions: findings.filter((f) => f.kind === 'suggestion').length,

@@ -108,6 +108,8 @@ export function registerIpc(
       },
       async (_onToken, onProgress) => {
         const result = await ai.updateWorld(input, onProgress)
+        if (result.ideas)
+          broadcast('memory:checked', { seriesId: input.seriesId, added: result.ideas })
         // Adaptive story characters pick up what happened to them in this chapter.
         void ai.learnFromChapter(input).catch(() => {})
         return result
@@ -437,6 +439,12 @@ export function registerIpc(
         broadcast('ai:progress', { requestId: input.requestId, text }),
       ),
     'memory:tidyApply': (input) => ai.applyTidy(input.seriesId, input.kept),
+    'memory:checks': (input) => ai.ideaChecks.list(input.seriesId),
+    'memory:checkStory': (input) =>
+      ai.checkStoryIdeas(input.seriesId, input.requestId, (text) =>
+        broadcast('ai:progress', { requestId: input.requestId, text }),
+      ),
+    'memory:checksApply': (input) => ai.applyIdeaChecks(input.seriesId, input.apply, input.dismiss),
     'memory:undo': (input) => ai.memoryLog.undo(input.seriesId, input.changeId),
     'memory:lastUsed': (input) => {
       const used = ai.lastUsed.get(input.seriesId)

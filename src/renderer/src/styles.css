@@ -21,7 +21,7 @@ body,
 }
 
 body {
-  background: var(--bg);
+  background: var(--surface);
   color: var(--text);
   font: 14px/1.45 var(--ui-font);
 }
@@ -455,7 +455,7 @@ button.new-card:hover {
   grid-area: panel;
   overflow-y: auto;
   border-right: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface);
   padding: 0.9rem 0.75rem;
   min-width: 0;
 }
@@ -1592,7 +1592,7 @@ kbd {
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: var(--bg);
+  background: var(--surface);
 }
 .settings-nav {
   border-right: 1px solid var(--border);
@@ -3383,7 +3383,7 @@ kbd {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: var(--bg);
+  background: var(--surface);
   display: flex;
 }
 .series-settings > * {
@@ -4035,7 +4035,7 @@ kbd {
   grid-template-columns: 15rem 1fr;
   height: 100%;
   min-height: 0;
-  background: var(--bg);
+  background: var(--surface);
 }
 .ai-history {
   border-right: 1px solid var(--border);
@@ -4143,7 +4143,7 @@ kbd {
 }
 .ai-text pre {
   white-space: pre-wrap;
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.5rem 0.7rem;
@@ -6615,4 +6615,25 @@ kbd {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* General ideas: a screen of its own, beside World. */
+.ideas-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface);
+}
+.ideas-page-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.ideas-page .memory-view {
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
 }

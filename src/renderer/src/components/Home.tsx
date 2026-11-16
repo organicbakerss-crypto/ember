@@ -15,6 +15,7 @@ import { WorldView } from '../world/WorldView'
 import { WritingView, type ChapterTarget } from './WritingView'
 import { isBook } from './worldLink'
 import { AiView } from '../ai/AiView'
+import { IdeasView } from '../ai/IdeasView'
 import { sortNamesNote, worldUpdateNote } from '../ai/worldUpdate'
 import { useOverlays } from './overlays'
 
@@ -51,6 +52,8 @@ type Route =
   | { view: 'splitAi'; write: WriteSide }
   /** The AI alone (a torn-off window). */
   | { view: 'ai'; seriesId: string; volumeId: string }
+  /** The story's General ideas (opened from writing). */
+  | { view: 'ideas'; seriesId: string; from?: WriteSide }
 
 const writeSide = (r: Extract<PaneRoute, { kind: 'write' }>): WriteSide => ({
   seriesId: r.seriesId,
@@ -125,6 +128,8 @@ export function Home(props: { detached?: PaneRoute | null }) {
   const [activeSide, setActiveSide] = useState<'write' | 'world'>('write')
   // Roundtable is a full-width mode of the existing AI tab, not another sidebar pane.
   const [roundtableExpanded, setRoundtableExpanded] = useState(false)
+  /** A conversation the AI pane should open (where an idea came from). */
+  const [aiOpen, setAiOpen] = useState<{ id: string; token: number } | null>(null)
   // Where each pane is now, as it reports it (for popping out, and for a torn-off window).
   const at = useRef<{ write?: PaneRoute; world?: PaneRoute; ai?: PaneRoute }>({})
   const word = useWords()
@@ -512,6 +517,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
           onOpenInbox={openInbox}
           roundtableActive={roundtableExpanded}
           onRoundtableChange={setRoundtableExpanded}
+          openConversation={aiOpen}
         />
       </PaneFrame>
     )
@@ -553,6 +559,11 @@ export function Home(props: { detached?: PaneRoute | null }) {
               : undefined
         }
         onToggleAi={() => toggleAi(write, place)}
+        onOpenIdeas={
+          place === 'alone'
+            ? () => setRoute({ view: 'ideas', seriesId: series.id, from: write })
+            : undefined
+        }
         aiBeside={route.view === 'splitAi'}
         hideModeSwitch={place !== 'alone'}
         beside={
@@ -716,6 +727,7 @@ export function Home(props: { detached?: PaneRoute | null }) {
             onOpenInbox={openInbox}
             roundtableActive={true}
             onRoundtableChange={setRoundtableExpanded}
+            openConversation={aiOpen}
           />
         </AlonePane>
       )
@@ -726,6 +738,26 @@ export function Home(props: { detached?: PaneRoute | null }) {
     return <SplitView left={left} right={right} />
   }
   if (route.view === 'world') return worldPane(route, 'alone') ?? shelf
+  if (route.view === 'ideas') {
+    const story = seriesOf(route.seriesId)
+    if (!story) return shelf
+    const from = route.from
+    const back = () =>
+      setRoute(from ? { view: 'volume', ...from } : { view: 'series', seriesId: story.id })
+    return (
+      <IdeasView
+        seriesId={story.id}
+        storyName={story.name}
+        backLabel={from ? 'Back to writing' : 'Back to the story'}
+        onBack={back}
+        onOpenConversation={(id) => {
+          setAiOpen({ id, token: Date.now() })
+          const volumeId = from?.volumeId ?? story.volumes[0]?.id
+          if (volumeId) setRoute({ view: 'splitAi', write: { seriesId: story.id, volumeId } })
+        }}
+      />
+    )
+  }
   if (route.view === 'settings') {
     return (
       <main className="settings-page">

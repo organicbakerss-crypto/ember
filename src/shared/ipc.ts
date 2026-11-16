@@ -81,6 +81,7 @@ import {
 } from './schema'
 import type { MemoryDraft } from './memory/build'
 import type { TidySuggestion } from './memory/tidy'
+import type { IdeaCheck } from './memory/check'
 
 /* ---------- shared result types ---------- */
 
@@ -330,6 +331,8 @@ export interface AiJobInfo {
     suggestions: number
     continuity?: number
     questions?: number
+    /** Update the world: new idea suggestions from checking General ideas. */
+    ideas?: number
     /** Sorting names: names it found weren't names for the world. */
     skipped?: number
     /** The audiobook script: where it was saved (null: not saved), and its size. */
@@ -1141,6 +1144,13 @@ export const ipcInputs = {
   'memory:undo': z.object({ seriesId: id('series'), changeId: z.string().min(1).max(80) }),
   /** Tidy up: the AI suggests links, merges, moves, filing and splits (progress as ai:progress). */
   'memory:tidy': z.object({ seriesId: id('series'), requestId: z.string().min(1).max(80) }),
+  'memory:checks': z.object({ seriesId: id('series') }),
+  'memory:checkStory': z.object({ seriesId: id('series'), requestId: z.string().min(1).max(80) }),
+  'memory:checksApply': z.object({
+    seriesId: id('series'),
+    apply: z.array(z.string().min(1).max(80)).max(1000),
+    dismiss: z.array(z.string().min(1).max(80)).max(1000),
+  }),
   /** Makes the tidy-up suggestions the writer kept. */
   'memory:tidyApply': z.object({
     seriesId: id('series'),
@@ -1425,6 +1435,7 @@ export interface IpcResults {
     suggestions: number
     continuity: number
     questions: number
+    ideas: number
   }
   'ai:summaries': ChapterSummaryInfo[]
   'inbox:accept': { item: InboxItem; entryId: string | null; relationshipId: string | null }
@@ -1463,6 +1474,9 @@ export interface IpcResults {
   'memory:undo': { undone: number; skipped: string[] }
   'memory:tidy': { suggestions: TidySuggestion[]; topics: number }
   'memory:tidyApply': { changed: number; removed: number }
+  'memory:checks': IdeaCheck[]
+  'memory:checkStory': { added: number; chapters: number }
+  'memory:checksApply': { applied: number }
   'memory:make': MemoryDraft
   'memory:draft': MemoryDraft | null
   'memory:read': MemoryDraft
@@ -1560,6 +1574,8 @@ export interface IpcEvents {
   'ai:progress': { requestId: string; text: string }
   /** The memory was brought up to date after an answer in this conversation. */
   'memory:updated': { seriesId: string; conversationId: string; changeId: string; summary: string }
+  /** Idea suggestions were added (from checking a chapter): General ideas shows them. */
+  'memory:checked': { seriesId: string; added: number }
   /** An answer read these memory topics (the map glows them). */
   'memory:used': { seriesId: string; nodeIds: string[] }
   /** A "Make nodes" draft changed (null: kept or discarded). */

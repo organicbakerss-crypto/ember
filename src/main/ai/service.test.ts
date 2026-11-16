@@ -1046,6 +1046,110 @@ describe('the story memory', () => {
     expect(trash.some((f) => f.includes(mk(2, '').id))).toBe(true)
   })
 
+  it('checks the ideas against the chapters; the writer ticks; a damaged list is never written over', async () => {
+    fake = await startFakeOllama((r) => {
+      const system = r.messages[0]!.content
+      if (!system.includes('You check a writer')) return 'ok'
+      expect(r.messages[1]!.content).toContain('Mara ran to the harbour.')
+      return JSON.stringify({
+        onPage: [{ point: 'P1', quote: 'ran to the harbour' }],
+        new: [{ node: '', title: 'Odo', text: 'Odo is waiting for someone', quote: 'Odo waited' }],
+      })
+    })
+    const ref = await story()
+    const T0 = new Date().toISOString()
+    await lib.saveNodes(ref.seriesId, [
+      {
+        formatVersion: 1,
+        id: 'nod_aaaaaaaaaaaaaaaa',
+        title: 'Mara',
+        state: 'unfixed',
+        summary: '',
+        volumeId: null,
+        entryIds: [],
+        links: [],
+        parentId: null,
+        loose: false,
+        pos: null,
+        points: [
+          {
+            id: 'pnt_aaaaaaaaaaaaaaaa',
+            text: 'Mara runs to the harbour',
+            state: 'unfixed',
+            sources: [],
+            createdAt: T0,
+            updatedAt: T0,
+          },
+        ],
+        history: [],
+        createdAt: T0,
+        updatedAt: T0,
+      },
+    ])
+    const ai = service({})
+    // A second chapter showing the same things: still one suggestion each.
+    const again = await lib.createChapter({
+      seriesId: ref.seriesId,
+      volumeId: ref.volumeId,
+      title: 'Again',
+    })
+    await lib.saveChapter(ref.seriesId, ref.volumeId, again.id, {
+      content: doc('Mara ran to the harbour.', 'Odo waited by the boats.'),
+    })
+    expect(await ai.checkStoryIdeas(ref.seriesId, 'r-check')).toEqual({ added: 2, chapters: 2 })
+    // Nothing changed yet; checking again adds nothing twice.
+    expect((await lib.listNodes(ref.seriesId)).nodes[0]!.points[0]!.state).toBe('unfixed')
+    expect(await ai.checkStoryIdeas(ref.seriesId, 'r-check2')).toEqual({ added: 0, chapters: 2 })
+    const waiting = await ai.ideaChecks.list(ref.seriesId)
+    const onPage = waiting.find((c) => c.kind === 'onPage')!
+    const fresh = waiting.find((c) => c.kind === 'fresh')!
+    // The writer ticks only the first; the other is set aside.
+    expect(await ai.applyIdeaChecks(ref.seriesId, [onPage.id], [fresh.id])).toEqual({ applied: 1 })
+    const nodes = (await lib.listNodes(ref.seriesId)).nodes
+    expect(nodes).toHaveLength(1)
+    expect(nodes[0]!.points[0]!.state).toBe('fixed')
+    expect(await ai.ideaChecks.list(ref.seriesId)).toEqual([])
+    // A damaged list is reported and left as it is.
+    const file = join(lib.paths.localDir, 'idea-checks', `${ref.seriesId}.json`)
+    await fs.promises.writeFile(file, '{ not json')
+    await expect(ai.checkStoryIdeas(ref.seriesId, 'r-check3')).rejects.toThrow(/can’t be read/)
+    expect(await fs.promises.readFile(file, 'utf8')).toBe('{ not json')
+  })
+
+  it('updating the world also checks the ideas against that chapter', async () => {
+    fake = await startFakeOllama((r) => {
+      const system = r.messages[0]!.content
+      if (system.includes('You check a writer'))
+        return JSON.stringify({ new: [{ node: 'LOOSE', text: 'Odo hides a letter', quote: '' }] })
+      return JSON.stringify({ summary: 'Mara runs.', facts: [], new: [] })
+    })
+    const ref = await story()
+    const T0 = new Date().toISOString()
+    await lib.saveNodes(ref.seriesId, [
+      {
+        formatVersion: 1,
+        id: 'nod_bbbbbbbbbbbbbbbb',
+        title: 'Odo',
+        state: 'unfixed',
+        summary: '',
+        volumeId: null,
+        entryIds: [],
+        links: [],
+        parentId: null,
+        loose: false,
+        pos: null,
+        points: [],
+        history: [],
+        createdAt: T0,
+        updatedAt: T0,
+      },
+    ])
+    const ai = service({})
+    const result = await ai.updateWorld({ requestId: 'r-world', ...ref }, () => {})
+    expect(result.ideas).toBe(1)
+    expect((await ai.ideaChecks.list(ref.seriesId))[0]!.topic).toBe('Loose ends')
+  })
+
   it('undo leaves a topic alone if it changed since', async () => {
     const ref = await story()
     const { MemoryLog } = await import('./memoryLog')

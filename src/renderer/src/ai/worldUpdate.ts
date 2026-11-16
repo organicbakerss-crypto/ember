@@ -16,11 +16,14 @@ export function worldUpdateNote(title: string, r: Done): string {
     n(r.questions, 'question for you', 'questions for you'),
   ].filter(Boolean)
   const name = `“${title || 'Untitled'}”`
-  if (!parts.length) return `Read ${name}: nothing new for the world.`
+  const ideas = r.ideas
+    ? ` ${n(r.ideas, 'idea suggestion is', 'idea suggestions are')} waiting in General ideas.`
+    : ''
+  if (!parts.length) return `Read ${name}: nothing new for the world.${ideas}`
   const where = r.applied
     ? 'Each is listed in the world’s inbox, where you can undo it.'
     : 'They’re waiting in the world’s inbox.'
-  return `Read ${name}: ${parts.join(', ')}. ${where}`
+  return `Read ${name}: ${parts.join(', ')}. ${where}${ideas}`
 }
 
 /** What sorting names did, in words. */

@@ -180,6 +180,8 @@ export function AiView(props: {
   /** Controlled by Home when the Roundtable takes over the full AI workspace. */
   roundtableActive?: boolean
   onRoundtableChange?: (active: boolean) => void
+  /** Opens this conversation (from General ideas: where an idea came from). */
+  openConversation?: { id: string; token: number } | null
 }) {
   const { seriesId } = props
   const { settings, update } = useSettings()
@@ -508,6 +510,16 @@ export function AiView(props: {
       setError(describeError(err).message)
     }
   }
+
+  // Asked to open a conversation (from General ideas: where an idea came from).
+  const openRef = useRef(open)
+  useEffect(() => {
+    openRef.current = open
+  })
+  const wanted = props.openConversation
+  useEffect(() => {
+    if (wanted) void openRef.current(wanted.id)
+  }, [wanted])
 
   useEffect(() => {
     if (roundtableOpen || !pendingOpen.id) return
@@ -1256,7 +1268,7 @@ export function AiView(props: {
           setListOpen(false)
         }}
       >
-        Story memory
+        General ideas
       </button>
       {adding === null ? (
         <button

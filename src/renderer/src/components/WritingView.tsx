@@ -132,6 +132,8 @@ export function WritingView(props: {
   onOpenWorld?: (entryId?: string, how?: 'window') => void
   /** Opens the world beside this view (split screen); unset when it already is. */
   onOpenWorldBeside?: () => void
+  /** Opens the story's General ideas (shown only with the AI on). */
+  onOpenIdeas?: () => void
   /** Opens or closes the AI beside the page. */
   onToggleAi?: () => void
   /** The AI is open beside the page. */
@@ -1598,6 +1600,16 @@ export function WritingView(props: {
                   {word('world', 'World')}
                 </button>
               )}
+              {aiOn && props.onOpenIdeas && !props.hideModeSwitch && (
+                <button
+                  role="radio"
+                  aria-checked={false}
+                  title="General ideas: the ideas worked out for this story (fixed, unfixed, whims)"
+                  onClick={props.onOpenIdeas}
+                >
+                  Ideas
+                </button>
+              )}
             </div>
             {(props.onToggleWorldBeside || aiOn) && (
               <div className="beside-switch" role="group" aria-label="Beside the page">
@@ -1677,7 +1689,26 @@ export function WritingView(props: {
                 >
                   {word('world', 'World')}
                 </button>
+                {aiOn && props.onOpenIdeas && (
+                  <button
+                    role="radio"
+                    aria-checked={false}
+                    title="General ideas: the ideas worked out for this story (fixed, unfixed, whims)"
+                    onClick={props.onOpenIdeas}
+                  >
+                    Ideas
+                  </button>
+                )}
               </div>
+            )}
+            {aiOn && props.onOpenIdeas && !(props.onOpenWorld && !props.hideModeSwitch) && (
+              <button
+                className="small"
+                title="General ideas: the ideas worked out for this story (fixed, unfixed, whims)"
+                onClick={props.onOpenIdeas}
+              >
+                Ideas
+              </button>
             )}
           </>
         )}
