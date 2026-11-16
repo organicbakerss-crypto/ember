@@ -1423,7 +1423,8 @@ export function WritingView(props: {
         </nav>
         {margins && (
           <button className="command-box" onClick={openPalette} title={`Command palette (${MOD}K)`}>
-            <span aria-hidden>⌕</span> Find, jump, or do anything
+            <span aria-hidden>⌕</span>
+            <span className="command-box-text">Find, jump, or do anything</span>
             <kbd>{MOD}K</kbd>
           </button>
         )}
