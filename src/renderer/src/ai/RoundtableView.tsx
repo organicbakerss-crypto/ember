@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ROUNDTABLE_CAST } from '@shared/ai/roundtableCast'
-import { yourPartner } from '@shared/ai/personas'
+import { GUESTS, yourPartner } from '@shared/ai/personas'
 import { useSettings } from '../useTheme'
 import { newId } from '@shared/ids'
 import type { ConversationFile } from '@shared/schema'
@@ -48,7 +48,7 @@ export function RoundtableView({
   const [limit, setLimit] = useState(0)
   /** What the writer picked to keep from the results ('summary' or a participant id). */
   const [picked, setPicked] = useState<Set<string>>(() => new Set())
-  const [selected, setSelected] = useState<string[]>([currentCharacter.id, 'specialist-fantasy'])
+  const [selected, setSelected] = useState<string[]>([currentCharacter.id, GUESTS[0]!.id])
   const [file, setFile] = useState<ConversationFile | null>(null)
   const [saved, setSaved] = useState<ConversationSummary[]>([])
   const [tab, setTab] = useState<Tab>('floor')
@@ -464,8 +464,7 @@ export function RoundtableView({
               ))}
             </div>
             <p className="muted small">
-              Pick 2 to 12: your partner, specialists and guest stars. Older sessions keep their
-              original cast.
+              Pick 2 to 12: John AI and the guest stars. Older sessions keep their original cast.
             </p>
           </div>
           <label className="rt-limit">

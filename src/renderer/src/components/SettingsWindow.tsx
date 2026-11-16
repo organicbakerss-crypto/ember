@@ -1017,10 +1017,9 @@ function AiSettingsSection() {
           )}
           <h3>AI character</h3>
           <p className="muted small">
-            Who answers in Chat, Brainstorm and Ask the story. The brainstorming partners all give
-            the same complete feedback; only their personality differs. Guest stars are AI
-            portrayals of real creators who look through their own lens. Under any answer, “Second
-            opinion” asks someone else.
+            Who answers in Chat, Brainstorm and Ask the story. John AI is a plain assistant with no
+            personality. Guest stars are AI portrayals of real creators who look through their own
+            lens. Under any answer, “Second opinion” asks someone else.
           </p>
           <label>
             Character
@@ -1037,13 +1036,11 @@ function AiSettingsSection() {
                 })
               }
             >
-              <optgroup label="Brainstorming partners">
-                {REGULARS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </optgroup>
+              {REGULARS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
               <optgroup label="Guest stars (AI portrayals)">
                 {GUESTS.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -1064,7 +1061,7 @@ function AiSettingsSection() {
                   {p.knownFor}. {guestNotice(p)} An AI portrayal, not the real person.
                 </p>
               ) : (
-                <p className="muted small">{p.kind === 'regular' ? p.summary : p.focus}</p>
+                <p className="muted small">{p.summary}</p>
               )
             })()}
           <h3>Your story characters</h3>

@@ -10,25 +10,20 @@ import {
 } from '.'
 
 describe('AI characters', () => {
-  it('has ten partners, John AI and eleven guest stars, each with a voice shown by example', () => {
-    expect(REGULARS).toHaveLength(11)
+  it('has John AI and eleven guest stars, each guest with a voice shown by example', () => {
+    expect(REGULARS.map((p) => p.id)).toEqual(['john-ai'])
     expect(GUESTS).toHaveLength(11)
     for (const p of PERSONAS)
       if (!(p.kind === 'regular' && p.plain)) expect(p.sounds.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('reads an unknown or old character as the default', () => {
+  it('reads an unknown, old or retired character as John AI', () => {
+    expect(DEFAULT_PERSONA_ID).toBe('john-ai')
     expect(persona('john-old-character').id).toBe(DEFAULT_PERSONA_ID)
+    expect(persona('nora').id).toBe('john-ai')
+    expect(persona('specialist-pacing').id).toBe('john-ai')
     expect(persona('john-ai').name).toBe('John AI')
     expect(persona(undefined).id).toBe(DEFAULT_PERSONA_ID)
-  })
-
-  it('gives every partner the same full checklist, and no backstory', () => {
-    for (const p of REGULARS.filter((x) => !x.plain)) {
-      const prompt = personaInstructions(p.id)
-      expect(prompt).toContain('check all of these')
-      expect(prompt).toContain("Don't invent a personal history")
-    }
   })
 
   it('tells a guest star where they go deep and where they are lighter, and that it is a portrayal', () => {
@@ -41,7 +36,7 @@ describe('AI characters', () => {
   })
 
   it('carries the anti-slop examples, and stays short', () => {
-    const prompt = personaInstructions('max')
+    const prompt = personaInstructions('john-ai')
     expect(prompt).toContain('That third one is sneaky.')
     expect(prompt).toContain('Suddenly it’s Sunday evening.')
     for (const p of PERSONAS)
@@ -60,18 +55,6 @@ describe('AI characters', () => {
   })
 })
 
-describe('telling the partners apart', () => {
-  it('gives each partner its own way of answering and a full example answer', async () => {
-    const { personaReminder } = await import('.')
-    const partners = REGULARS.filter((p) => !p.plain)
-    expect(new Set(partners.map((p) => p.approach)).size).toBe(partners.length)
-    for (const p of partners) {
-      expect(personaInstructions(p.id)).toContain(p.example)
-      expect(personaReminder(p.id)).toContain(`Answer as ${p.name}`)
-    }
-  })
-})
-
 describe('John AI', () => {
   it('is a plain assistant: no personality, still no AI slop', () => {
     const prompt = personaInstructions('john-ai')
@@ -82,10 +65,10 @@ describe('John AI', () => {
 })
 
 describe('your partner at the Roundtable', () => {
-  it('is the main AI when that is a partner, else the partner used last', async () => {
+  it('is John AI', async () => {
     const { yourPartner } = await import('.')
-    expect(yourPartner({ characterId: 'max', lastPartnerId: 'nora' }).id).toBe('max')
-    expect(yourPartner({ characterId: 'guest-dan-harmon', lastPartnerId: 'iris' }).id).toBe('iris')
-    expect(yourPartner({ characterId: 'guest-dan-harmon' }).id).toBe(DEFAULT_PERSONA_ID)
+    expect(yourPartner({ characterId: 'guest-dan-harmon', lastPartnerId: 'nora' }).id).toBe(
+      'john-ai',
+    )
   })
 })

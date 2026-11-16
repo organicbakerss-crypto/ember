@@ -927,7 +927,7 @@ The writer now talks the story through in ChatGPT and uses the app's AI for worl
 ### 2. Cut the regular AI partners
 
 - Remove the regular partners (Nora, Max, Iris, …). Keep John AI and the guest stars. Old conversations with a removed partner still open; new messages in them are answered by John AI.
-- Still to decide with the writer: the Roundtable (its partner falls back to a regular), chatting as the story's own characters (second opinions, "in a character's voice"), and the specialists.
+- **Done (Nov 2026).** The writer decided: the Roundtable partner is John AI; the story's own characters stay (chatting as them, second opinions, "in a character's voice"); the specialists go too. Only John AI and the guest stars are left (`regulars.ts` holds John AI; `specialists.ts` is gone; the default character is John AI). Anything unknown (a saved setting, conversation or Roundtable seat naming a retired partner or specialist) reads as John AI; an old Roundtable session keeps the seat's name. The Roundtable offers John AI and the guest stars.
 
 ### 3. The Stage (takes the regulars' place)
 

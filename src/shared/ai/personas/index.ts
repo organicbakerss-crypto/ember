@@ -1,17 +1,16 @@
 import { GUESTS } from './guests'
 import { REGULARS } from './regulars'
 import { DEPTH, slopGuidance } from './slop'
-import { SPECIALISTS } from './specialists'
-import type { GuestPersona, Persona, RegularPersona, SpecialistPersona } from './types'
+import type { GuestPersona, Persona, RegularPersona } from './types'
 
-export type { GuestPersona, Persona, RegularPersona, SpecialistPersona } from './types'
-export { SPECIALISTS } from './specialists'
+export type { GuestPersona, Persona, RegularPersona } from './types'
 export { GUESTS } from './guests'
 export { REGULARS } from './regulars'
 export { DEPTH, SLOP_RULES, slopGuidance } from './slop'
 
-export const DEFAULT_PERSONA_ID = 'nora'
-export const PERSONAS: readonly Persona[] = [...REGULARS, ...GUESTS, ...SPECIALISTS]
+/** John AI. Anything unknown (a retired partner or specialist) reads as it. */
+export const DEFAULT_PERSONA_ID = 'john-ai'
+export const PERSONAS: readonly Persona[] = [...REGULARS, ...GUESTS]
 
 const byId = new Map<string, Persona>(PERSONAS.map((p) => [p.id, p]))
 if (byId.size !== PERSONAS.length) throw new Error('Character ids must be unique.')
@@ -23,12 +22,10 @@ export function persona(id: string | null | undefined): Persona {
 
 export const isGuest = (p: Persona): p is GuestPersona => p.kind === 'guest'
 
-/** The partner who represents you: the main AI if it's a partner, else the one used last. */
-export function yourPartner(settings: { characterId?: string; lastPartnerId?: string }): Persona {
-  const main = persona(settings.characterId)
-  if (main.kind === 'regular') return main
-  const last = persona(settings.lastPartnerId)
-  return last.kind === 'regular' ? last : persona(DEFAULT_PERSONA_ID)
+/** Your partner at the Roundtable: John AI (the other partners were retired). */
+export function yourPartner(settings?: { characterId?: string; lastPartnerId?: string }): Persona {
+  void settings
+  return persona(DEFAULT_PERSONA_ID)
 }
 
 /** Characters that learn from the writer's own messages. */
@@ -62,17 +59,6 @@ function regularPrompt(p: RegularPersona): string {
     `How you'd answer "Does this scene work?" about a different story (a tavern reunion). Match this shape and voice, not its content:\n"${p.example}"`,
     `Your taste decides what you bring up first and how you say it, never what you leave out.`,
     CHECKLIST,
-  ].join('\n')
-}
-
-function specialistPrompt(p: SpecialistPersona): string {
-  return [
-    `You are the ${p.name} specialist, called in to look at the writer's work for one thing only: ${p.focus}. You're an expert in that area, not a person with a life story.`,
-    `Go deep on your area and leave the rest to others. If nothing in your area needs attention, say so in a sentence or two rather than reviewing everything else.`,
-    `The questions you bring:\n${p.lens.map((q) => `- ${q}`).join('\n')}`,
-    `How you talk: ${p.voice}`,
-    `Lines that show your voice:\n${p.sounds.map((x) => `- ${x}`).join('\n')}`,
-    `How you'd answer "Does this scene work?" about a different story (a tavern reunion). Match this voice and focus, not its content:\n"${p.example}"`,
   ].join('\n')
 }
 
@@ -122,11 +108,7 @@ export function personaInstructions(
 ): string {
   const p = persona(id)
   return [
-    p.kind === 'guest'
-      ? guestPrompt(p)
-      : p.kind === 'specialist'
-        ? specialistPrompt(p)
-        : regularPrompt(p),
+    p.kind === 'guest' ? guestPrompt(p) : regularPrompt(p),
     ...(learned.length
       ? [
           `Picked up since this card was written, from the writer's own words (newer than the card; where they differ, these win):\n${learned.map((x) => `- ${x}`).join('\n')}`,
@@ -146,8 +128,6 @@ export function personaReminder(id: string | null | undefined): string {
   const p = persona(id)
   if (p.kind === 'regular' && p.plain)
     return `Answer as a thoughtful collaborator: thorough, specific to their story, in plain words.`
-  if (p.kind === 'specialist')
-    return `Answer as the ${p.name} specialist: only ${p.focus}. ${p.voice} Not as a generic assistant.`
   return p.kind === 'guest'
     ? `Answer as ${p.name}: ${p.voice} Through your lens (${p.lens.slice(0, 2).join(' ')}). Not as a generic assistant or a polished report.`
     : `Answer as ${p.name}. ${p.approach} Not as a generic assistant.`

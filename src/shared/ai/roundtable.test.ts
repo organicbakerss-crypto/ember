@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ROUNDTABLE_CAST, roundtableRole } from './roundtableCast'
-import { GUESTS, SPECIALISTS } from './personas'
+import { GUESTS } from './personas'
 import { conversationFileSchema } from '../schema'
 import {
   advancePhase,
@@ -44,11 +44,12 @@ const initial = (): RoundtableSession => ({
 })
 
 describe('Roundtable phase engine', () => {
-  it('seats the brainstorming partners, the specialists and the guest stars', () => {
-    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular')).toHaveLength(11)
-    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(10)
+  it('seats John AI and the guest stars', () => {
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'regular').map((r) => r.id)).toEqual([
+      'john-ai',
+    ])
+    expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'specialist')).toHaveLength(0)
     expect(ROUNDTABLE_CAST.filter((role) => role.kind === 'guest')).toHaveLength(11)
-    expect(roundtableRole('nora', 'regular').instructions).toContain('You are Nora')
     for (const guest of GUESTS) {
       const role = roundtableRole(guest.id, 'guest')
       expect(role.instructions).toContain(`AI portrayal of ${guest.name}`)
@@ -58,34 +59,11 @@ describe('Roundtable phase engine', () => {
     }
   })
 
-  it('still opens an old session whose character was retired', () => {
-    expect(roundtableRole('retired-character', 'regular').instructions).toContain('You are Nora')
-    expect(() => roundtableRole('specialist-unknown', 'specialist')).toThrow()
-  })
-
-  it('seats ten specialists, five genres and five crafts, each kept to its own area', () => {
-    expect(SPECIALISTS.map((p) => p.name)).toEqual([
-      'Fantasy',
-      'Science Fiction',
-      'Horror',
-      'Mystery',
-      'Comedy',
-      'Interpersonal',
-      'Inner Monologue',
-      'Pacing',
-      'Tension',
-      'Hooks & Endings',
-    ])
-    for (const p of SPECIALISTS) {
-      const role = roundtableRole(p.id, 'specialist')
-      expect(role.instructions).toContain(`You are the ${p.name} specialist`)
-      expect(role.instructions).toContain(p.focus)
-      expect(role.instructions).toContain('That third one is sneaky.')
-      for (const other of SPECIALISTS) {
-        if (other.id !== p.id) expect(role.instructions).not.toContain(other.example)
-      }
-    }
-    expect(() => roundtableRole('specialist-romance', 'specialist')).toThrow()
+  it('still opens an old session with a retired partner or specialist (as John AI, by name)', () => {
+    const john = roundtableRole('john-ai', 'regular').instructions
+    expect(roundtableRole('nora', 'regular').instructions).toBe(john)
+    expect(roundtableRole('specialist-fantasy', 'specialist').instructions).toBe(john)
+    expect(roundtableRole('specialist-fantasy', 'specialist').name).toBe('specialist-fantasy')
   })
 
   it('mixes a specialist with regular characters in valid peer ballots', () => {
@@ -99,7 +77,6 @@ describe('Roundtable phase engine', () => {
     expect(validBallot(session, 'specialist-fantasy', ['specialist-fantasy', 'john-ai'])).toBe(
       false,
     )
-    expect(roundtableRole('specialist-fantasy', 'specialist').name).toBe('Fantasy')
   })
 
   it('persists the full session in the existing conversation schema', () => {

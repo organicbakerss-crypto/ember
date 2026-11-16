@@ -1495,13 +1495,11 @@ export function AiView(props: {
             disabled={!!busy}
             onChange={(e) => void pickCharacter(e.target.value)}
           >
-            <optgroup label="Brainstorming partners">
-              {REGULARS.map((p) => (
-                <option key={p.id} value={p.id} title={p.summary}>
-                  {p.name}
-                </option>
-              ))}
-            </optgroup>
+            {REGULARS.map((p) => (
+              <option key={p.id} value={p.id} title={p.summary}>
+                {p.name}
+              </option>
+            ))}
             <optgroup label="Guest stars (AI portrayals)">
               {GUESTS.map((p) => (
                 <option key={p.id} value={p.id} title={p.knownFor}>
@@ -1702,7 +1700,7 @@ export function AiView(props: {
                         onClick={(e) =>
                           openMenu(e, [
                             ...PERSONAS.filter((p) => p.id !== thread.characterId).map((p) => ({
-                              label: `${p.name}${isGuest(p) ? ' (guest star)' : p.kind === 'specialist' ? ' (specialist)' : ''}`,
+                              label: `${p.name}${isGuest(p) ? ' (guest star)' : ''}`,
                               onSelect: () => void secondOpinion(i, p.id),
                             })),
                             ...(cast ?? [])
