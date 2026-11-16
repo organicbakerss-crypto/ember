@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyUpdate, describeChanges, parseUpdate } from './update'
+import { applyUpdate, describeChanges, handedMessages, parseUpdate } from './update'
 import { tidyText } from './tidy'
 import { keepDraft, mergePart, parsePartReply, type MemoryDraft } from './build'
 import type { MemoryNodeFile } from '../schema'
@@ -137,5 +137,23 @@ describe('Make nodes links what it finds', () => {
     const odo = kept.find((n) => n.title === 'Odo')!
     expect(eye.links.sort()).toEqual([heist.id, odo.id].sort())
     expect(odo.links).toEqual([]) // the same link isn't made twice
+  })
+})
+
+describe('something the writer hands the ideas', () => {
+  it('is read as a hand-over (not a chat exchange), with what to take', () => {
+    const [system, user] = handedMessages({
+      storyName: 'Casino',
+      memory: '',
+      name: 'plot.md',
+      text: 'Josh hides the Eye.',
+      instruction: 'Only the casino story',
+      part: 2,
+      parts: 3,
+    })
+    expect(system!.content).toContain('from things they hand you')
+    expect(system!.content).toContain('“Only the casino story”')
+    expect(system!.content).not.toContain('After the exchange that follows')
+    expect(user!.content).toContain('Part 2 of 3 of “plot.md”')
   })
 })

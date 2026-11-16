@@ -62,6 +62,40 @@ const clip = (s: string, words: number) => {
   return all.length > words ? `${all.slice(0, words).join(' ')} …` : s
 }
 
+/**
+ * What the AI is asked about something the writer hands it for their ideas:
+ * a block from a ChatGPT chat, their plot, notes (in parts when it's long).
+ */
+export function handedMessages(input: {
+  storyName: string
+  memory: string
+  name: string
+  text: string
+  instruction: string
+  part: number
+  parts: number
+}): { role: 'system' | 'user'; content: string }[] {
+  const system = updateMessages({ ...input, question: '', answer: '' })[0]!.content
+  return [
+    {
+      role: 'system',
+      content: system
+        .replace(
+          'as they talk with an AI about it.',
+          'from things they hand you: a piece of a ChatGPT conversation, their plot, their notes.',
+        )
+        .replace(
+          'After the exchange that follows, say what changed. Most exchanges change little or nothing: then reply with empty lists.',
+          `Read what they handed you and say what to change: add everything worth keeping that isn't there yet, and update what it changes. In a conversation, the writer's own ideas and what they agreed to are fixed; the other side's suggestions they didn't take up are unfixed at most; what they turned down is rejected. In the writer's own plot or notes, what's stated as decided is fixed.${input.instruction.trim() ? ` The writer says: “${input.instruction.trim()}”. Follow that (leave out what it excludes).` : ''}`,
+        ),
+    },
+    {
+      role: 'user',
+      content: `${input.parts > 1 ? `Part ${input.part} of ${input.parts} of ` : ''}“${input.name}”:\n<<<\n${input.text}\n>>>`,
+    },
+  ]
+}
+
 /** What the AI is asked after an exchange. `memory` is tidyText's view (topics with keys). */
 export function updateMessages(input: {
   storyName: string

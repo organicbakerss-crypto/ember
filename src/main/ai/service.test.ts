@@ -1150,6 +1150,59 @@ describe('the story memory', () => {
     expect((await ai.ideaChecks.list(ref.seriesId))[0]!.topic).toBe('Loose ends')
   })
 
+  it('takes in something the writer hands it (pasted or a file); undo puts it back', async () => {
+    const seen: string[] = []
+    fake = await startFakeOllama((r) => {
+      const system = r.messages[0]!.content
+      if (!system.includes('from things they hand you')) return 'ok'
+      seen.push(r.messages[1]!.content)
+      return JSON.stringify({
+        points: [
+          {
+            node: '',
+            title: 'The Saint’s Eye',
+            text: 'The Eye is real',
+            state: 'fixed',
+            quote: '',
+          },
+        ],
+      })
+    })
+    const ref = await story()
+    const ai = service({})
+    const r = await ai.addToIdeas({
+      seriesId: ref.seriesId,
+      requestId: 'r-add',
+      text: 'The writer: the Eye is real.',
+      instruction: '',
+    })
+    expect(r.summary).toContain('“The Saint’s Eye”')
+    expect((await lib.listNodes(ref.seriesId)).nodes.map((n) => n.title)).toEqual([
+      'The Saint’s Eye',
+    ])
+    expect(seen[0]).toContain('“Pasted text”')
+    // A file: plain text or Markdown (Word and saved ChatGPT pages are read the same way).
+    await ai.addToIdeas({
+      seriesId: ref.seriesId,
+      requestId: 'r-add2',
+      file: { name: 'plot.md', data: new TextEncoder().encode('# Plot\n\nThe Eye is real.') },
+      instruction: '',
+    })
+    expect(seen[1]).toContain('“plot.md”')
+    expect(seen[1]).toContain('The Eye is real.')
+    // Undo: the topic it made goes again.
+    expect(await ai.memoryLog.undo(ref.seriesId, r.changeId!)).toEqual({ undone: 1, skipped: [] })
+    // Too long for this: pointed at Make nodes instead.
+    await expect(
+      ai.addToIdeas({
+        seriesId: ref.seriesId,
+        requestId: 'r-add3',
+        text: 'word '.repeat(60001),
+        instruction: '',
+      }),
+    ).rejects.toThrow(/Make nodes/)
+  })
+
   it('undo leaves a topic alone if it changed since', async () => {
     const ref = await story()
     const { MemoryLog } = await import('./memoryLog')

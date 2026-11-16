@@ -59,7 +59,14 @@ import { MemoryBuilds } from './memoryBuild'
 import { MemoryLog } from './memoryLog'
 import { IdeaChecks } from './ideaChecks'
 import { applyChecks, checkMessages, parseCheck, type IdeaCheck } from '@shared/memory/check'
-import { applyUpdate, describeChanges, parseUpdate, updateMessages } from '@shared/memory/update'
+import {
+  applyUpdate,
+  describeChanges,
+  handedMessages,
+  parseUpdate,
+  updateMessages,
+} from '@shared/memory/update'
+import { attachmentText } from './attachments'
 import {
   applyTidy as applyTidyChanges,
   parseTidy,
@@ -69,6 +76,7 @@ import {
   type TidySuggestion,
 } from '@shared/memory/tidy'
 import type { MemoryDraft } from '@shared/memory/build'
+import type { MemoryNodeFile } from '@shared/schema'
 import {
   memoryIndex,
   nodeForAI,
@@ -210,6 +218,8 @@ const LIMITS = {
 
 /** How much of a chapter goes to the AI at once when reading it for the world. */
 const READ_WORDS = { ollama: 1500, chatgpt: 12000 }
+/** The most words handed to General ideas at once (a whole chat goes through Make nodes). */
+const MAX_ADD_WORDS = 60000
 /** Most entries' notes sent with a chapter, and the other names listed. */
 const MAX_NOTES = 12
 const MAX_OTHER_NAMES = 400
@@ -695,6 +705,127 @@ export class AiService {
       )
       onProgress('')
       return { added, chapters: chapters.length }
+    })
+  }
+
+  /**
+   * Something the writer hands General ideas (a block from a ChatGPT chat,
+   * their plot, notes; pasted or a file): the AI works it in, in parts when
+   * it's long. Changes are made straight away, listed on each topic and kept
+   * in the change log so they can be undone.
+   */
+  async addToIdeas(
+    input: {
+      seriesId: string
+      requestId: string
+      text?: string
+      file?: { name: string; data: Uint8Array }
+      instruction: string
+    },
+    onProgress: (text: string) => void = () => {},
+  ): Promise<{ changeId: string | null; summary: string; parts: number }> {
+    const provider = await this.client()
+    const library = this.options.host.current
+    let name = 'Pasted text'
+    let text = input.text ?? ''
+    if (input.file) {
+      name = input.file.name
+      const raw = new TextDecoder('utf-8', { fatal: false }).decode(input.file.data)
+      let chat: ReturnType<typeof chatFromSavedPage> | null = null
+      if (/\.html?$/i.test(name) && raw.includes('streamController.enqueue(')) {
+        try {
+          chat = chatFromSavedPage(raw)
+        } catch {
+          chat = null
+        }
+      }
+      text = chat?.chat.messages.length
+        ? chat.chat.messages
+            .map((m) => `${m.role === 'user' ? 'The writer' : 'ChatGPT'}: ${m.text}`)
+            .join('\n\n')
+        : await attachmentText(name, input.file.data)
+    }
+    const total = words(text)
+    if (!total) throw new AppError('invalid-input', 'There’s nothing in it to add.')
+    if (total > MAX_ADD_WORDS)
+      throw new AppError(
+        'invalid-input',
+        `That’s long (${total.toLocaleString('en')} words). For a whole ChatGPT chat, use “+ Add a ChatGPT chat” in the AI pane, then Make nodes: it sorts the chat by story first.`,
+      )
+    const { nodes, problems } = await library.listNodes(input.seriesId)
+    if (problems.length)
+      throw new AppError(
+        'corrupt',
+        `A General ideas file can’t be read (${problems[0]!.path}); nothing was changed.`,
+      )
+    const series = await library.getSeries(input.seriesId)
+    const parts = chapterParts(
+      text.split(/\n\s*\n/).filter((p) => p.trim()),
+      provider.kind === 'chatgpt' ? 9000 : 2000,
+    ).filter((p) => p.trim())
+    return this.track(input.requestId, async (signal) => {
+      const at = new Date().toISOString()
+      let current = nodes
+      const changed = new Map<string, MemoryNodeFile>()
+      const created = new Set<string>()
+      const what: string[] = []
+      for (const [i, part] of parts.entries()) {
+        onProgress(parts.length > 1 ? `Reading part ${i + 1} of ${parts.length}…` : 'Reading it…')
+        const touched = new Set([
+          ...pickByWords(current, searchTerms(part), 15).map((p) => p.id),
+          ...current.filter((n) => n.loose).map((n) => n.id),
+        ])
+        const { text: memory, keys } = tidyText(current, touched)
+        const reply = parseUpdate(
+          await provider.chat({
+            messages: handedMessages({
+              storyName: series.name,
+              memory,
+              name,
+              text: part,
+              instruction: input.instruction,
+              part: i + 1,
+              parts: parts.length,
+            }),
+            json: true,
+            temperature: 0.2,
+            signal,
+          }),
+        )
+        if (!reply) continue
+        const result = applyUpdate(current, reply, keys, {
+          conversationId: '',
+          title: name,
+          at,
+          quote: '',
+        })
+        for (const n of result.save) changed.set(n.id, n)
+        for (const id of result.created) created.add(id)
+        what.push(...result.what)
+        const saved = new Map(result.save.map((n) => [n.id, n]))
+        current = [
+          ...current.map((n) => saved.get(n.id) ?? n),
+          ...result.save.filter((n) => !current.some((x) => x.id === n.id)),
+        ]
+      }
+      onProgress('')
+      if (!changed.size) return { changeId: null, summary: '', parts: parts.length }
+      const save = [...changed.values()]
+      await library.saveNodes(input.seriesId, save)
+      const summary = describeChanges(what) || 'summaries brought up to date'
+      const changeId = `chg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      await this.memoryLog.add(input.seriesId, {
+        id: changeId,
+        at,
+        conversationId: '',
+        summary,
+        before: save.map((n) => ({
+          id: n.id,
+          node: created.has(n.id) ? null : (nodes.find((x) => x.id === n.id) ?? null),
+        })),
+        after: save.map((n) => ({ id: n.id, updatedAt: n.updatedAt })),
+      })
+      return { changeId, summary, parts: parts.length }
     })
   }
 

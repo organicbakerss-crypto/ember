@@ -1145,6 +1145,20 @@ export const ipcInputs = {
   /** Tidy up: the AI suggests links, merges, moves, filing and splits (progress as ai:progress). */
   'memory:tidy': z.object({ seriesId: id('series'), requestId: z.string().min(1).max(80) }),
   'memory:checks': z.object({ seriesId: id('series') }),
+  'memory:add': z
+    .object({
+      seriesId: id('series'),
+      requestId: z.string().min(1).max(80),
+      text: z.string().max(2_000_000).optional(),
+      file: z
+        .object({
+          name: z.string().trim().min(1).max(300),
+          data: z.instanceof(Uint8Array).refine((d) => d.byteLength <= 20 * 1024 * 1024),
+        })
+        .optional(),
+      instruction: z.string().max(500),
+    })
+    .refine((x) => !!x.text?.trim() || !!x.file, 'Paste something or choose a file.'),
   'memory:checkStory': z.object({ seriesId: id('series'), requestId: z.string().min(1).max(80) }),
   'memory:checksApply': z.object({
     seriesId: id('series'),
@@ -1475,6 +1489,7 @@ export interface IpcResults {
   'memory:tidy': { suggestions: TidySuggestion[]; topics: number }
   'memory:tidyApply': { changed: number; removed: number }
   'memory:checks': IdeaCheck[]
+  'memory:add': { changeId: string | null; summary: string; parts: number }
   'memory:checkStory': { added: number; chapters: number }
   'memory:checksApply': { applied: number }
   'memory:make': MemoryDraft

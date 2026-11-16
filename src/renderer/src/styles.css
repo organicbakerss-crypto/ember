@@ -6637,3 +6637,11 @@ kbd {
   width: 100%;
   margin: 0 auto;
 }
+.memory-add textarea,
+.memory-add input:not([type]) {
+  width: 100%;
+}
+.memory-add.drop-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+}

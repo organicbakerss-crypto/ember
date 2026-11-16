@@ -49,6 +49,8 @@ export function MemoryView(props: {
   const [tidying, setTidying] = useState(false)
   /** Checking against the chapters: null (not), 'review' (what's waiting), 'story' (read every chapter first). */
   const [checking, setChecking] = useState<'review' | 'story' | null>(null)
+  /** Handing the AI something for the ideas (pasted, or a file). */
+  const [adding, setAdding] = useState(false)
   const [waiting, setWaiting] = useState(0)
   const countWaiting = useCallback(() => {
     api.invoke('memory:checks', { seriesId }).then(
@@ -232,8 +234,14 @@ export function MemoryView(props: {
           </div>
         </div>
         <span className="status-spacer" />
-        {!draft && !making && !tidying && !checking && (
+        {!draft && !making && !tidying && !checking && !adding && (
           <>
+            <button
+              title="Give the AI something new for your ideas: a piece of a ChatGPT chat, your plot, notes (paste it or choose a file)"
+              onClick={() => setAdding(true)}
+            >
+              Add info…
+            </button>
             {waiting > 0 && (
               <button
                 className="primary"
@@ -271,7 +279,16 @@ export function MemoryView(props: {
         </p>
       )}
 
-      {checking && !draft ? (
+      {adding && !draft ? (
+        <AddPanel
+          seriesId={seriesId}
+          storyName={storyName}
+          onDone={() => {
+            setAdding(false)
+            load()
+          }}
+        />
+      ) : checking && !draft ? (
         <ChecksPanel
           seriesId={seriesId}
           read={checking === 'story'}
@@ -1083,6 +1100,175 @@ const TIDY_GROUPS: { kind: TidySuggestion['kind']; label: string }[] = [
 ]
 
 /** Tidy up: the AI reviews the memory; the writer ticks which suggestions to make. */
+/** Something new for the ideas: pasted, or a file (plot, notes, a saved ChatGPT page). */
+function AddPanel(props: { seriesId: string; storyName: string; onDone: () => void }) {
+  const { seriesId } = props
+  const { toast } = useOverlays()
+  const [text, setText] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [instruction, setInstruction] = useState(`Only the ideas for “${props.storyName}”`)
+  const [requestId, setRequestId] = useState<string | null>(null)
+  const [progress, setProgress] = useState('Reading it…')
+  const [done, setDone] = useState<{ changeId: string | null; summary: string } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [over, setOver] = useState(false)
+  const picker = useRef<HTMLInputElement>(null)
+  useIpcEvent('ai:progress', (e) => {
+    if (e.requestId === requestId && e.text) setProgress(e.text)
+  })
+  const start = async () => {
+    const id = `add-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setRequestId(id)
+    setError(null)
+    setProgress('Reading it…')
+    try {
+      const r = await api.invoke('memory:add', {
+        seriesId,
+        requestId: id,
+        instruction,
+        ...(file
+          ? { file: { name: file.name, data: new Uint8Array(await file.arrayBuffer()) } }
+          : { text }),
+      })
+      setDone(r)
+    } catch (err) {
+      const e = describeError(err)
+      if (e.code !== 'cancelled') setError(e.message)
+    } finally {
+      setRequestId(null)
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="memory-draft memory-add">
+        <h3>Add info</h3>
+        <p className="small">
+          {done.changeId
+            ? `Added to your ideas: ${done.summary}.`
+            : 'Nothing new to add: your ideas already have it.'}
+        </p>
+        <div className="row">
+          {done.changeId && (
+            <button
+              onClick={() =>
+                void api
+                  .invoke('memory:undo', { seriesId, changeId: done.changeId! })
+                  .then((r) => {
+                    toast(
+                      r.skipped.length
+                        ? `Undone, except ${r.skipped.join(', ')} (changed since).`
+                        : 'Undone.',
+                    )
+                    props.onDone()
+                  })
+                  .catch((err: unknown) => setError(describeError(err).message))
+              }
+            >
+              Undo
+            </button>
+          )}
+          <button className="primary" onClick={props.onDone}>
+            Done
+          </button>
+        </div>
+        {error && <p className="error small">{error}</p>}
+      </div>
+    )
+  }
+  return (
+    <div
+      className={`memory-draft memory-add ${over ? 'drop-over' : ''}`}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        setOver(true)
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setOver(false)
+        const f = e.dataTransfer.files[0]
+        if (f) setFile(f)
+      }}
+    >
+      <h3>Add info</h3>
+      <p className="small muted">
+        Give the AI something new for your ideas: a piece of a ChatGPT chat, your plot, notes. It
+        adds what’s new and updates what it changes; every change is listed on its topic and can be
+        undone. (For a whole ChatGPT chat, “+ Add a ChatGPT chat” and Make nodes sort it by story
+        first.)
+      </p>
+      {file ? (
+        <p className="small">
+          File: <b>{file.name}</b>{' '}
+          <button className="link" disabled={!!requestId} onClick={() => setFile(null)}>
+            Remove
+          </button>
+        </p>
+      ) : (
+        <>
+          <textarea
+            aria-label="What to add"
+            rows={10}
+            placeholder="Paste it here…"
+            value={text}
+            disabled={!!requestId}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <p className="small muted">
+            Or drop a file here, or{' '}
+            <button className="link" disabled={!!requestId} onClick={() => picker.current?.click()}>
+              choose a file
+            </button>{' '}
+            (.txt, .md, .docx, or a ChatGPT page saved from the browser).
+          </p>
+          <input
+            ref={picker}
+            type="file"
+            hidden
+            aria-label="File to add"
+            accept=".txt,.md,.markdown,.docx,.html,.htm"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) setFile(f)
+              e.target.value = ''
+            }}
+          />
+        </>
+      )}
+      <label className="small">
+        What to take
+        <input
+          aria-label="What to take"
+          value={instruction}
+          disabled={!!requestId}
+          onChange={(e) => setInstruction(e.target.value)}
+        />
+      </label>
+      {error && <p className="error small">{error}</p>}
+      {requestId ? (
+        <>
+          <p className="small" role="status">
+            {progress}
+          </p>
+          <progress />
+          <div className="row">
+            <button onClick={() => void api.invoke('ai:cancel', { requestId })}>Stop</button>
+          </div>
+        </>
+      ) : (
+        <div className="row">
+          <button className="primary" disabled={!file && !text.trim()} onClick={() => void start()}>
+            Add to ideas
+          </button>
+          <button onClick={props.onDone}>Cancel</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const CHECK_GROUPS: { kind: IdeaCheck['kind']; label: string; ticked: boolean }[] = [
   { kind: 'onPage', label: 'Now on the page: mark fixed', ticked: true },
   {
