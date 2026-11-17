@@ -2238,7 +2238,8 @@ export class AiService {
         if (made.length)
           findings = checkFindings(raws, text, facts(await library.world.view(worldId)))
         for (const f of findings) {
-          if (f.kind === 'suggestion' && f.suggestion?.type !== 'new') await apply(f)
+          // What was read between the lines waits for the writer.
+          if (f.kind === 'suggestion' && f.suggestion?.type !== 'new' && !f.implied) await apply(f)
         }
         applied = made.length
         findings = [...made, ...findings.filter((f) => f.kind !== 'suggestion')]

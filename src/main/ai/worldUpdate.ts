@@ -28,7 +28,7 @@ export const NEW_KINDS: Record<string, { template: string; label: string }> = {
 const KIND_GUIDE =
   'person: one individual; faction: any group or organisation, such as a company, shop, band, team, gang, church, school, radio or TV station, agency, club or family; place: a location or building; creature: an animal or non-human being'
 
-const LIMITS = { suggestions: 30, continuity: 10, questions: 3 }
+const LIMITS = { suggestions: 30, continuity: 10, questions: 5 }
 
 /* ---------- what the AI is asked ---------- */
 
@@ -46,16 +46,16 @@ export function findingsMessages(input: {
   answers: { question: string; answer: string }[]
 }): ChatMessage[] {
   const types = input.relationshipTypes.map((t) => `${t.id} (${t.label})`).join(', ')
-  const system = `You read one chapter of a novel and note what it tells about the story's world, so the writer's world notes stay up to date. Use only what the chapter says. Reply with JSON only, exactly this shape:
-{"summary":"","new":[{"name":"","kind":"","about":"","quote":""}],"facts":[{"entry":"","field":"","value":"","quote":""}],"relationships":[{"from":"","to":"","type":"","words":"","quote":""}],"continuity":[{"entry":"","problem":"","quote":""}],"questions":[{"question":"","quote":""}]}
+  const system = `You read one chapter of a novel and note what it tells about the story's world, so the writer's world notes stay up to date. Base everything on the chapter (and the notes). Read it the way a careful reader would: what it shows, what it tells, and what it clearly implies. Reply with JSON only, exactly this shape:
+{"summary":"","new":[{"name":"","kind":"","about":"","quote":""}],"facts":[{"entry":"","field":"","value":"","quote":""}],"relationships":[{"from":"","to":"","type":"","words":"","how":"shown|told|implied","quote":""}],"continuity":[{"entry":"","problem":"","quote":""}],"questions":[{"question":"","quote":""}]}
 - summary: at most 6 sentences: who is there, what happens, what changes. Keep names exactly.
 - new: people, places, groups, creatures, events or systems (magic, laws) the chapter names that are not in the world notes or the list of other names. kind is one of: ${Object.keys(NEW_KINDS).join(', ')} (${KIND_GUIDE}). about: one short line.
 - facts: what the chapter shows about an entry in the notes that its notes don't say yet, or that has changed (where someone is now, a new role, someone dies). entry: its exact name. field: one of the fields listed for that entry. value: a few words; for a field marked "a name", the exact name of another entry.
-- relationships: two entries named in the chapter who are connected in it, if the notes don't already say so. type is one of: ${types}. words: optional, like "sister of".
+- relationships: two entries who are connected, if the notes don't already say so. They don't need to meet on the page: include connections the chapter tells or clearly implies, past ones too (they met before, fought together years ago, one remembers, mentions or recognises the other, one knows the other's family, a shared history in passing). Both must be named in the chapter or in the notes. type is one of: ${types}; use "met" when they've known each other but nothing more is clear. words: optional, like "sister of" or "served together in the war". how: "shown" (they deal with each other here), "told" (the text says it outright) or "implied" (the text clearly points to it, reading between the lines). quote: the sentence that points to it. When a connection seems likely but you're not sure, don't list it here: ask the writer in questions instead (for example: "Have Mara and Dov met before? She seems to recognise him.").
 - continuity: anything in the chapter that contradicts the world notes or what the writer told you (an eye colour that changed, someone in two places at once, the dead acting). problem: what doesn't fit, in one line.
-- questions: at most 3 things you can't tell that matter for the notes, which only the writer can answer (for example: is "the Captain" Mara, or someone new?).
+- questions: at most 5 things you can't tell that matter for the notes, which only the writer can answer (for example: is "the Captain" Mara, or someone new? Have these two met before?).
 - quote: the exact sentence from the chapter it comes from, copied word for word.
-Leave a list empty when there's nothing for it. Don't repeat what the notes already say. Don't guess.`
+Leave a list empty when there's nothing for it. Don't repeat what the notes already say. Reading between the lines is fine where the text points to it; never invent what it gives no sign of.`
   const parts = [
     input.notes.length
       ? `World notes for the entries named in this chapter:\n\n${input.notes.join('\n\n---\n\n')}`
@@ -100,7 +100,15 @@ export interface RawFindings {
   summary: string
   new: { name: string; kind: string; about: string; quote: string }[]
   facts: { entry: string; field: string; value: string; quote: string }[]
-  relationships: { from: string; to: string; type: string; words: string; quote: string }[]
+  relationships: {
+    from: string
+    to: string
+    type: string
+    words: string
+    /** Shown on the page, told outright, or read between the lines. */
+    how?: 'shown' | 'told' | 'implied'
+    quote: string
+  }[]
   continuity: { entry: string; problem: string; quote: string }[]
   questions: { question: string; quote: string }[]
 }
@@ -145,6 +153,9 @@ export function parseFindings(reply: string): RawFindings | null {
       to: str(o['to']),
       type: str(o['type']).toLowerCase(),
       words: str(o['words']),
+      how: (['shown', 'told', 'implied'].includes(str(o['how']).toLowerCase())
+        ? str(o['how']).toLowerCase()
+        : 'shown') as 'shown' | 'told' | 'implied',
       quote: str(o['quote']),
     })),
     continuity: list('continuity', (o) => ({
@@ -158,7 +169,13 @@ export function parseFindings(reply: string): RawFindings | null {
 
 /* ---------- checking it against the world ---------- */
 
-export type Finding = Pick<InboxItem, 'kind' | 'text' | 'quote' | 'entryId' | 'suggestion' | 'undo'>
+export type Finding = Pick<
+  InboxItem,
+  'kind' | 'text' | 'quote' | 'entryId' | 'suggestion' | 'undo'
+> & {
+  /** Read between the lines: always left for the writer to accept, never made by itself. */
+  implied?: boolean
+}
 
 export interface WorldFacts {
   entries: EntrySummary[]
@@ -285,7 +302,8 @@ export function checkFindings(
       const label = r.words.slice(0, 80)
       add(`rel:${p}:${q}:${type.id}`, {
         kind: 'suggestion',
-        text: `${a.name} and ${b.name}: ${type.label}${label ? ` (${label})` : ''}`,
+        ...(r.how === 'implied' ? { implied: true } : {}),
+        text: `${a.name} and ${b.name}: ${type.label}${label ? ` (${label})` : ''}${r.how === 'implied' ? ' · read between the lines' : ''}`,
         quote: quoteOf(r.quote),
         entryId: a.id,
         suggestion: { type: 'relationship', from: a.id, to: b.id, relType: type.id, label },

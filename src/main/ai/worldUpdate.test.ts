@@ -5,6 +5,7 @@ import { BUILT_IN_RELATIONSHIP_TYPES } from '@shared/world/relationships'
 import {
   chapterParts,
   checkFindings,
+  findingsMessages,
   parseFindings,
   type RawFindings,
   type WorldFacts,
@@ -143,6 +144,38 @@ describe('reading the AI’s findings', () => {
     raw.relationships = [{ from: 'Odo', to: 'Mara', type: 'met', words: '', quote: '' }]
     const rel = { type: 'met', from: MARA, to: ODO } as WorldFacts['relationships'][number]
     expect(checkFindings([raw], CHAPTER, world({ relationships: [rel] }))).toEqual([])
+  })
+
+  it('reads between the lines: a past connection is suggested and waits for the writer', () => {
+    const reply = JSON.stringify({
+      relationships: [
+        { from: 'Mara', to: 'Odo', type: 'met', words: 'met years ago', how: 'implied', quote: '' },
+        { from: 'Odo', to: 'Mara', type: 'friends', words: '', how: 'odd', quote: '' },
+      ],
+    })
+    const raw = parseFindings(reply)!
+    expect(raw.relationships.map((r) => r.how)).toEqual(['implied', 'shown'])
+    const found = checkFindings([raw], CHAPTER, world())
+    expect(found[0]).toMatchObject({
+      text: 'Mara and Odo: Met (met years ago) · read between the lines',
+      implied: true,
+    })
+    expect(found[1]!.implied).toBeUndefined()
+  })
+
+  it('tells the AI to read past connections, and to ask when it isn’t sure', () => {
+    const system = findingsMessages({
+      chapterTitle: 'A',
+      text: 'x',
+      part: 1,
+      parts: 1,
+      notes: [],
+      otherNames: [],
+      relationshipTypes: [...BUILT_IN_RELATIONSHIP_TYPES],
+      answers: [],
+    })[0]!.content
+    expect(system).toContain("They don't need to meet on the page")
+    expect(system).toContain('ask the writer in questions instead')
   })
 
   it('splits a long chapter into parts by words', () => {
