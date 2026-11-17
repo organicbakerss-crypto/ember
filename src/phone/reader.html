@@ -273,6 +273,16 @@
       .bar {
         background: var(--bar, var(--bg));
       }
+      .theme-toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        text-align: left;
+      }
+      .theme-toggle span:nth-child(2) {
+        flex: 1;
+      }
       .swatches {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -468,9 +478,9 @@
       function login(message) {
         const input = el('input', {
           type: 'password',
-          placeholder: 'Passphrase',
+          placeholder: 'Sign-in phrase',
           autocomplete: 'current-password',
-          'aria-label': 'Passphrase',
+          'aria-label': 'Sign-in phrase',
         })
         const err = el('p', { class: 'error small' }, message || '')
         const go = async () => {
@@ -483,7 +493,7 @@
           } catch (e) {
             key = null
             err.textContent =
-              e.message === 'Wrong passphrase.' ? 'That passphrase isn’t right.' : e.message
+              e.message === 'Wrong passphrase.' ? 'That phrase isn’t right.' : e.message
           }
         }
         input.addEventListener('keydown', (e) => e.key === 'Enter' && go())
@@ -938,6 +948,14 @@
       }
 
       /* ---------- reading settings ---------- */
+      /** The theme grid is folded away until it's opened. */
+      let themesOpen = false
+      const themeName = () =>
+        (
+          THEMES.find((t) => t.id === look.theme) || {
+            name: { light: 'Light', dark: 'Dark', sepia: 'Sepia' }[look.theme] || 'Light',
+          }
+        ).name
       function settings(back) {
         const done = back || (() => show(stories))
         const row = (label, options, keyName) =>
@@ -969,10 +987,23 @@
           el(
             'main',
             { class: 'settings' },
-            el('div', { class: 'muted small' }, 'Theme'),
+            el(
+              'button',
+              {
+                class: 'theme-toggle',
+                'aria-expanded': themesOpen ? 'true' : 'false',
+                onclick: () => {
+                  themesOpen = !themesOpen
+                  show(settings, back)
+                },
+              },
+              el('span', { class: 'muted small' }, 'Theme'),
+              el('span', {}, themeName()),
+              el('span', { class: 'muted' }, themesOpen ? '▾' : '▸'),
+            ),
             el(
               'div',
-              { class: 'swatches' },
+              { class: 'swatches', hidden: !themesOpen },
               [
                 ...(THEMES.length
                   ? []
@@ -1014,6 +1045,7 @@
                     style: `background:${t.colors.bar || t.colors.bg};color:${t.colors.text};border-color:${t.colors.line}`,
                     onclick: () => {
                       look.theme = t.id
+                      themesOpen = false
                       applyLook()
                       show(settings, back)
                     },

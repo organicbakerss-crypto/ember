@@ -3,7 +3,7 @@
  * (the gatekeeper, with the reading page inside it) bound to the sync
  * bucket, at <name>.<account>.workers.dev. It needs a Cloudflare token that
  * may edit Workers (the sync token only reaches storage); the token is used
- * once and not kept. The passphrase is only ever stored as a hash.
+ * kept on this computer (see reader.ts). The passphrase is only ever stored as a hash.
  */
 import { createHash } from 'node:crypto'
 import { appConfig } from '../../../app.config'
@@ -104,15 +104,14 @@ interface ApiResponse<T> {
 export async function deployReader(input: {
   token: string
   bucket: string
-  passphrase: string
+  /** The sign-in phrase's hash (passHash). */
+  passHash: string
+  /** The script to upload (readerScript()). */
+  script?: string
   fetchImpl?: typeof fetch
   api?: string
 }): Promise<{ url: string }> {
-  if (input.passphrase.length < MIN_PASSPHRASE)
-    throw new AppError(
-      'invalid-input',
-      `Pick a passphrase of at least ${MIN_PASSPHRASE} characters: it's what keeps your chapters private.`,
-    )
+  if (!/^[0-9a-f]{64}$/.test(input.passHash)) throw new Error('No sign-in phrase.')
   const fetchImpl = input.fetchImpl ?? fetch
   const api = input.api ?? CLOUDFLARE_API
   const call = async <T>(
@@ -182,7 +181,7 @@ export async function deployReader(input: {
     compatibility_date: '2025-01-01',
     bindings: [
       { type: 'r2_bucket', name: 'BUCKET', bucket_name: input.bucket },
-      { type: 'secret_text', name: 'PASS_HASH', text: passHash(input.passphrase) },
+      { type: 'secret_text', name: 'PASS_HASH', text: input.passHash },
       { type: 'plain_text', name: 'APP_NAME', text: appConfig.name },
     ],
   }
@@ -190,7 +189,7 @@ export async function deployReader(input: {
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
   form.append(
     'worker.js',
-    new Blob([readerScript()], { type: 'application/javascript+module' }),
+    new Blob([input.script ?? readerScript()], { type: 'application/javascript+module' }),
     'worker.js',
   )
   const put = await call(

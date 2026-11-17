@@ -8,6 +8,7 @@ import { SyncEngine } from '../sync/engine'
 import worker from '../../phone/worker.js'
 import { deployReader, passHash, readerScript, READER_NAME } from './deploy'
 import { NOTES_PREFIX, PhoneNotes } from './notes'
+import { PhoneReader } from './reader'
 
 const dirs: string[] = []
 afterEach(async () => {
@@ -255,7 +256,7 @@ describe('putting the phone reader on Cloudflare', () => {
     const r = await deployReader({
       token: 'tok-1234567890',
       bucket: 'lib-bucket',
-      passphrase: PASS,
+      passHash: passHash(PASS),
       fetchImpl,
       api: 'https://api.test',
     })
@@ -283,7 +284,7 @@ describe('putting the phone reader on Cloudflare', () => {
     expect(script).not.toContain('vocabulary')
   })
 
-  it('says when the token can’t set up Workers, and refuses a short passphrase', async () => {
+  it('says when the token can’t set up Workers', async () => {
     const { fetchImpl } = api({
       [`PUT /accounts/acc1/workers/scripts/${READER_NAME}`]: () => ({
         success: false,
@@ -294,20 +295,58 @@ describe('putting the phone reader on Cloudflare', () => {
       deployReader({
         token: 'tok-1234567890',
         bucket: 'lib-bucket',
-        passphrase: PASS,
+        passHash: passHash(PASS),
         fetchImpl,
         api: 'https://api.test',
       }),
     ).rejects.toThrow(/can’t set up Workers/)
-    await expect(
-      deployReader({
-        token: 'tok-1234567890',
-        bucket: 'lib-bucket',
-        passphrase: 'short',
-        fetchImpl,
-        api: 'https://api.test',
-      }),
-    ).rejects.toThrow(/at least 8/)
+  })
+
+  it('set up once: the token and phrase are kept (locked), and updates go up by themselves', async () => {
+    const { calls, fetchImpl } = api()
+    const dir = await fs.promises.mkdtemp(join(os.tmpdir(), 'phonestate-'))
+    dirs.push(dir)
+    const secrets = {
+      canEncrypt: () => true,
+      encrypt: (t: string) => `locked:${Buffer.from(t).toString('base64')}`,
+      decrypt: (t: string) => Buffer.from(t.slice(7), 'base64').toString(),
+    }
+    const reader = new PhoneReader(
+      () => ({ bucket: 'lib-bucket', localDir: dir }),
+      () => ({ secrets, fetchImpl }),
+      'https://api.test',
+    )
+    // Sync's token is kept for it when sync connects.
+    await reader.rememberToken('tok-1234567890')
+    await expect(reader.setup({ passphrase: 'short' })).rejects.toThrow(/at least 8/)
+    const st = await reader.setup({ passphrase: PASS })
+    expect(st).toMatchObject({
+      url: `https://${READER_NAME}.me123.workers.dev`,
+      hasToken: true,
+      hasPhrase: true,
+    })
+    const saved = await fs.promises.readFile(join(dir, 'phone.json'), 'utf8')
+    expect(saved).not.toContain('tok-1234567890')
+    expect(saved).not.toContain(passHash(PASS))
+    const uploads = () => calls.filter((c) => c.method === 'PUT').length
+    expect(uploads()).toBe(1)
+    // Nothing newer: nothing goes up.
+    expect(await reader.update()).toBe(false)
+    expect(uploads()).toBe(1)
+    // A newer reader (here: the version kept is an old one) goes up with what's kept.
+    const state = JSON.parse(saved) as Record<string, unknown>
+    await fs.promises.writeFile(
+      join(dir, 'phone.json'),
+      JSON.stringify({ ...state, version: 'old' }),
+    )
+    expect(await reader.update()).toBe(true)
+    expect(uploads()).toBe(2)
+    const upload = calls.filter((c) => c.method === 'PUT').at(-1)!.body as FormData
+    const metadata = JSON.parse(await (upload.get('metadata') as Blob).text()) as {
+      bindings: { name: string; text?: string }[]
+    }
+    // The same phrase: the phone stays signed in.
+    expect(metadata.bindings.find((b) => b.name === 'PASS_HASH')!.text).toBe(passHash(PASS))
   })
 
   it('the built script is a module that still answers', async () => {

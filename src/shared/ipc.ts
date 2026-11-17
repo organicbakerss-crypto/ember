@@ -82,7 +82,7 @@ import {
 import type { MemoryDraft } from './memory/build'
 import type { TidySuggestion } from './memory/tidy'
 import type { IdeaCheck } from './memory/check'
-import type { PhoneNote } from './phone'
+import type { PhoneNote, PhoneReaderStatus } from './phone'
 
 /* ---------- shared result types ---------- */
 
@@ -1264,8 +1264,10 @@ export const ipcInputs = {
   'phone:status': z.void(),
   /** Puts the phone reader on the writer's Cloudflare account (the token is used once, not kept). */
   'phone:setup': z.object({
-    token: z.string().trim().min(10).max(500),
-    passphrase: z.string().min(8).max(200),
+    /** Left out: the token kept here. */
+    token: z.string().trim().min(10).max(500).optional(),
+    /** Left out: the phrase kept here (the same phrase keeps the phone signed in). */
+    passphrase: z.string().min(8).max(200).optional(),
   }),
   'phone:openCloudflare': z.void(),
   /** Notes left on the phone (empty while sync isn't connected). */
@@ -1433,8 +1435,8 @@ export interface IpcResults {
   'sync:connect': { status: SyncStatus } | { confirm: { series: number; worlds: number } }
   'sync:disconnect': SyncStatus
   'sync:openCloudflare': null
-  'phone:status': { syncConnected: boolean; url: string | null; setUpAt: string | null }
-  'phone:setup': { url: string }
+  'phone:status': PhoneReaderStatus
+  'phone:setup': PhoneReaderStatus
   'phone:openCloudflare': null
   'phone:notes': PhoneNote[]
   'phone:archive': PhoneNote

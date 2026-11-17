@@ -141,9 +141,17 @@ export async function setupFromToken(
   )
 }
 
-/** Cloudflare's token page, filled in with the one permission sync needs. */
+/**
+ * Cloudflare's token page, filled in with what sync needs (storage) and what
+ * the phone reader needs (Workers), so one token does both.
+ */
 export function tokenPageUrl(): string {
-  const permissions = encodeURIComponent(JSON.stringify([{ key: 'workers_r2', type: 'edit' }]))
+  const permissions = encodeURIComponent(
+    JSON.stringify([
+      { key: 'workers_r2', type: 'edit' },
+      { key: 'workers_scripts', type: 'edit' },
+    ]),
+  )
   const name = encodeURIComponent(`${appConfig.name} sync`)
   return `https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=${permissions}&name=${name}&accountId=*&zoneId=all`
 }

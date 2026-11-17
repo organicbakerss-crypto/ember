@@ -98,11 +98,12 @@ describe('setting up from one Cloudflare token', () => {
     ).rejects.toThrow(/isn’t turned on/)
   })
 
-  it('links to the token page with the permission filled in', () => {
+  it('links to the token page with both permissions filled in (sync and the phone reader)', () => {
     const url = new URL(tokenPageUrl())
     expect(url.hostname).toBe('dash.cloudflare.com')
     expect(JSON.parse(url.searchParams.get('permissionGroupKeys')!)).toEqual([
       { key: 'workers_r2', type: 'edit' },
+      { key: 'workers_scripts', type: 'edit' },
     ])
   })
 })

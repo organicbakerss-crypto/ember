@@ -323,6 +323,11 @@ export class SyncService {
     }
   }
 
+  /** How this computer keeps secrets and makes web requests (the phone reader uses them too). */
+  tools(): { secrets: SecretBox; fetchImpl?: typeof fetch } {
+    return { secrets: this.options.secrets, fetchImpl: this.options.fetchImpl }
+  }
+
   /** The cloud storage and bucket, while connected (the phone reader's notes live there). */
   connection(): { cloud: CloudStore; bucket: string; localDir: string } | null {
     if (!this.cloud || !this.config || !this.library) return null

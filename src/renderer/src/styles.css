@@ -6726,3 +6726,6 @@ kbd {
   line-height: 1rem;
   text-align: center;
 }
+.phone-setup .row input {
+  flex: 1;
+}

@@ -22,3 +22,14 @@ export const phoneNoteSchema = z.looseObject({
   archivedAt: z.string().nullable().catch(null).default(null),
 })
 export type PhoneNote = z.infer<typeof phoneNoteSchema>
+
+/** The phone reader, as Settings shows it. */
+export interface PhoneReaderStatus {
+  syncConnected: boolean
+  url: string | null
+  setUpAt: string | null
+  /** A Cloudflare token is kept on this computer. */
+  hasToken: boolean
+  /** A sign-in phrase is kept on this computer (updates go up by themselves). */
+  hasPhrase: boolean
+}

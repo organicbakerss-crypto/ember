@@ -23,6 +23,7 @@ import { ExportStyleFields } from '../io/ExportDialog'
 import { MOD } from './commands'
 import { useOverlays } from './overlays'
 import { syncLabel, useSyncStatus } from '../useSync'
+import type { PhoneReaderStatus } from '@shared/phone'
 import { StoryCharactersSettings } from './StoryCharactersSettings'
 
 interface Category {
@@ -238,122 +239,127 @@ function ImportExportSettings() {
 /** The phone reader: chapters on the iPhone, notes back to this computer. */
 function PhoneReaderSettings() {
   const { toast } = useOverlays()
-  const [state, setState] = useState<{ url: string | null; setUpAt: string | null } | null>(null)
-  const [open, setOpen] = useState(false)
+  const [state, setState] = useState<PhoneReaderStatus | null>(null)
+  const [changing, setChanging] = useState(false)
   const [token, setToken] = useState('')
   const [pass, setPass] = useState('')
-  const [again, setAgain] = useState('')
+  const [showPass, setShowPass] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    api.invoke('phone:status').then(setState, () => setState({ url: null, setUpAt: null }))
+    api.invoke('phone:status').then(setState, () => {})
   }, [])
+  if (!state) return null
+  const ready = !!state.url && state.hasToken && state.hasPhrase
   const setUp = async () => {
     setBusy(true)
     setError(null)
     try {
-      const { url } = await api.invoke('phone:setup', { token, passphrase: pass })
-      setState({ url, setUpAt: new Date().toISOString() })
-      setOpen(false)
+      setState(
+        await api.invoke('phone:setup', {
+          ...(token.trim() ? { token: token.trim() } : {}),
+          ...(pass ? { passphrase: pass } : {}),
+        }),
+      )
+      setChanging(false)
       setToken('')
       setPass('')
-      setAgain('')
     } catch (err) {
       setError(describeError(err).message)
     } finally {
       setBusy(false)
     }
   }
+  const phraseField = (
+    <label>
+      Sign-in phrase for your phone
+      <span className="row">
+        <input
+          type={showPass ? 'text' : 'password'}
+          aria-label="Sign-in phrase for your phone"
+          value={pass}
+          autoComplete="new-password"
+          placeholder="At least 8 characters"
+          onChange={(e) => setPass(e.target.value)}
+        />
+        <button className="link small" onClick={() => setShowPass((v) => !v)}>
+          {showPass ? 'Hide' : 'Show'}
+        </button>
+      </span>
+    </label>
+  )
   return (
     <div className="phone-reader">
       <h4>Phone reader (iPhone)</h4>
       <p className="muted small">
-        Read your chapters on your iPhone, and leave notes there that show up here, in the Comments
-        panel beside the chapter. It lives on your own Cloudflare account, with what syncs; it can
-        only read chapters and add notes, never change or delete your writing.
+        Read your chapters on your iPhone and leave notes that show up here, in the Comments panel.
+        It can only read chapters and add notes, never change your writing.
       </p>
-      {state?.url && (
+      {ready && !changing ? (
         <>
           <p className="small">
             On your iPhone, open{' '}
             <button
               className="link"
-              onClick={() =>
-                void navigator.clipboard.writeText(state.url!).then(() => toast('Copied.'))
-              }
               title="Copy"
+              onClick={() =>
+                void navigator.clipboard.writeText(state.url!).then(() => toast('Link copied.'))
+              }
             >
               {state.url}
             </button>{' '}
-            in Safari, sign in with your passphrase, then Share → Add to Home Screen.
+            in Safari, type your phrase once, then Share → Add to Home Screen.
           </p>
-          {state.setUpAt && (
-            <p className="muted small">Set up {new Date(state.setUpAt).toLocaleDateString()}.</p>
-          )}
+          <p className="muted small">Updates go to your phone by themselves.</p>
+          <button className="small" onClick={() => setChanging(true)}>
+            Change the phrase…
+          </button>
         </>
-      )}
-      {!open ? (
-        <button onClick={() => setOpen(true)}>
-          {state?.url ? 'Set it up again (new passphrase or update)…' : 'Set up the phone reader…'}
-        </button>
       ) : (
         <div className="phone-setup">
-          <ol className="small">
-            <li>
-              Make a Cloudflare token that can run it (your sync token only reaches storage):{' '}
-              <button className="link" onClick={() => void api.invoke('phone:openCloudflare')}>
-                Open Cloudflare
-              </button>
-              , press Create Token, and copy it. It’s used once and not kept.
-            </li>
-            <li>Paste it here, and pick a passphrase for your phone (at least 8 characters).</li>
-          </ol>
-          <label>
-            Cloudflare token
-            <input
-              type="password"
-              aria-label="Cloudflare token"
-              value={token}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => setToken(e.target.value)}
-            />
-          </label>
-          <label>
-            Passphrase for your phone
-            <input
-              type="password"
-              aria-label="Passphrase for your phone"
-              value={pass}
-              autoComplete="new-password"
-              onChange={(e) => setPass(e.target.value)}
-            />
-          </label>
-          <label>
-            The passphrase again
-            <input
-              type="password"
-              aria-label="The passphrase again"
-              value={again}
-              autoComplete="new-password"
-              onChange={(e) => setAgain(e.target.value)}
-            />
-          </label>
-          {pass && again && pass !== again && (
-            <p className="error small">The two passphrases don’t match.</p>
+          {!state.hasToken && (
+            <>
+              <p className="small">
+                It needs a Cloudflare token that can run it.{' '}
+                <button className="link" onClick={() => void api.invoke('phone:openCloudflare')}>
+                  Open Cloudflare
+                </button>
+                , press Create Token, and paste it here. It’s kept on this computer, locked, so you
+                only do this once.
+              </p>
+              <label>
+                Cloudflare token
+                <input
+                  type="password"
+                  aria-label="Cloudflare token"
+                  value={token}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(e) => setToken(e.target.value)}
+                />
+              </label>
+            </>
+          )}
+          {phraseField}
+          {state.url && (
+            <p className="muted small">
+              Use the same phrase as before and your phone stays signed in.
+            </p>
           )}
           {error && <p className="error small">{error}</p>}
           <div className="row">
             <button
               className="primary"
-              disabled={busy || token.trim().length < 10 || pass.length < 8 || pass !== again}
+              disabled={busy || pass.length < 8 || (!state.hasToken && token.trim().length < 10)}
               onClick={() => void setUp()}
             >
               {busy ? 'Setting it up…' : 'Set it up'}
             </button>
-            <button disabled={busy} onClick={() => setOpen(false)}>
-              Cancel
-            </button>
+            {changing && (
+              <button disabled={busy} onClick={() => setChanging(false)}>
+                Cancel
+              </button>
+            )}
           </div>
         </div>
       )}
