@@ -323,6 +323,12 @@ export class SyncService {
     }
   }
 
+  /** The cloud storage and bucket, while connected (the phone reader's notes live there). */
+  connection(): { cloud: CloudStore; bucket: string; localDir: string } | null {
+    if (!this.cloud || !this.config || !this.library) return null
+    return { cloud: this.cloud, bucket: this.config.bucket, localDir: this.library.paths.localDir }
+  }
+
   /** How much the library takes in the cloud (one listing). */
   async usage(): Promise<{ bytes: number; files: number } | null> {
     if (!this.cloud) return null

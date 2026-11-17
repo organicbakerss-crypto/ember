@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CHAPTER_LABELS, CHAPTER_STATUSES } from '@shared/schema'
+import type { PhoneNote } from '@shared/phone'
 import { ChapterStrip, MarginNotes, SceneCast } from './MarginsParts'
 import { isIndividualTemplate } from '@shared/world/templates'
 import { SelectionAiBox, type AiSelection } from '../ai/SelectionAiBox'
@@ -200,6 +201,24 @@ export function WritingView(props: {
   const [selectionParagraphs, setSelectionParagraphs] = useState<string[] | null>(null)
   const { settings, update: updateSettings } = useSettings()
   const { choose, openMenu } = useOverlays()
+  // Notes left on the phone reader (none unless it's set up and sync is connected).
+  const [phoneNotes, setPhoneNotes] = useState<PhoneNote[]>([])
+  useEffect(() => {
+    let live = true
+    const load = () =>
+      void api.invoke('phone:notes').then(
+        (list) => live && setPhoneNotes(list),
+        () => {},
+      )
+    load()
+    const timer = setInterval(load, 3 * 60_000)
+    window.addEventListener('focus', load)
+    return () => {
+      live = false
+      clearInterval(timer)
+      window.removeEventListener('focus', load)
+    }
+  }, [])
   // Export and import dialogs (export can start with one chapter chosen).
   const aiOn = settings.ai.enabled
   // Offer the AI what this view shows (it reads it when asked).
@@ -890,6 +909,8 @@ export function WritingView(props: {
   )
 
   const current = selectedId ? (liveMeta[selectedId] ?? view?.chapters[selectedId]) : undefined
+  const chapterPhone = phoneNotes.filter((n) => n.chapterId === selectedId)
+  const phoneOpen = chapterPhone.filter((n) => !n.archivedAt).length
   const currentTitle = current?.title ?? ''
   const selectedText = selectionParagraphs?.join('\n\n') || null
   useEffect(() => {
@@ -1795,7 +1816,8 @@ export function WritingView(props: {
             </RailButton>
           )}
           <RailButton
-            label="Comments"
+            label={phoneOpen ? `Comments (${phoneOpen} from iPhone)` : 'Comments'}
+            badge={phoneOpen}
             shown={settings.railLabels ? 'Comments' : undefined}
             active={panel === 'comments'}
             onClick={() => togglePanel('comments')}
@@ -1995,6 +2017,24 @@ export function WritingView(props: {
               onNote={(id, note) => editor.current?.setCommentNote(id, note)}
               onRemove={(id) => editor.current?.removeComment(id)}
               onShow={(id) => editor.current?.showComment(id)}
+              phone={
+                chapterPhone.length
+                  ? {
+                      notes: chapterPhone,
+                      onDone: (id, done) =>
+                        void api
+                          .invoke('phone:archive', { id, archived: done })
+                          .then((n) =>
+                            setPhoneNotes((list) => list.map((x) => (x.id === n.id ? n : x))),
+                          )
+                          .catch((err: unknown) => toast(describeError(err).message)),
+                      onShow: (n) => {
+                        if (!editor.current?.showText(n.quote, n.paragraph))
+                          toast('That passage isn’t in the chapter any more (it may have changed).')
+                      },
+                    }
+                  : null
+              }
             />
           )}
           {panel === 'history' && (
@@ -2301,6 +2341,8 @@ function RailButton(props: {
   shown?: string
   active: boolean
   onClick: () => void
+  /** A count shown on the icon (notes from the phone). */
+  badge?: number
   children: React.ReactNode
 }) {
   return (
@@ -2323,6 +2365,7 @@ function RailButton(props: {
         {props.children}
       </svg>
       {props.shown && <span className="rail-label">{props.shown}</span>}
+      {!!props.badge && <span className="rail-badge">{props.badge}</span>}
     </button>
   )
 }

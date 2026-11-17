@@ -12,6 +12,11 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
+    // The phone reader's gatekeeper runs on Cloudflare (a service-worker-like runtime).
+    files: ['src/phone/**/*.js'],
+    languageOptions: { globals: { ...globals.serviceworker, ...globals.browser } },
+  },
+  {
     files: ['src/renderer/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     languageOptions: { globals: globals.browser },

@@ -235,6 +235,132 @@ function ImportExportSettings() {
  * Versions set aside when both computers changed the same thing and the
  * changes couldn't all be combined. Each can be put back or deleted.
  */
+/** The phone reader: chapters on the iPhone, notes back to this computer. */
+function PhoneReaderSettings() {
+  const { toast } = useOverlays()
+  const [state, setState] = useState<{ url: string | null; setUpAt: string | null } | null>(null)
+  const [open, setOpen] = useState(false)
+  const [token, setToken] = useState('')
+  const [pass, setPass] = useState('')
+  const [again, setAgain] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    api.invoke('phone:status').then(setState, () => setState({ url: null, setUpAt: null }))
+  }, [])
+  const setUp = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const { url } = await api.invoke('phone:setup', { token, passphrase: pass })
+      setState({ url, setUpAt: new Date().toISOString() })
+      setOpen(false)
+      setToken('')
+      setPass('')
+      setAgain('')
+    } catch (err) {
+      setError(describeError(err).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="phone-reader">
+      <h4>Phone reader (iPhone)</h4>
+      <p className="muted small">
+        Read your chapters on your iPhone, and leave notes there that show up here, in the Comments
+        panel beside the chapter. It lives on your own Cloudflare account, with what syncs; it can
+        only read chapters and add notes, never change or delete your writing.
+      </p>
+      {state?.url && (
+        <>
+          <p className="small">
+            On your iPhone, open{' '}
+            <button
+              className="link"
+              onClick={() =>
+                void navigator.clipboard.writeText(state.url!).then(() => toast('Copied.'))
+              }
+              title="Copy"
+            >
+              {state.url}
+            </button>{' '}
+            in Safari, sign in with your passphrase, then Share → Add to Home Screen.
+          </p>
+          {state.setUpAt && (
+            <p className="muted small">Set up {new Date(state.setUpAt).toLocaleDateString()}.</p>
+          )}
+        </>
+      )}
+      {!open ? (
+        <button onClick={() => setOpen(true)}>
+          {state?.url ? 'Set it up again (new passphrase or update)…' : 'Set up the phone reader…'}
+        </button>
+      ) : (
+        <div className="phone-setup">
+          <ol className="small">
+            <li>
+              Make a Cloudflare token that can run it (your sync token only reaches storage):{' '}
+              <button className="link" onClick={() => void api.invoke('phone:openCloudflare')}>
+                Open Cloudflare
+              </button>
+              , press Create Token, and copy it. It’s used once and not kept.
+            </li>
+            <li>Paste it here, and pick a passphrase for your phone (at least 8 characters).</li>
+          </ol>
+          <label>
+            Cloudflare token
+            <input
+              type="password"
+              aria-label="Cloudflare token"
+              value={token}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setToken(e.target.value)}
+            />
+          </label>
+          <label>
+            Passphrase for your phone
+            <input
+              type="password"
+              aria-label="Passphrase for your phone"
+              value={pass}
+              autoComplete="new-password"
+              onChange={(e) => setPass(e.target.value)}
+            />
+          </label>
+          <label>
+            The passphrase again
+            <input
+              type="password"
+              aria-label="The passphrase again"
+              value={again}
+              autoComplete="new-password"
+              onChange={(e) => setAgain(e.target.value)}
+            />
+          </label>
+          {pass && again && pass !== again && (
+            <p className="error small">The two passphrases don’t match.</p>
+          )}
+          {error && <p className="error small">{error}</p>}
+          <div className="row">
+            <button
+              className="primary"
+              disabled={busy || token.trim().length < 10 || pass.length < 8 || pass !== again}
+              onClick={() => void setUp()}
+            >
+              {busy ? 'Setting it up…' : 'Set it up'}
+            </button>
+            <button disabled={busy} onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SyncConflicts({ refresh }: { refresh: string | null }) {
   const { toast } = useOverlays()
   const [list, setList] = useState<IpcResult<'sync:conflicts'>>([])
@@ -396,6 +522,7 @@ function SyncSettings() {
           off.
         </p>
         <SyncConflicts refresh={status.lastSyncedAt} />
+        <PhoneReaderSettings />
       </section>
     )
   }

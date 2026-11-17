@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="__APP_NAME__" />
+    <meta name="theme-color" content="#14110f" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>__APP_NAME__</title>
+    <style>
+      :root {
+        --bg: #faf7f2;
+        --text: #24201c;
+        --muted: #7a7068;
+        --line: #e6ded3;
+        --accent: #b5532e;
+        --card: #ffffff;
+        --font: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+        --size: 19px;
+      }
+      :root[data-theme='dark'] {
+        --bg: #14110f;
+        --text: #e9e2d8;
+        --muted: #9a8f84;
+        --line: #2c2620;
+        --accent: #e07a4f;
+        --card: #1d1915;
+      }
+      :root[data-theme='sepia'] {
+        --bg: #f3e9d6;
+        --text: #3b2f22;
+        --muted: #85735e;
+        --line: #e0d2b8;
+        --accent: #9c4a22;
+        --card: #f8f0e0;
+      }
+      :root[data-font='sans'] {
+        --font: -apple-system, 'Helvetica Neue', system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        font:
+          16px/1.4 -apple-system,
+          'Helvetica Neue',
+          system-ui,
+          sans-serif;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+          env(safe-area-inset-left);
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        background: none;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 14px;
+        min-height: 44px;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button.link {
+        border: none;
+        padding: 6px 0;
+        color: var(--accent);
+        min-height: 0;
+      }
+      .bar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+      }
+      .bar h1 {
+        flex: 1;
+        font-size: 16px;
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: center;
+      }
+      .bar button {
+        border: none;
+        min-width: 44px;
+        padding: 8px;
+      }
+      main {
+        padding: 12px 16px 120px;
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      .list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .list li button {
+        width: 100%;
+        text-align: left;
+        border: none;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        padding: 14px 4px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .small {
+        font-size: 13px;
+      }
+      .error {
+        color: #c0392b;
+      }
+      .chapter {
+        font-family: var(--font);
+        font-size: var(--size);
+        line-height: 1.65;
+      }
+      .chapter h2.title {
+        font-size: 1.4em;
+        line-height: 1.25;
+        margin: 0.6em 0 1em;
+      }
+      .chapter p {
+        margin: 0 0 0.9em;
+      }
+      .chapter blockquote {
+        margin: 0 0 0.9em;
+        padding-left: 1em;
+        border-left: 3px solid var(--line);
+      }
+      .chapter .break {
+        text-align: center;
+        color: var(--muted);
+        margin: 1.2em 0;
+        letter-spacing: 0.5em;
+      }
+      .chapter .picture {
+        text-align: center;
+        color: var(--muted);
+        font-style: italic;
+      }
+      .chapter mark.noted {
+        background: color-mix(in srgb, var(--accent) 22%, transparent);
+        color: inherit;
+        border-radius: 2px;
+      }
+      .nav {
+        display: flex;
+        gap: 10px;
+        margin: 28px 0 16px;
+      }
+      .nav button {
+        flex: 1;
+      }
+      .notes h3 {
+        font-size: 15px;
+        margin: 24px 0 8px;
+      }
+      .note {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+      }
+      .quote {
+        border-left: 3px solid var(--line);
+        padding-left: 10px;
+        font-style: italic;
+        font-family: var(--font);
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .note.done {
+        opacity: 0.55;
+      }
+      .sheet {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 20;
+        background: var(--card);
+        border-top: 1px solid var(--line);
+        border-radius: 16px 16px 0 0;
+        padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+        box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
+      }
+      .sheet textarea {
+        width: 100%;
+        min-height: 110px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px;
+        background: var(--bg);
+        font-size: 16px;
+      }
+      .sheet .row {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .sheet .row button {
+        flex: 1;
+      }
+      .float {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(18px + env(safe-area-inset-bottom));
+        z-index: 10;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+      }
+      .login {
+        padding-top: 18vh;
+        text-align: center;
+      }
+      .login input {
+        width: 100%;
+        max-width: 320px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+        font-size: 16px;
+        margin: 14px 0;
+      }
+      .settings {
+        display: grid;
+        gap: 12px;
+      }
+      .settings .row {
+        display: flex;
+        gap: 8px;
+      }
+      .settings .row button {
+        flex: 1;
+      }
+      .settings .row button.on {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      'use strict'
+      const SALT = 'phone-reader:'
+      const app = document.getElementById('app')
+      const store = {
+        get(k, d) {
+          try {
+            const v = localStorage.getItem('reader.' + k)
+            return v === null ? d : JSON.parse(v)
+          } catch {
+            return d
+          }
+        },
+        set(k, v) {
+          try {
+            localStorage.setItem('reader.' + k, JSON.stringify(v))
+          } catch {
+            /* full or blocked: it's only a convenience */
+          }
+        },
+      }
+
+      /* ---------- looks ---------- */
+      const look = store.get('look', { theme: 'light', font: 'serif', size: 19 })
+      const applyLook = () => {
+        document.documentElement.dataset.theme = look.theme
+        document.documentElement.dataset.font = look.font
+        document.documentElement.style.setProperty('--size', look.size + 'px')
+        store.set('look', look)
+      }
+      applyLook()
+
+      /* ---------- the chapter cache (IndexedDB, by the file's hash: it never changes) ---------- */
+      let dbp = null
+      const db = () =>
+        (dbp ??= new Promise((resolve) => {
+          try {
+            const req = indexedDB.open('reader', 1)
+            req.onupgradeneeded = () => req.result.createObjectStore('chapters')
+            req.onsuccess = () => resolve(req.result)
+            req.onerror = () => resolve(null)
+          } catch {
+            resolve(null)
+          }
+        }))
+      const cacheGet = async (hash) => {
+        const d = await db()
+        if (!d) return null
+        return new Promise((resolve) => {
+          const r = d.transaction('chapters').objectStore('chapters').get(hash)
+          r.onsuccess = () => resolve(r.result ?? null)
+          r.onerror = () => resolve(null)
+        })
+      }
+      const cachePut = async (hash, value) => {
+        const d = await db()
+        if (!d) return
+        d.transaction('chapters', 'readwrite').objectStore('chapters').put(value, hash)
+      }
+
+      /* ---------- talking to the gatekeeper ---------- */
+      let key = store.get('key', null)
+      async function call(path, init = {}) {
+        const res = await fetch(path, {
+          ...init,
+          headers: { ...(init.headers || {}), authorization: 'Bearer ' + key },
+        })
+        if (res.status === 401 && !init.signingIn) {
+          key = null
+          store.set('key', null)
+          show(login)
+          throw new Error('Signed out.')
+        }
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'Something went wrong.')
+        return data
+      }
+      async function hashOf(pass) {
+        const bytes = new TextEncoder().encode(SALT + pass)
+        const digest = await crypto.subtle.digest('SHA-256', bytes)
+        return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+      }
+      async function chapter(c) {
+        const hit = await cacheGet(c.hash)
+        if (hit) return hit
+        const got = await call('/api/chapter/' + c.hash)
+        await cachePut(c.hash, got)
+        return got
+      }
+
+      /* ---------- little view helpers ---------- */
+      const el = (tag, props = {}, ...kids) => {
+        const n = document.createElement(tag)
+        for (const [k, v] of Object.entries(props)) {
+          if (k === 'class') n.className = v
+          else if (k.startsWith('on')) n.addEventListener(k.slice(2), v)
+          else if (v !== undefined && v !== null && v !== false)
+            n.setAttribute(k, v === true ? '' : v)
+        }
+        for (const kid of kids.flat())
+          if (kid !== null && kid !== undefined && kid !== false)
+            n.append(kid instanceof Node ? kid : document.createTextNode(String(kid)))
+        return n
+      }
+      let current = null
+      function show(view, ...args) {
+        current = { view, args }
+        app.replaceChildren()
+        window.scrollTo(0, 0)
+        view(...args)
+      }
+      const bar = (title, back, extra) =>
+        el(
+          'header',
+          { class: 'bar' },
+          back
+            ? el('button', { 'aria-label': 'Back', onclick: back }, '‹')
+            : el('span', { style: 'width:44px' }),
+          el('h1', {}, title),
+          extra || el('span', { style: 'width:44px' }),
+        )
+      const when = (iso) => {
+        const d = new Date(iso)
+        const mins = Math.round((Date.now() - d.getTime()) / 60000)
+        if (mins < 1) return 'just now'
+        if (mins < 60) return mins + ' min ago'
+        if (mins < 60 * 24) return Math.round(mins / 60) + ' h ago'
+        return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+      }
+
+      /* ---------- signing in ---------- */
+      function login(message) {
+        const input = el('input', {
+          type: 'password',
+          placeholder: 'Passphrase',
+          autocomplete: 'current-password',
+          'aria-label': 'Passphrase',
+        })
+        const err = el('p', { class: 'error small' }, message || '')
+        const go = async () => {
+          if (!input.value) return
+          key = await hashOf(input.value)
+          try {
+            await call('/api/check', { signingIn: true })
+            store.set('key', key)
+            show(stories)
+          } catch (e) {
+            key = null
+            err.textContent =
+              e.message === 'Wrong passphrase.' ? 'That passphrase isn’t right.' : e.message
+          }
+        }
+        input.addEventListener('keydown', (e) => e.key === 'Enter' && go())
+        app.append(
+          el(
+            'main',
+            { class: 'login' },
+            el('h2', {}, '__APP_NAME__'),
+            el('p', { class: 'muted' }, 'Read your chapters and leave notes for your computer.'),
+            input,
+            el('div', {}, el('button', { class: 'primary', onclick: go }, 'Sign in')),
+            err,
+          ),
+        )
+        input.focus()
+      }
+
+      /* ---------- stories and books ---------- */
+      async function stories() {
+        const main = el('main', {}, el('p', { class: 'muted' }, 'Loading…'))
+        app.append(
+          bar(
+            'Your stories',
+            null,
+            el('button', { 'aria-label': 'Reading settings', onclick: () => show(settings) }, 'Aa'),
+          ),
+          main,
+        )
+        let list = store.get('library', null)
+        try {
+          list = (await call('/api/library')).stories
+          store.set('library', list)
+        } catch (e) {
+          if (!list) return main.replaceChildren(el('p', { class: 'error' }, e.message))
+          main.prepend(
+            el('p', { class: 'muted small' }, 'Offline: showing what was saved on this phone.'),
+          )
+        }
+        main.querySelector('p.muted:not(.small)')?.remove()
+        const last = store.get('last', null)
+        if (last)
+          main.append(
+            el(
+              'button',
+              {
+                class: 'primary',
+                style: 'width:100%;margin:6px 0 14px',
+                onclick: () => openBook(last.book, last.chapterId),
+              },
+              'Carry on: ' + (last.title || 'where you were'),
+            ),
+          )
+        if (!list.length) main.append(el('p', { class: 'muted' }, 'Nothing synced yet.'))
+        main.append(
+          el(
+            'ul',
+            { class: 'list' },
+            list.map((s) =>
+              el(
+                'li',
+                {},
+                el(
+                  'button',
+                  {
+                    onclick: () =>
+                      s.books.length === 1
+                        ? openBook({ ...s.books[0], story: s.name })
+                        : show(books, s),
+                  },
+                  el('span', {}, s.name),
+                  el(
+                    'span',
+                    { class: 'muted small' },
+                    s.books.length === 1 ? '' : s.books.length + ' books',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
+      }
+      function books(s) {
+        app.append(
+          bar(s.name, () => show(stories)),
+          el(
+            'main',
+            {},
+            el(
+              'ul',
+              { class: 'list' },
+              s.books.map((b) =>
+                el(
+                  'li',
+                  {},
+                  el('button', { onclick: () => openBook({ ...b, story: s.name }) }, b.name),
+                ),
+              ),
+            ),
+          ),
+        )
+      }
+
+      /* ---------- a book's chapters (all saved on the phone as they load) ---------- */
+      async function openBook(b, chapterId) {
+        show(contents, b, chapterId)
+      }
+      async function contents(b, goTo) {
+        const main = el('main', {}, el('p', { class: 'muted' }, 'Loading…'))
+        app.append(
+          bar(b.name, () => show(stories)),
+          main,
+        )
+        let data = store.get('book.' + b.unit, null)
+        try {
+          data = await call('/api/book?unit=' + encodeURIComponent(b.unit))
+          store.set('book.' + b.unit, data)
+        } catch (e) {
+          if (!data) return main.replaceChildren(el('p', { class: 'error' }, e.message))
+        }
+        const chapters = data.chapters
+        if (goTo) {
+          const i = chapters.findIndex((c) => c.id === goTo)
+          if (i >= 0) return show(read, b, chapters, i)
+        }
+        const items = chapters.map((c, i) =>
+          el(
+            'li',
+            {},
+            el(
+              'button',
+              { onclick: () => show(read, b, chapters, i) },
+              el('span', { class: 'muted' }, 'Chapter ' + (i + 1)),
+            ),
+          ),
+        )
+        main.replaceChildren(
+          chapters.length
+            ? el('ul', { class: 'list' }, items)
+            : el('p', { class: 'muted' }, 'No chapters yet.'),
+        )
+        // Titles fill in (and every chapter is kept for reading offline).
+        let next = 0
+        const worker = async () => {
+          while (next < chapters.length) {
+            const i = next++
+            try {
+              const c = await chapter(chapters[i])
+              items[i].querySelector('span').textContent = c.title || 'Untitled'
+              items[i].querySelector('span').className = ''
+            } catch {
+              /* offline: it stays a number */
+            }
+          }
+        }
+        await Promise.all([worker(), worker(), worker(), worker()])
+      }
+
+      /* ---------- reading ---------- */
+      function inline(nodes, out) {
+        for (const n of nodes || []) {
+          if (n.type === 'text') {
+            let node = document.createTextNode(n.text || '')
+            for (const m of n.marks || []) {
+              if (m.type === 'bold') node = el('strong', {}, node)
+              else if (m.type === 'italic') node = el('em', {}, node)
+              else if (m.type === 'underline') node = el('u', {}, node)
+              else if (m.type === 'strike') node = el('s', {}, node)
+            }
+            out.append(node)
+          } else if (n.type === 'hardBreak') out.append(el('br'))
+          else if (n.content) inline(n.content, out)
+        }
+        return out
+      }
+      function blocks(nodes, out) {
+        for (const n of nodes || []) {
+          switch (n.type) {
+            case 'paragraph':
+              out.append(inline(n.content, el('p')))
+              break
+            case 'heading':
+              out.append(inline(n.content, el(n.attrs && n.attrs.level === 3 ? 'h4' : 'h3')))
+              break
+            case 'blockquote':
+              out.append(blocks(n.content, el('blockquote')))
+              break
+            case 'bulletList':
+            case 'orderedList':
+              out.append(
+                el(
+                  n.type === 'orderedList' ? 'ol' : 'ul',
+                  {},
+                  (n.content || []).map((li) => blocks(li.content, el('li'))),
+                ),
+              )
+              break
+            case 'sceneBreak':
+            case 'horizontalRule':
+              out.append(el('div', { class: 'break' }, '* * *'))
+              break
+            case 'chapterImage':
+              out.append(
+                el(
+                  'p',
+                  { class: 'picture' },
+                  '[Picture' + (n.attrs && n.attrs.alt ? ': ' + n.attrs.alt : '') + ']',
+                ),
+              )
+              break
+            default:
+              if (n.content) blocks(n.content, out)
+          }
+        }
+        return out
+      }
+      /** The paragraph (top-level block) a node is in. */
+      const paragraphOf = (node, root) => {
+        let n = node.nodeType === 1 ? node : node.parentNode
+        while (n && n.parentNode !== root) n = n.parentNode
+        return n ? [...root.children].indexOf(n) : null
+      }
+
+      let pending = store.get('pending', [])
+      async function flush() {
+        for (const note of [...pending]) {
+          try {
+            await call('/api/notes/' + note.id, { method: 'PUT', body: JSON.stringify(note) })
+            pending = pending.filter((p) => p.id !== note.id)
+            store.set('pending', pending)
+          } catch {
+            return
+          }
+        }
+      }
+      window.addEventListener('online', flush)
+
+      async function read(b, chapters, i) {
+        const c = chapters[i]
+        const main = el('main', {}, el('p', { class: 'muted' }, 'Loading…'))
+        app.append(
+          bar(
+            b.name,
+            () => show(contents, b),
+            el(
+              'button',
+              {
+                'aria-label': 'Reading settings',
+                onclick: () => show(settings, () => show(read, b, chapters, i)),
+              },
+              'Aa',
+            ),
+          ),
+          main,
+        )
+        let data
+        try {
+          data = await chapter(c)
+        } catch (e) {
+          return main.replaceChildren(
+            el(
+              'p',
+              { class: 'error' },
+              'This chapter isn’t saved on the phone yet, and there’s no connection.',
+            ),
+          )
+        }
+        store.set('last', { book: b, chapterId: c.id, title: data.title })
+        const body = blocks(data.content && data.content.content, el('div', { class: 'body' }))
+        const text = el(
+          'article',
+          { class: 'chapter' },
+          el('h2', { class: 'title' }, data.title || 'Untitled'),
+          body,
+        )
+        const notes = el('section', { class: 'notes' })
+        const nav = el(
+          'div',
+          { class: 'nav' },
+          el(
+            'button',
+            { disabled: i === 0, onclick: () => show(read, b, chapters, i - 1) },
+            '‹ Previous',
+          ),
+          el(
+            'button',
+            { disabled: i === chapters.length - 1, onclick: () => show(read, b, chapters, i + 1) },
+            'Next ›',
+          ),
+        )
+        main.replaceChildren(
+          text,
+          el(
+            'button',
+            { style: 'width:100%;margin-top:18px', onclick: () => noteSheet(null) },
+            'Note on this chapter',
+          ),
+          notes,
+          nav,
+        )
+
+        const where = {
+          seriesId: b.unit.split('/')[1],
+          volumeId: b.id,
+          chapterId: c.id,
+          chapterTitle: data.title || '',
+        }
+        const drawNotes = async () => {
+          let all = store.get('notes', [])
+          try {
+            all = (await call('/api/notes')).notes
+            store.set('notes', all)
+          } catch {
+            /* offline: the last ones seen */
+          }
+          const mine = [...all.filter((n) => !pending.some((p) => p.id === n.id)), ...pending]
+            .filter((n) => n.chapterId === c.id)
+            .sort((x, y) => (x.createdAt || '').localeCompare(y.createdAt || ''))
+          notes.replaceChildren(
+            mine.length ? el('h3', {}, 'Your notes') : '',
+            ...mine.map((n) =>
+              el(
+                'div',
+                { class: 'note' + (n.archivedAt ? ' done' : '') },
+                n.quote
+                  ? el('div', { class: 'quote' }, n.quote)
+                  : el('div', { class: 'muted small' }, 'On the whole chapter'),
+                el('div', {}, n.text),
+                el(
+                  'div',
+                  { class: 'muted small' },
+                  'Note from iPhone · ' +
+                    when(n.createdAt || new Date().toISOString()) +
+                    (pending.some((p) => p.id === n.id)
+                      ? ' · waiting for a connection'
+                      : n.archivedAt
+                        ? ' · done on your computer'
+                        : ''),
+                ),
+                !n.archivedAt
+                  ? el(
+                      'button',
+                      {
+                        class: 'link small',
+                        onclick: async () => {
+                          if (!confirm('Delete this note?')) return
+                          pending = pending.filter((p) => p.id !== n.id)
+                          store.set('pending', pending)
+                          await call('/api/notes/' + n.id, { method: 'DELETE' }).catch(() => {})
+                          drawNotes()
+                        },
+                      },
+                      'Delete',
+                    )
+                  : '',
+              ),
+            ),
+          )
+        }
+
+        function noteSheet(sel) {
+          const quote = sel ? sel.text : ''
+          const input = el('textarea', {
+            'aria-label': 'Your note',
+            placeholder: sel ? 'Your note on this passage…' : 'Your note on this chapter…',
+          })
+          const sheet = el(
+            'div',
+            { class: 'sheet', role: 'dialog' },
+            quote
+              ? el(
+                  'div',
+                  { class: 'quote small' },
+                  quote.length > 240 ? quote.slice(0, 240) + '…' : quote,
+                )
+              : el(
+                  'div',
+                  { class: 'muted small', style: 'margin-bottom:8px' },
+                  'On the whole chapter',
+                ),
+            input,
+            el(
+              'div',
+              { class: 'row' },
+              el('button', { onclick: () => sheet.remove() }, 'Cancel'),
+              el(
+                'button',
+                {
+                  class: 'primary',
+                  onclick: async () => {
+                    if (!input.value.trim()) return
+                    const note = {
+                      id:
+                        'pn-' +
+                        Date.now().toString(36) +
+                        '-' +
+                        Math.random().toString(36).slice(2, 8),
+                      ...where,
+                      quote,
+                      paragraph: sel ? sel.paragraph : null,
+                      text: input.value.trim(),
+                      createdAt: new Date().toISOString(),
+                      archivedAt: null,
+                    }
+                    pending.push(note)
+                    store.set('pending', pending)
+                    sheet.remove()
+                    window.getSelection()?.removeAllRanges()
+                    await flush()
+                    drawNotes()
+                  },
+                },
+                'Save note',
+              ),
+            ),
+          )
+          document.body.append(sheet)
+          input.focus()
+        }
+
+        // Select some text, then "Note on this": iOS keeps its own menu, so the button sits below.
+        const floatBtn = el('button', { class: 'primary float', hidden: true }, 'Note on this')
+        app.append(floatBtn)
+        let picked = null
+        const onSelect = () => {
+          const s = window.getSelection()
+          const t = s && s.rangeCount ? s.toString().trim() : ''
+          if (!t || !body.contains(s.anchorNode)) {
+            floatBtn.hidden = true
+            return
+          }
+          picked = {
+            text: t.slice(0, 2000),
+            paragraph: paragraphOf(s.getRangeAt(0).startContainer, body),
+          }
+          floatBtn.hidden = false
+        }
+        document.addEventListener('selectionchange', onSelect)
+        floatBtn.addEventListener('click', () => {
+          floatBtn.hidden = true
+          if (picked) noteSheet(picked)
+        })
+        const leave = current
+        const stop = setInterval(() => {
+          if (current !== leave) {
+            document.removeEventListener('selectionchange', onSelect)
+            floatBtn.remove()
+            clearInterval(stop)
+          }
+        }, 500)
+        await flush()
+        drawNotes()
+      }
+
+      /* ---------- reading settings ---------- */
+      function settings(back) {
+        const done = back || (() => show(stories))
+        const row = (label, options, keyName) =>
+          el(
+            'div',
+            {},
+            el('div', { class: 'muted small' }, label),
+            el(
+              'div',
+              { class: 'row' },
+              options.map(([value, text]) =>
+                el(
+                  'button',
+                  {
+                    class: look[keyName] === value ? 'on' : '',
+                    onclick: () => {
+                      look[keyName] = value
+                      applyLook()
+                      show(settings, back)
+                    },
+                  },
+                  text,
+                ),
+              ),
+            ),
+          )
+        app.append(
+          bar('Reading', done),
+          el(
+            'main',
+            { class: 'settings' },
+            row(
+              'Theme',
+              [
+                ['light', 'Light'],
+                ['sepia', 'Sepia'],
+                ['dark', 'Dark'],
+              ],
+              'theme',
+            ),
+            row(
+              'Font',
+              [
+                ['serif', 'Serif'],
+                ['sans', 'Sans'],
+              ],
+              'font',
+            ),
+            row(
+              'Size',
+              [
+                [16, 'Small'],
+                [19, 'Medium'],
+                [22, 'Large'],
+                [26, 'Larger'],
+              ],
+              'size',
+            ),
+            el(
+              'button',
+              {
+                onclick: () => {
+                  key = null
+                  store.set('key', null)
+                  show(login)
+                },
+              },
+              'Sign out',
+            ),
+          ),
+        )
+      }
+
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {})
+      show(key ? stories : login)
+    </script>
+  </body>
+</html>

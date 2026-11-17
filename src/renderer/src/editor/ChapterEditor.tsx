@@ -46,6 +46,8 @@ export interface EditorHandle {
   setTitle: (title: string) => void
   /** Selects and shows a search match: the n-th text node, from start to end. */
   showMatch: (node: number, start: number, end: number) => void
+  /** Finds a passage (a phone note's quote) and shows it, preferring the given paragraph. Returns whether it did. */
+  showText: (text: string, paragraph: number | null) => boolean
   /** Replaces the selection if it is the searched text. Returns whether it did. */
   replaceSelection: (replacement: string, query: string, matchCase: boolean) => boolean
   insertSceneBreak: () => void
@@ -502,6 +504,36 @@ function EditorPage(
       }
       update({ title })
       void saver.flush()
+    },
+    showText(text: string, paragraph: number | null) {
+      const needle = text.split('\n')[0]!.trim().slice(0, 200)
+      if (!needle) return false
+      const hits: { from: number; to: number; top: number }[] = []
+      /** A text block's text, searched; `start` is where its content begins in the document. */
+      const scan = (block: PMNode, start: number, top: number) => {
+        let plain = ''
+        const at: number[] = []
+        block.descendants((inner, innerPos) => {
+          if (inner.isText) {
+            for (let i = 0; i < inner.text!.length; i++) at.push(start + innerPos + i)
+            plain += inner.text
+          }
+        })
+        const i = plain.indexOf(needle)
+        if (i >= 0) hits.push({ from: at[i]!, to: at[i + needle.length - 1]! + 1, top })
+      }
+      editor.state.doc.forEach((child, offset, top) => {
+        if (child.isTextblock) return scan(child, offset + 1, top)
+        child.descendants((node, pos) => {
+          if (!node.isTextblock) return true
+          scan(node, offset + 1 + pos + 1, top)
+          return false
+        })
+      })
+      const hit = hits.find((h) => h.top === paragraph) ?? hits[0]
+      if (!hit) return false
+      editor.chain().focus().setTextSelection({ from: hit.from, to: hit.to }).scrollIntoView().run()
+      return true
     },
     showMatch(node: number, start: number, end: number) {
       const range = textNodeRange(editor.state.doc, node, start, end)

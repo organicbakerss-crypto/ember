@@ -10,6 +10,11 @@ import {
   type IpcMainInvokeEvent,
 } from 'electron'
 import { tokenPageUrl } from './sync/cloudflare'
+import { deployReader, readerTokenPageUrl } from './phone/deploy'
+import { PhoneNotes } from './phone/notes'
+import { writeJsonFile } from './fs/jsonFile'
+import fs from 'node:fs'
+import { z as zod } from 'zod'
 import type { DocLeases } from './docLeases'
 import { copyForRoyalRoad, exportVolume, exportWorldPdf } from './export/service'
 import { readDocx } from './import/docx'
@@ -60,6 +65,7 @@ export function registerIpc(
   backup: BackupService,
 ): { libraryChanged: (change: LibraryChange) => void } {
   const { manager, leases } = windows
+  const phoneNotes = new PhoneNotes(() => sync.connection()?.cloud ?? null)
   // Asking the other windows what they show (for a torn-off AI window).
   // Roundtable continues in the main process if the AI tab is closed or hidden.
   const roundtable = new RoundtableRunner(host, ai, (status) =>
@@ -496,6 +502,39 @@ export function registerIpc(
       await shell.openExternal(tokenPageUrl())
       return null
     },
+    'phone:status': async () => {
+      const c = sync.connection()
+      const saved = c ? await readPhoneState(c.localDir) : null
+      return { syncConnected: !!c, url: saved?.url ?? null, setUpAt: saved?.at ?? null }
+    },
+    'phone:setup': async (input) => {
+      const c = sync.connection()
+      if (!c)
+        throw new AppError(
+          'invalid-input',
+          'Connect sync first (Settings → Sync): the phone reads what syncs.',
+        )
+      const { url } = await deployReader({
+        ...input,
+        bucket: c.bucket,
+        // Tests point it at a stand-in for Cloudflare (as they do for sync).
+        ...(!app.isPackaged && process.env['SYNC_TEST_API']
+          ? { api: process.env['SYNC_TEST_API'] }
+          : {}),
+      })
+      await writeJsonFile(join(c.localDir, 'phone.json'), {
+        formatVersion: 1,
+        url,
+        at: new Date().toISOString(),
+      })
+      return { url }
+    },
+    'phone:openCloudflare': async () => {
+      await shell.openExternal(readerTokenPageUrl())
+      return null
+    },
+    'phone:notes': () => phoneNotes.list(),
+    'phone:archive': (input) => phoneNotes.archive(input.id, input.archived),
     'sync:now': () => sync.syncNow(),
     'sync:conflicts': () => sync.conflicts(),
     'sync:conflictRestore': async (input) => {
@@ -830,5 +869,18 @@ async function runHandler<C extends IpcChannel>(
 export function broadcast<E extends keyof IpcEvents>(event: E, payload: IpcEvents[E]): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(`${IPC_EVENT_PREFIX}${event}`, payload)
+  }
+}
+
+/** Where this computer put the phone reader (kept on this computer only). */
+async function readPhoneState(localDir: string): Promise<{ url: string; at: string } | null> {
+  try {
+    const raw = JSON.parse(
+      await fs.promises.readFile(join(localDir, 'phone.json'), 'utf8'),
+    ) as unknown
+    const r = zod.object({ url: zod.string().url(), at: zod.string() }).safeParse(raw)
+    return r.success ? r.data : null
+  } catch {
+    return null
   }
 }

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CommentInfo } from '../editor/comments'
+import type { PhoneNote } from '@shared/phone'
+import { ARCHIVE_DAYS } from '@shared/phone'
 import { MOD } from './commands'
 
 /**
@@ -24,7 +26,15 @@ export function CommentsPanel(props: {
   onNote: (id: string, note: string) => void
   onRemove: (id: string) => void
   onShow: (id: string) => void
+  /** Notes left on the phone reader for this chapter (only once it's set up). */
+  phone?: {
+    notes: PhoneNote[]
+    onDone: (id: string, done: boolean) => void
+    onShow: (note: PhoneNote) => void
+  } | null
 }) {
+  const phoneOpen = props.phone?.notes.filter((n) => !n.archivedAt) ?? []
+  const phoneDone = props.phone?.notes.filter((n) => n.archivedAt) ?? []
   return (
     <div className="comments-panel">
       <h2>Comments</h2>
@@ -64,6 +74,46 @@ export function CommentsPanel(props: {
             </div>
           )}
         </div>
+      )}
+      {props.phone && (phoneOpen.length > 0 || phoneDone.length > 0) && (
+        <section className="phone-notes" aria-label="Notes from iPhone">
+          <h3 className="small">Notes from iPhone ({phoneOpen.length})</h3>
+          <ol className="comment-list">
+            {[...phoneOpen, ...phoneDone].map((n) => (
+              <li key={n.id} className={`comment-card phone-note ${n.archivedAt ? 'done' : ''}`}>
+                <div className="row phone-note-head">
+                  <span className="comment-by small">Note from iPhone</span>
+                  <span className="muted small">{new Date(n.createdAt).toLocaleString()}</span>
+                  <span className="status-spacer" />
+                  <button
+                    className={`icon phone-check ${n.archivedAt ? 'on' : ''}`}
+                    aria-label={n.archivedAt ? 'Put back' : 'Done'}
+                    title={
+                      n.archivedAt
+                        ? `Done: deleted ${ARCHIVE_DAYS} days after you ticked it. Click to put it back.`
+                        : `Done (archived, then deleted after ${ARCHIVE_DAYS} days)`
+                    }
+                    onClick={() => props.phone!.onDone(n.id, !n.archivedAt)}
+                  >
+                    ✓
+                  </button>
+                </div>
+                {n.quote ? (
+                  <button
+                    className="comment-passage"
+                    title="Show it on the page"
+                    onClick={() => props.phone!.onShow(n)}
+                  >
+                    “{n.quote.length > 160 ? `${n.quote.slice(0, 157)}…` : n.quote}”
+                  </button>
+                ) : (
+                  <div className="muted small">On the whole chapter</div>
+                )}
+                <p className="phone-note-text">{n.text}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
       {props.comments.length === 0 ? (
         <p className="muted small">No comments in this chapter.</p>

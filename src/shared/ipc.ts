@@ -82,6 +82,7 @@ import {
 import type { MemoryDraft } from './memory/build'
 import type { TidySuggestion } from './memory/tidy'
 import type { IdeaCheck } from './memory/check'
+import type { PhoneNote } from './phone'
 
 /* ---------- shared result types ---------- */
 
@@ -1259,6 +1260,18 @@ export const ipcInputs = {
   'ai:chatgptSignOut': z.void(),
   /** Opens Cloudflare's token page, filled in with the permission sync needs. */
   'sync:openCloudflare': z.void(),
+  /** The phone reader: whether it's set up here, and its address. */
+  'phone:status': z.void(),
+  /** Puts the phone reader on the writer's Cloudflare account (the token is used once, not kept). */
+  'phone:setup': z.object({
+    token: z.string().trim().min(10).max(500),
+    passphrase: z.string().min(8).max(200),
+  }),
+  'phone:openCloudflare': z.void(),
+  /** Notes left on the phone (empty while sync isn't connected). */
+  'phone:notes': z.void(),
+  /** Ticks a phone note off (archived, deleted 3 days later) or puts it back. */
+  'phone:archive': z.object({ id: z.string().min(1).max(80), archived: z.boolean() }),
   /** Stops syncing on this computer (nothing is deleted anywhere). */
   'sync:disconnect': z.void(),
   'sync:now': z.void(),
@@ -1420,6 +1433,11 @@ export interface IpcResults {
   'sync:connect': { status: SyncStatus } | { confirm: { series: number; worlds: number } }
   'sync:disconnect': SyncStatus
   'sync:openCloudflare': null
+  'phone:status': { syncConnected: boolean; url: string | null; setUpAt: string | null }
+  'phone:setup': { url: string }
+  'phone:openCloudflare': null
+  'phone:notes': PhoneNote[]
+  'phone:archive': PhoneNote
   'ai:status': AiStatus
   'ai:ask': { text: string; lookedAt: string[] }
   'ai:secondOpinion': { text: string }
