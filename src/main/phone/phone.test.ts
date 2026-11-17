@@ -277,6 +277,10 @@ describe('putting the phone reader on Cloudflare', () => {
     expect(script).toContain('<!doctype html>')
     expect(script).not.toContain('__READER_HTML__')
     expect(script).not.toContain('__ICON_PNG__')
+    // Every theme's colours went in (and nothing that changes the words).
+    expect(script).not.toContain('__THEMES__')
+    expect(script).toContain('\\"id\\":\\"cyberpunk\\"')
+    expect(script).not.toContain('vocabulary')
   })
 
   it('says when the token can’t set up Workers, and refuses a short passphrase', async () => {

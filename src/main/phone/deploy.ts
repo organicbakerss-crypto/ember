@@ -24,10 +24,59 @@ export const passHash = (passphrase: string) =>
     .update(SALT + passphrase)
     .digest('hex')
 
+interface ThemeFile {
+  id: string
+  name: string
+  appearance: 'light' | 'dark'
+  colors: Record<string, string>
+}
+const themeFiles = import.meta.glob<ThemeFile>('../../renderer/src/themes/*.json', {
+  eager: true,
+  import: 'default',
+})
+
+/** The app's themes for the phone: colours only (no skin words, fonts or decorations). */
+export function phoneThemes(): {
+  id: string
+  name: string
+  appearance: string
+  colors: Record<string, string>
+}[] {
+  return Object.values(themeFiles)
+    .filter((t) => t?.id && t.colors)
+    .sort((a, b) =>
+      a.appearance === b.appearance
+        ? a.name.localeCompare(b.name)
+        : a.appearance === 'light'
+          ? -1
+          : 1,
+    )
+    .map((t) => {
+      const c = t.colors
+      return {
+        id: t.id,
+        name: t.name,
+        appearance: t.appearance,
+        colors: {
+          bg: c['page'] ?? c['bg']!,
+          bar: c['bg']!,
+          text: c['page-text'] ?? c['text']!,
+          muted: c['muted']!,
+          line: c['border']!,
+          accent: c['accent']!,
+          'accent-text': c['accent-text'] ?? '#fff',
+          card: c['surface'] ?? c['bg']!,
+        },
+      }
+    })
+}
+
 /** The Worker's code with the page and icon inside it. */
 export function readerScript(): string {
+  const page = readerHtml.replace(`'__THEMES__'`, JSON.stringify(phoneThemes()))
+  if (page.includes('__THEMES__')) throw new Error('The phone reader’s themes didn’t go in.')
   const script = workerJs
-    .replace(`'__READER_HTML__'`, JSON.stringify(readerHtml))
+    .replace(`'__READER_HTML__'`, JSON.stringify(page))
     .replace(`'__ICON_PNG__'`, JSON.stringify(iconPng()))
   if (script.includes('__READER_HTML__') || script.includes('__ICON_PNG__'))
     throw new Error('The phone reader’s page didn’t go in.')
