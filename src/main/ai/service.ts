@@ -2141,9 +2141,17 @@ export class AiService {
       library.world.answers(worldId),
     ])
 
-    // The entries named in the chapter, most mentioned first.
+    // The entries named in the chapter, most mentioned first. Names only some
+    // people use ("Dad", Josh's) count when the narrator or one of them is here.
+    const here = new Set<string>([
+      ...(chapter.povEntryId ? [chapter.povEntryId] : []),
+      ...(chapter.povs ?? []).flatMap((p) => (p.entryId ? [p.entryId] : [])),
+      ...nameMatcher(entryTerms(view.entries))
+        .find(text)
+        .map((m) => m.entryId),
+    ])
     const counts = new Map<string, number>()
-    for (const m of nameMatcher(entryTerms(view.entries)).find(text)) {
+    for (const m of nameMatcher(entryTerms(view.entries, here)).find(text)) {
       counts.set(m.entryId, (counts.get(m.entryId) ?? 0) + 1)
     }
     const named = [...counts].sort((a, b) => b[1] - a[1]).slice(0, MAX_NOTES)
@@ -2184,6 +2192,7 @@ export class AiService {
             otherNames,
             relationshipTypes: view.relationshipTypes,
             answers,
+            narrator: chapter.povs?.[0]?.name ?? chapter.pov ?? undefined,
           }),
           json: true,
           temperature: 0.2,

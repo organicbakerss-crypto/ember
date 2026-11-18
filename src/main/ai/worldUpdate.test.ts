@@ -178,6 +178,57 @@ describe('reading the AI’s findings', () => {
     expect(system).toContain('ask the writer in questions instead')
   })
 
+  it('finds other names (who uses them) and identities, always for the writer to accept', () => {
+    const raw = parseFindings(
+      JSON.stringify({
+        names: [
+          { entry: 'Mara', name: 'Mum', usedBy: 'Odo', kind: 'nickname', quote: '' },
+          { entry: 'Mara', name: 'Mara', usedBy: '', kind: 'alias', quote: '' }, // already her name
+          { entry: 'Mara', name: 'Ghost', usedBy: 'Nobody', kind: 'secret', quote: '' }, // unknown user
+        ],
+        identities: [
+          { a: 'Odo', b: 'Mara', kind: 'same', quote: '' },
+          { a: 'Odo', b: 'Odo', kind: 'becomes', quote: '' },
+          { a: 'Odo', b: 'Mara', kind: 'cousin', quote: '' },
+        ],
+      }),
+    )!
+    const found = checkFindings([raw], CHAPTER, world())
+    expect(found.map((f) => f.text)).toEqual([
+      'Mara is also called “Mum” (by Odo)',
+      'Odo and Mara are the same person',
+    ])
+    expect(found.every((f) => f.implied)).toBe(true)
+    expect(found[0]!.suggestion).toEqual({
+      type: 'name',
+      entryId: MARA,
+      name: 'Mum',
+      usedBy: [ODO],
+      kind: 'nickname',
+    })
+    expect(found[1]!.suggestion).toEqual({
+      type: 'identity',
+      kind: 'same',
+      entryId: ODO,
+      other: MARA,
+    })
+  })
+
+  it('tells the AI who narrates, so "my dad" is the narrator’s', () => {
+    const user = findingsMessages({
+      chapterTitle: 'A',
+      text: 'x',
+      part: 1,
+      parts: 1,
+      notes: [],
+      otherNames: [],
+      relationshipTypes: [...BUILT_IN_RELATIONSHIP_TYPES],
+      answers: [],
+      narrator: 'Josh',
+    })[1]!.content
+    expect(user).toContain('The chapter is told by Josh')
+  })
+
   it('splits a long chapter into parts by words', () => {
     const p = (n: number) => Array.from({ length: n }, () => 'word').join(' ')
     expect(chapterParts([p(600), p(600), p(600)], 1500)).toHaveLength(2)

@@ -4,6 +4,7 @@ import type { BoardFile, RelationshipFile } from '@shared/schema'
 import { worldImageUrl } from '@shared/media'
 import { valuesAt } from '@shared/world/facts'
 import { bandStops, boardLines, describeLine, type BoardLine } from '@shared/world/relationships'
+import { foldsAt, shownNames } from '@shared/world/identity'
 import { api, describeError } from '../../api'
 import { useOverlays } from '../../components/overlays'
 import { loadLocal, saveLocal } from '../../storage'
@@ -85,7 +86,11 @@ export function PeopleBoard(props: {
   const [typesOpen, setTypesOpen] = useState(false)
 
   const who = world.view.entries.filter((e) => lensOf(world, e) === 'who')
-  const people = who.filter((e) => !isGroup(e))
+  // Two entries for one person (once it's revealed), or someone who has become
+  // someone else, show as one circle at this moment, with every name.
+  const folds = foldsAt(world.view.entries, world.at, world.positions)
+  const people = who.filter((e) => !isGroup(e) && !folds.has(e.id))
+  const label = (p: EntrySummary) => shownNames(p.id, world.view.entries, folds).join(' / ')
   const groups = who.filter(isGroup)
   // Where portraits were just dropped, shown until the saved board comes back (no snap-back).
   const [dropped, setDropped] = useState<{ base: BoardFile['positions']; at: Positions } | null>(
@@ -124,7 +129,9 @@ export function PeopleBoard(props: {
     .filter((f) => !!f)
 
   const lines = boardLines(
-    world.view.relationships.filter((r) => onBoard.has(r.from) && onBoard.has(r.to)),
+    world.view.relationships
+      .map((r) => ({ ...r, from: folds.get(r.from) ?? r.from, to: folds.get(r.to) ?? r.to }))
+      .filter((r) => r.from !== r.to && onBoard.has(r.from) && onBoard.has(r.to)),
     world.view.relationshipTypes,
     { at: world.at, positions: world.positions, hidden, blend: settings.world.blendLines },
   )
@@ -355,7 +362,7 @@ export function PeopleBoard(props: {
                 className={`board-person ${drag?.ids.includes(p.id) && drag.moved ? 'dragging' : ''}`}
                 transform={`translate(${x} ${y})`}
                 role="button"
-                aria-label={p.name}
+                aria-label={label(p)}
                 onPointerDown={(e) => startDrag(e, [p.id])}
               >
                 <circle r={R} className="board-portrait-ring" />
@@ -375,7 +382,7 @@ export function PeopleBoard(props: {
                   </text>
                 )}
                 <text y={R + 22} textAnchor="middle" className="board-name">
-                  {p.name}
+                  {label(p)}
                 </text>
               </g>
             )

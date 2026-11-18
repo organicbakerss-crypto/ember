@@ -50,7 +50,25 @@ export function nameMatcher(terms: NameTerm[]): NameMatcher {
   }
 }
 
-/** The terms for a set of entries: each name and alias. */
-export function entryTerms(entries: { id: string; name: string; aliases: string[] }[]): NameTerm[] {
-  return entries.flatMap((e) => [e.name, ...e.aliases].map((term) => ({ entryId: e.id, term })))
+/**
+ * The terms for a set of entries: each name and alias, and their other names
+ * that everyone uses. A name only some people use ("Dad", used by Josh) counts
+ * only when one of them is in `context` (the chapter's narrator, or someone
+ * in it), so it never points at the wrong person elsewhere.
+ */
+export function entryTerms(
+  entries: {
+    id: string
+    name: string
+    aliases: string[]
+    names?: { name: string; usedBy: string[] }[]
+  }[],
+  context?: ReadonlySet<string>,
+): NameTerm[] {
+  return entries.flatMap((e) => [
+    ...[e.name, ...e.aliases].map((term) => ({ entryId: e.id, term })),
+    ...(e.names ?? [])
+      .filter((n) => !n.usedBy.length || (context && n.usedBy.some((u) => context.has(u))))
+      .map((n) => ({ entryId: e.id, term: n.name })),
+  ])
 }

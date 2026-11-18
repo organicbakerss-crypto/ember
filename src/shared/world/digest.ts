@@ -3,6 +3,8 @@
  * ids), so a language model can understand the whole world without seeing
  * any image. Derived data, rebuilt locally whenever it's asked for.
  */
+import { identityLines } from './identity'
+import type { EntryIdentity, EntryName } from '../schema'
 import type {
   FactValue,
   Quote,
@@ -26,6 +28,8 @@ export interface DigestEntry {
   snippet: string
   /** For eras and events: their place on the timeline. */
   when?: TimelinePlace | null
+  names?: EntryName[]
+  identities?: EntryIdentity[]
 }
 
 /** The world's timeline from its eras and events (those placed, or of an era or event template). */
@@ -163,6 +167,8 @@ export interface EntryTextInput {
     facts: Record<string, FactValue[]>
     quotes: Quote[]
     when?: TimelinePlace | null
+    names?: EntryName[]
+    identities?: EntryIdentity[]
   }
   /** The page's paragraphs. */
   body: string[]
@@ -200,6 +206,18 @@ export function entryText(input: EntryTextInput): string {
   if (entry.when || template.lens === 'when')
     out.push(`When: ${whenText(entry.id, timeline, chapters)}`)
   if (entry.aliases.length) out.push(`Also called: ${entry.aliases.join(', ')}`)
+  out.push(
+    ...identityLines(
+      entry,
+      [...input.entries.filter((e) => e.id !== entry.id), entry],
+      (anchor) => {
+        if (!anchor) return null
+        if (anchor.kind === 'event') return names.get(anchor.entryId) ?? 'an event'
+        const at = positions.get(anchor.chapterId)
+        return at === undefined ? null : chapters[at]!.label
+      },
+    ),
+  )
 
   const facts: string[] = []
   for (const field of template.fields) {

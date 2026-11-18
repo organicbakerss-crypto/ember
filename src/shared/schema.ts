@@ -287,6 +287,43 @@ export type Picture = z.infer<typeof pictureSchema>
 /** A tag on an entry: short, as the writer typed it. */
 export const tagSchema = z.string().trim().min(1).max(60)
 
+/**
+ * Another name for an entry, with who uses it ("Dad" is what Josh calls Uncle
+ * Pete), what kind of name it is, and from when. A name with no `usedBy` is
+ * used by everyone (like an alias).
+ */
+export const entryNameSchema = z.looseObject({
+  id: z.string().min(1).max(40),
+  name: z.string().trim().min(1).max(120),
+  /** Who calls them this (empty: everyone). */
+  usedBy: z.array(id('entry')).catch([]).default([]),
+  kind: z.enum(['nickname', 'alias', 'disguise', 'secret']).catch('nickname').default('nickname'),
+  /** From when (null: from the start). */
+  from: z
+    .lazy(() => factAnchorSchema)
+    .nullable()
+    .catch(null)
+    .default(null),
+})
+export type EntryName = z.infer<typeof entryNameSchema>
+
+/**
+ * Who someone is, over the story. `same`: the other entry is this same
+ * person (two names, a secret identity), revealed at `at` (null: always
+ * known). `becomes`: this one becomes the other entry from `at` on (a
+ * transformation, a takeover, a new name). Held by one side only.
+ */
+export const entryIdentitySchema = z.looseObject({
+  kind: z.enum(['same', 'becomes']),
+  entryId: id('entry'),
+  at: z
+    .lazy(() => factAnchorSchema)
+    .nullable()
+    .catch(null)
+    .default(null),
+})
+export type EntryIdentity = z.infer<typeof entryIdentitySchema>
+
 export const worldEntryFileSchema = z.looseObject({
   formatVersion,
   id: id('entry'),
@@ -305,6 +342,10 @@ export const worldEntryFileSchema = z.looseObject({
   tags: z.array(tagSchema).catch([]).default([]),
   /** More pictures than the portrait: outfits, house plans, reference art. */
   gallery: z.array(pictureSchema).catch([]).default([]),
+  /** Other names: who uses them, what kind, from when. */
+  names: z.array(entryNameSchema).catch([]).default([]),
+  /** Same person as / becomes another entry (see entryIdentitySchema). */
+  identities: z.array(entryIdentitySchema).catch([]).default([]),
   /** Entries merged into this one; links and POV tags to them now mean this entry. */
   mergedFrom: z.array(id('entry')).default([]),
   /** For eras and events: their place on the timeline (null: not placed yet). */
@@ -367,6 +408,21 @@ export const suggestionSchema = z.discriminatedUnion('type', [
     text: z.string().max(1000).optional(),
     link: id('entry').optional(),
   }),
+  /** Another name for an entry (who uses it), from this chapter on. */
+  z.looseObject({
+    type: z.literal('name'),
+    entryId: id('entry'),
+    name: z.string().trim().min(1).max(120),
+    usedBy: z.array(id('entry')).default([]),
+    kind: z.enum(['nickname', 'alias', 'disguise', 'secret']).catch('nickname').default('nickname'),
+  }),
+  /** Two entries are the same person, or one becomes the other, from this chapter on. */
+  z.looseObject({
+    type: z.literal('identity'),
+    kind: z.enum(['same', 'becomes']),
+    entryId: id('entry'),
+    other: id('entry'),
+  }),
   /** Two entries connected, from this chapter on. */
   z.looseObject({
     type: z.literal('relationship'),
@@ -410,6 +466,10 @@ export const inboxItemSchema = z.looseObject({
       /** The line it kept as a quote. */
       quote: z.looseObject({ entryId: id('entry'), quoteId: id('quote') }).optional(),
       relationshipId: id('relationship').optional(),
+      /** A name it added. */
+      name: z.looseObject({ entryId: id('entry'), nameId: z.string() }).optional(),
+      /** An identity link it added. */
+      identity: z.looseObject({ entryId: id('entry'), other: id('entry') }).optional(),
     })
     .optional()
     .catch(undefined),

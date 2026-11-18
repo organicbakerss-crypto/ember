@@ -44,14 +44,18 @@ export function findingsMessages(input: {
   relationshipTypes: RelationshipType[]
   /** What the writer has told the AI before. */
   answers: { question: string; answer: string }[]
+  /** Who tells the chapter (its point of view), if known. */
+  narrator?: string
 }): ChatMessage[] {
   const types = input.relationshipTypes.map((t) => `${t.id} (${t.label})`).join(', ')
   const system = `You read one chapter of a novel and note what it tells about the story's world, so the writer's world notes stay up to date. Base everything on the chapter (and the notes). Read it the way a careful reader would: what it shows, what it tells, and what it clearly implies. Reply with JSON only, exactly this shape:
-{"summary":"","new":[{"name":"","kind":"","about":"","quote":""}],"facts":[{"entry":"","field":"","value":"","quote":""}],"relationships":[{"from":"","to":"","type":"","words":"","how":"shown|told|implied","quote":""}],"continuity":[{"entry":"","problem":"","quote":""}],"questions":[{"question":"","quote":""}]}
+{"summary":"","new":[{"name":"","kind":"","about":"","quote":""}],"facts":[{"entry":"","field":"","value":"","quote":""}],"relationships":[{"from":"","to":"","type":"","words":"","how":"shown|told|implied","quote":""}],"names":[{"entry":"","name":"","usedBy":"","kind":"nickname|alias|disguise|secret","quote":""}],"identities":[{"a":"","b":"","kind":"same|becomes","quote":""}],"continuity":[{"entry":"","problem":"","quote":""}],"questions":[{"question":"","quote":""}]}
 - summary: at most 6 sentences: who is there, what happens, what changes. Keep names exactly.
 - new: people, places, groups, creatures, events or systems (magic, laws) the chapter names that are not in the world notes or the list of other names. kind is one of: ${Object.keys(NEW_KINDS).join(', ')} (${KIND_GUIDE}). about: one short line.
 - facts: what the chapter shows about an entry in the notes that its notes don't say yet, or that has changed (where someone is now, a new role, someone dies). entry: its exact name. field: one of the fields listed for that entry. value: a few words; for a field marked "a name", the exact name of another entry.
 - relationships: two entries who are connected, if the notes don't already say so. They don't need to meet on the page: include connections the chapter tells or clearly implies, past ones too (they met before, fought together years ago, one remembers, mentions or recognises the other, one knows the other's family, a shared history in passing). Both must be named in the chapter or in the notes. type is one of: ${types}; use "met" when they've known each other but nothing more is clear. words: optional, like "sister of" or "served together in the war". how: "shown" (they deal with each other here), "told" (the text says it outright) or "implied" (the text clearly points to it, reading between the lines). quote: the sentence that points to it. When a connection seems likely but you're not sure, don't list it here: ask the writer in questions instead (for example: "Have Mara and Dov met before? She seems to recognise him.").
+- names: another name the chapter uses for an entry in the notes that the notes don't list yet: a nickname, a title, a disguise, a secret identity, or what someone calls them (in a chapter Josh narrates, "Dad" is Josh's father). entry: the entry's exact name. usedBy: who uses this name when only some people do (exact name), or "" if everyone does. kind: nickname, alias, disguise or secret. Only when you're sure who it means; if not, ask in questions ("Is the 'Dad' Josh mentions Uncle Pete?").
+- identities: two entries (in the notes or the other names) that turn out to be the same person (kind "same": one is a second name, a disguise or a secret identity of the other), or where one becomes the other from here on (kind "becomes": a: who they were, b: who they become). Only when the chapter makes it clear; otherwise ask in questions.
 - continuity: anything in the chapter that contradicts the world notes or what the writer told you (an eye colour that changed, someone in two places at once, the dead acting). problem: what doesn't fit, in one line.
 - questions: at most 5 things you can't tell that matter for the notes, which only the writer can answer (for example: is "the Captain" Mara, or someone new? Have these two met before?).
 - quote: the exact sentence from the chapter it comes from, copied word for word.
@@ -65,6 +69,9 @@ Leave a list empty when there's nothing for it. Don't repeat what the notes alre
       : '',
     input.answers.length
       ? `The writer told you:\n${input.answers.map((a) => `- ${a.question} ${a.answer}`).join('\n')}`
+      : '',
+    input.narrator
+      ? `The chapter is told by ${input.narrator}: "I", "me", "my dad" and the like are ${input.narrator}'s.`
       : '',
     `The chapter “${input.chapterTitle || 'Untitled'}”${input.parts > 1 ? ` (part ${input.part} of ${input.parts})` : ''}:\n\n${input.text}`,
   ]
@@ -111,6 +118,8 @@ export interface RawFindings {
   }[]
   continuity: { entry: string; problem: string; quote: string }[]
   questions: { question: string; quote: string }[]
+  names?: { entry: string; name: string; usedBy: string; kind: string; quote: string }[]
+  identities?: { a: string; b: string; kind: string; quote: string }[]
 }
 
 /** The AI's JSON, read forgivingly (a code fence or a line around it is fine). Null if unreadable. */
@@ -164,6 +173,19 @@ export function parseFindings(reply: string): RawFindings | null {
       quote: str(o['quote']),
     })),
     questions: list('questions', (o) => ({ question: str(o['question']), quote: str(o['quote']) })),
+    names: list('names', (o) => ({
+      entry: str(o['entry']),
+      name: str(o['name']),
+      usedBy: str(o['usedBy']),
+      kind: str(o['kind']).toLowerCase(),
+      quote: str(o['quote']),
+    })),
+    identities: list('identities', (o) => ({
+      a: str(o['a']),
+      b: str(o['b']),
+      kind: str(o['kind']).toLowerCase(),
+      quote: str(o['quote']),
+    })),
   }
 }
 
@@ -173,7 +195,7 @@ export type Finding = Pick<
   InboxItem,
   'kind' | 'text' | 'quote' | 'entryId' | 'suggestion' | 'undo'
 > & {
-  /** Read between the lines: always left for the writer to accept, never made by itself. */
+  /** Read between the lines (or a name or identity): always left for the writer, never made by itself. */
   implied?: boolean
 }
 
@@ -208,7 +230,11 @@ export function checkFindings(
   }
   const byName = new Map<string, EntrySummary>()
   for (const e of world.entries) {
-    for (const n of [e.name, ...e.aliases]) {
+    for (const n of [
+      e.name,
+      ...e.aliases,
+      ...(e.names ?? []).filter((x) => !x.usedBy.length).map((x) => x.name),
+    ]) {
       const k = norm(n)
       if (k && !byName.has(k)) byName.set(k, e)
     }
@@ -307,6 +333,52 @@ export function checkFindings(
         quote: quoteOf(r.quote),
         entryId: a.id,
         suggestion: { type: 'relationship', from: a.id, to: b.id, relType: type.id, label },
+      })
+    }
+
+    // Other names and identities always wait for the writer.
+    for (const n of raw.names ?? []) {
+      const e = find(n.entry)
+      const name = n.name.replace(/\s+/g, ' ').trim()
+      if (!e || !name || name.length > 120) continue
+      const by = n.usedBy.trim() ? find(n.usedBy) : undefined
+      if (n.usedBy.trim() && !by) continue
+      if (by?.id === e.id) continue
+      const known = [e.name, ...e.aliases, ...(e.names ?? []).map((x) => x.name)].some(
+        (x) => norm(x) === norm(name),
+      )
+      if (known) continue
+      const kind =
+        (['nickname', 'alias', 'disguise', 'secret'] as const).find((k) => k === n.kind) ??
+        'nickname'
+      add(`name:${e.id}:${norm(name)}:${by?.id ?? ''}`, {
+        kind: 'suggestion',
+        implied: true,
+        text: `${e.name} is also called “${name}”${by ? ` (by ${by.name})` : ''}${kind === 'nickname' ? '' : ` · ${kind === 'secret' ? 'secret identity' : kind}`}`,
+        quote: quoteOf(n.quote),
+        entryId: e.id,
+        suggestion: { type: 'name', entryId: e.id, name, usedBy: by ? [by.id] : [], kind },
+      })
+    }
+    for (const i of raw.identities ?? []) {
+      const a = find(i.a)
+      const b = find(i.b)
+      const kind = i.kind === 'becomes' ? 'becomes' : i.kind === 'same' ? 'same' : null
+      if (!a || !b || a.id === b.id || !kind) continue
+      const linked = [a, b].some((x) =>
+        (x.identities ?? []).some((l) => l.entryId === (x.id === a.id ? b.id : a.id)),
+      )
+      if (linked) continue
+      add(`identity:${[a.id, b.id].sort().join(':')}`, {
+        kind: 'suggestion',
+        implied: true,
+        text:
+          kind === 'same'
+            ? `${a.name} and ${b.name} are the same person`
+            : `${a.name} becomes ${b.name}`,
+        quote: quoteOf(i.quote),
+        entryId: a.id,
+        suggestion: { type: 'identity', kind, entryId: a.id, other: b.id },
       })
     }
 

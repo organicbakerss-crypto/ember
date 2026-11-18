@@ -969,3 +969,12 @@ The writer reads chapters on their iPhone and leaves notes that come back to the
 
 The writer noticed two people who never meet on the page got no connection even when the story makes clear they've met before. Reading a chapter now picks up connections the chapter tells or clearly implies, past ones too (they met before, fought together, one remembers or recognises the other, a shared history in passing), using "Met" when nothing more is clear. Each says how it knows: shown, told, or implied. Implied ones are labelled "read between the lines" in the inbox and are never made by the AI itself, even with automatic world changes on: the writer accepts them. When a connection seems likely but the AI isn't sure, it asks the writer in the inbox instead ("Have Mara and Dov met before? She seems to recognise him."); up to 5 questions a chapter (was 3). Answers are kept and read next time.
 
+### Names and identities (Nov 2026)
+
+The writer's case: Uncle Pete is Josh's father; Josh (the narrator) calls him "Dad", Rodney calls him "Uncle Pete", so the two never got connected.
+
+- **Other names** on a person (`names` on the entry): the name, who uses it (empty: everyone), what kind (nickname, alias, disguise, secret identity) and from when. A name only some people use counts only where one of them is: in a chapter they narrate (its POV) or that names them; so "Dad" is Uncle Pete in Josh's chapters and nobody's elsewhere (`entryTerms(entries, context)`).
+- **Who they are** (`identities`, held by one side): "same person as" another entry, revealed in a chapter (two people on the board and the timeline before it, one after, with both names: "Uncle Pete / The Masked Man"), and "becomes" another entry from a chapter (their circle and lines carry over to who they become). Chains are followed (`src/shared/world/identity.ts`).
+- **On the person's page:** "Names and who they are": add a name (kind, who uses it), "Same person as…", "Becomes…", each with its chapter; links set on another person's page show there too.
+- **The AI:** told who narrates the chapter ("my dad" is theirs) and each person's names and identities; it suggests new names (with who uses them) and identities in the inbox, always waiting for the writer, never made by itself; when unsure who a name means, it asks.
+

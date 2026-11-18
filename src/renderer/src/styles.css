@@ -6729,3 +6729,25 @@ kbd {
 .phone-setup .row input {
   flex: 1;
 }
+
+/* A person's other names and who they are over the story. */
+.identity-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.identity-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.identity-row input {
+  min-width: 8rem;
+  flex: 1 1 8rem;
+}
+.identity-row select {
+  width: auto;
+}

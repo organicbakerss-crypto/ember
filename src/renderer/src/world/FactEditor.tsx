@@ -33,12 +33,12 @@ export function linkLens(field: TemplateField): Lens | undefined {
   return LINK_LENS[field.id]
 }
 
-function anchorKey(anchor: FactAnchor | null): string {
+export function anchorKey(anchor: FactAnchor | null): string {
   if (!anchor) return ''
   return anchor.kind === 'chapter' ? `c:${anchor.chapterId}` : `e:${anchor.entryId}`
 }
 
-function anchorFromKey(key: string): FactAnchor | null {
+export function anchorFromKey(key: string): FactAnchor | null {
   if (key.startsWith('c:')) return { kind: 'chapter', chapterId: key.slice(2) }
   if (key.startsWith('e:')) return { kind: 'event', entryId: key.slice(2) }
   return null

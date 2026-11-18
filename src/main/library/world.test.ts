@@ -862,3 +862,55 @@ describe('AI characters', () => {
     expect(await fs.promises.readFile(badPath, 'utf8')).toBe('{ not json')
   })
 })
+
+describe('names and identities', () => {
+  it('accepting a name or an identity keeps it on the entry, from the chapter it came from', async () => {
+    const worldId = await world()
+    const { chapterIds: chapters, source: sourceOf } = await story(worldId, [
+      ['Dad poured the coffee.'],
+    ])
+    const pete = await lib.world.createEntry(worldId, { name: 'Uncle Pete', template: 'person' })
+    const josh = await lib.world.createEntry(worldId, { name: 'Josh', template: 'person' })
+    const mask = await lib.world.createEntry(worldId, {
+      name: 'The Masked Man',
+      template: 'person',
+    })
+    const source = sourceOf(0)
+    const named = await lib.world.applySuggestion(
+      worldId,
+      { type: 'name', entryId: pete.id, name: 'Dad', usedBy: [josh.id], kind: 'nickname' },
+      source,
+      null,
+    )
+    expect(named.undo.name?.entryId).toBe(pete.id)
+    await lib.world.applySuggestion(
+      worldId,
+      { type: 'identity', kind: 'same', entryId: pete.id, other: mask.id },
+      source,
+      null,
+    )
+    // The same again changes nothing.
+    await lib.world.applySuggestion(
+      worldId,
+      { type: 'identity', kind: 'same', entryId: pete.id, other: mask.id },
+      source,
+      null,
+    )
+    const saved = await lib.world.readEntry(worldId, pete.id)
+    expect(saved.names).toMatchObject([
+      {
+        name: 'Dad',
+        usedBy: [josh.id],
+        kind: 'nickname',
+        from: { kind: 'chapter', chapterId: chapters[0] },
+      },
+    ])
+    expect(saved.identities).toEqual([
+      { kind: 'same', entryId: mask.id, at: { kind: 'chapter', chapterId: chapters[0] } },
+    ])
+    // The AI's text for Pete says both.
+    const asText = await lib.world.entryText(worldId, pete.id)
+    expect(asText).toContain('Dad (what Josh calls them')
+    expect(asText).toContain('Same person as The Masked Man')
+  })
+})

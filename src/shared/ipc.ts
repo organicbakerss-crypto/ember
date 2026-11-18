@@ -48,6 +48,10 @@ import {
   relationshipFileSchema,
   conversationFileSchema,
   memoryNodeFileSchema,
+  entryNameSchema,
+  entryIdentitySchema,
+  type EntryName,
+  type EntryIdentity,
   type MemoryNodeFile,
   type ConversationFile,
   relationshipTypeSchema,
@@ -246,6 +250,10 @@ export interface EntrySummary {
   id: string
   name: string
   aliases: string[]
+  /** Other names with who uses them (see EntryName). */
+  names?: EntryName[]
+  /** Same person as / becomes another entry. */
+  identities?: EntryIdentity[]
   template: string
   facts: Record<string, FactValue[]>
   /** The start of the entry's page. */
@@ -544,6 +552,8 @@ export const ipcInputs = {
       gallery: z.array(pictureSchema).max(500).optional(),
       mergedFrom: z.array(id('entry')).max(500).optional(),
       when: timelinePlaceSchema.nullable().optional(),
+      names: z.array(entryNameSchema).max(100).optional(),
+      identities: z.array(entryIdentitySchema).max(50).optional(),
     }),
   }),
   'entry:appearances': z.object({ worldId: id('world'), entryId: id('entry') }),

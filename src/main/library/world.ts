@@ -139,6 +139,8 @@ export type EntryPatch = Partial<
     | 'gallery'
     | 'mergedFrom'
     | 'when'
+    | 'names'
+    | 'identities'
   >
 >
 
@@ -298,6 +300,8 @@ export class WorldStore {
       template: input.template,
       name: input.name.trim(),
       aliases: [],
+      names: [],
+      identities: [],
       facts: cleanFacts(input.facts ?? {}, id),
       body: emptyDoc(),
       quotes: [],
@@ -355,6 +359,14 @@ export class WorldStore {
       next.mergedFrom = [...new Set(patch.mergedFrom.filter((id) => id !== entryId))]
     }
     if (patch.when !== undefined) next.when = patch.when
+    if (patch.names !== undefined) next.names = patch.names
+    if (patch.identities !== undefined) {
+      // Never itself, one of each.
+      const seen = new Set<string>()
+      next.identities = patch.identities.filter(
+        (i) => i.entryId !== entryId && !seen.has(i.entryId) && seen.add(i.entryId),
+      )
+    }
     next.updatedAt = this.host.timestamp()
     await this.host.writeFile(worldId, unitPaths.entry(entryId), next)
     return next
@@ -1213,6 +1225,46 @@ export class WorldStore {
       await keepQuote(s.entryId, s.field)
       return { entryId: s.entryId, relationshipId: null, undo }
     }
+    if (s.type === 'name') {
+      const nameId = newId('fact')
+      await this.host.lock.run(`world:${worldId}`, async () => {
+        const entry = await this.readEntry(worldId, s.entryId)
+        const same = (n: { name: string }) =>
+          n.name.trim().toLowerCase() === s.name.trim().toLowerCase()
+        const usedBy = new Set(s.usedBy)
+        if (
+          entry.names.some(
+            (n) =>
+              same(n) && n.usedBy.length === usedBy.size && n.usedBy.every((u) => usedBy.has(u)),
+          )
+        )
+          return
+        await this.writeEntry(worldId, s.entryId, {
+          names: [
+            ...entry.names,
+            { id: nameId, name: s.name.trim(), usedBy: s.usedBy, kind: s.kind, from },
+          ],
+        })
+      })
+      this.host.changed({ kind: 'entry', worldId, entryId: s.entryId })
+      undo.name = { entryId: s.entryId, nameId }
+      await keepQuote(s.entryId, null)
+      return { entryId: s.entryId, relationshipId: null, undo }
+    }
+    if (s.type === 'identity') {
+      await this.readEntry(worldId, s.other)
+      await this.host.lock.run(`world:${worldId}`, async () => {
+        const entry = await this.readEntry(worldId, s.entryId)
+        if (entry.identities.some((i) => i.entryId === s.other && i.kind === s.kind)) return
+        await this.writeEntry(worldId, s.entryId, {
+          identities: [...entry.identities, { kind: s.kind, entryId: s.other, at: from }],
+        })
+      })
+      this.host.changed({ kind: 'entry', worldId, entryId: s.entryId })
+      undo.identity = { entryId: s.entryId, other: s.other }
+      await keepQuote(s.entryId, null)
+      return { entryId: s.entryId, relationshipId: null, undo }
+    }
     const rel = await this.saveRelationship(worldId, {
       from: s.from,
       to: s.to,
@@ -1254,6 +1306,19 @@ export class WorldStore {
       if (!(err instanceof AppError) || err.code !== 'not-found') throw err
     }
     if (u.relationshipId) await this.deleteRelationship(worldId, u.relationshipId).catch(gone)
+    if (u.name || u.identity) {
+      const entryId = (u.name ?? u.identity)!.entryId
+      await this.host.lock
+        .run(`world:${worldId}`, async () => {
+          const entry = await this.readEntry(worldId, entryId)
+          await this.writeEntry(worldId, entryId, {
+            names: entry.names.filter((n) => n.id !== u.name?.nameId),
+            identities: entry.identities.filter((i) => i.entryId !== u.identity?.other),
+          })
+        })
+        .catch(gone)
+      this.host.changed({ kind: 'entry', worldId, entryId })
+    }
     if (u.fact || u.quote) {
       const entryId = (u.fact ?? u.quote)!.entryId
       await this.host.lock
@@ -1600,6 +1665,8 @@ function toSummary(entry: WorldEntryFile): EntrySummary {
     id: entry.id,
     name: entry.name,
     aliases: entry.aliases,
+    names: entry.names,
+    identities: entry.identities,
     template: entry.template,
     facts: entry.facts,
     snippet: clip(text, SNIPPET_LENGTH),

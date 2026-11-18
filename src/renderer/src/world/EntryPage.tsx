@@ -37,6 +37,7 @@ import { Portrait } from './Portrait'
 import { EntryGallery } from './EntryGallery'
 import { EntryTags } from './EntryTags'
 import { AiCharacterSection } from './AiCharacterSection'
+import { IdentitySection } from './IdentitySection'
 import { mapOfPlace } from './map/mapModel'
 import { RelationshipEditor } from './board/RelationshipEditor'
 import { useRelationships } from './board/useRelationships'
@@ -730,6 +731,15 @@ function EntryView(
             />
           </div>
         </section>
+      )}
+
+      {isIndividualTemplate(template) && (
+        <IdentitySection
+          world={world}
+          entry={entry}
+          onSave={(patch, label) => void save(patch, label)}
+          onOpen={props.onOpenEntry}
+        />
       )}
 
       {(template.lens === 'who' || ties.length > 0) && (
