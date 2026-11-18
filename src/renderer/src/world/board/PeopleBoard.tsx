@@ -332,7 +332,7 @@ export function PeopleBoard(props: {
                 onClick={() => setEditing({ kind: 'pair', line: l })}
                 onMouseMove={(e) =>
                   setHover({
-                    text: `${world.resolve(l.a)?.name} and ${world.resolve(l.b)?.name}: ${describeLine(l, world.view.relationshipTypes, world.positions)}`,
+                    text: `${world.resolve(l.a)?.name} and ${world.resolve(l.b)?.name}: ${describeLine(l, world.view.relationshipTypes, world.positions, (id) => world.resolve(id)?.name ?? '?')}`,
                     x: e.clientX,
                     y: e.clientY,
                   })
@@ -346,11 +346,14 @@ export function PeopleBoard(props: {
                   x2={b.x}
                   y2={b.y}
                   stroke={stroke}
-                  strokeWidth={5}
+                  strokeWidth={l.faint ? 3 : 5}
                   strokeLinecap="round"
-                  strokeDasharray={l.over ? '14 10' : undefined}
+                  strokeDasharray={l.faint ? '3 9' : l.over ? '14 10' : undefined}
+                  opacity={l.faint ? 0.55 : undefined}
                   className="board-line-stroke"
                 />
+                {l.arrows.toB && <Arrow from={a} to={b} colour={l.colours.at(-1)!} />}
+                {l.arrows.toA && <Arrow from={b} to={a} colour={l.colours[0]!} />}
               </g>
             )
           })}
@@ -476,4 +479,28 @@ function PairDialog(props: {
       </div>
     </div>
   )
+}
+
+/** An arrowhead for a one-way tie, just outside the circle it points at. */
+function Arrow(props: {
+  from: { x: number; y: number }
+  to: { x: number; y: number }
+  colour: string
+}) {
+  const dx = props.to.x - props.from.x
+  const dy = props.to.y - props.from.y
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len
+  const uy = dy / len
+  const tipX = props.to.x - ux * (R + 4)
+  const tipY = props.to.y - uy * (R + 4)
+  const size = 13
+  const baseX = tipX - ux * size
+  const baseY = tipY - uy * size
+  const points = [
+    `${tipX},${tipY}`,
+    `${baseX - uy * size * 0.6},${baseY + ux * size * 0.6}`,
+    `${baseX + uy * size * 0.6},${baseY - ux * size * 0.6}`,
+  ].join(' ')
+  return <polygon points={points} fill={props.colour} className="board-arrow" />
 }

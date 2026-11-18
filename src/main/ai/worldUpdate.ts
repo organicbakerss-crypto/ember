@@ -47,7 +47,13 @@ export function findingsMessages(input: {
   /** Who tells the chapter (its point of view), if known. */
   narrator?: string
 }): ChatMessage[] {
-  const types = input.relationshipTypes.map((t) => `${t.id} (${t.label})`).join(', ')
+  const types = input.relationshipTypes
+    .map((t) =>
+      t.oneWay
+        ? `${t.id} (one-way: "from" ${t.verb ?? t.label.toLowerCase()} "to")`
+        : `${t.id} (${t.label})`,
+    )
+    .join(', ')
   const system = `You read one chapter of a novel and note what it tells about the story's world, so the writer's world notes stay up to date. Base everything on the chapter (and the notes). Read it the way a careful reader would: what it shows, what it tells, and what it clearly implies. Reply with JSON only, exactly this shape:
 {"summary":"","new":[{"name":"","kind":"","about":"","quote":""}],"facts":[{"entry":"","field":"","value":"","quote":""}],"relationships":[{"from":"","to":"","type":"","words":"","how":"shown|told|implied","quote":""}],"names":[{"entry":"","name":"","usedBy":"","kind":"nickname|alias|disguise|secret","quote":""}],"identities":[{"a":"","b":"","kind":"same|becomes","quote":""}],"continuity":[{"entry":"","problem":"","quote":""}],"questions":[{"question":"","quote":""}]}
 - summary: at most 6 sentences: who is there, what happens, what changes. Keep names exactly.
@@ -329,7 +335,7 @@ export function checkFindings(
       add(`rel:${p}:${q}:${type.id}`, {
         kind: 'suggestion',
         ...(r.how === 'implied' ? { implied: true } : {}),
-        text: `${a.name} and ${b.name}: ${type.label}${label ? ` (${label})` : ''}${r.how === 'implied' ? ' · read between the lines' : ''}`,
+        text: `${type.oneWay ? `${a.name} ${type.verb ?? type.label.toLowerCase()} ${b.name}` : `${a.name} and ${b.name}: ${type.label}`}${label ? ` (${label})` : ''}${r.how === 'implied' ? ' · read between the lines' : ''}`,
         quote: quoteOf(r.quote),
         entryId: a.id,
         suggestion: { type: 'relationship', from: a.id, to: b.id, relType: type.id, label },

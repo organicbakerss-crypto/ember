@@ -118,3 +118,43 @@ describe('text form', () => {
     expect(text).toBe('Mara [mara] — sister of → Odo [odo] (family, siblings, from Ch 1)')
   })
 })
+
+describe('one-way and faint ties', () => {
+  it('works for, heard of and betrayed point one way; exes is both ways', () => {
+    const one = TYPES.filter((t) => t.oneWay).map((t) => t.id)
+    expect(one).toEqual(['works', 'heard', 'betrayed'])
+    expect(TYPES.find((t) => t.id === 'exes')!.oneWay).toBeUndefined()
+  })
+
+  it('draws an arrow at whoever it points to, both when it goes both ways', () => {
+    const [line] = boardLines([rel('a', 'b', 'works')], TYPES, { at: null, positions })
+    expect(line!.arrows).toEqual({ toA: false, toB: true })
+    const [back] = boardLines([rel('b', 'a', 'betrayed')], TYPES, { at: null, positions })
+    expect(back!.arrows).toEqual({ toA: true, toB: false })
+    const [mutual] = boardLines(
+      [rel('a', 'b', 'betrayed'), rel('b', 'a', 'betrayed', { start: ch('c2') })],
+      TYPES,
+      { at: null, positions },
+    )
+    expect(mutual!.arrows).toEqual({ toA: true, toB: true })
+    const [friends] = boardLines([rel('a', 'b', 'friends')], TYPES, { at: null, positions })
+    expect(friends!.arrows).toEqual({ toA: false, toB: false })
+  })
+
+  it('“heard of” is faint and, like “met”, only shows when nothing stronger does', () => {
+    const [heard] = boardLines([rel('a', 'b', 'heard')], TYPES, { at: null, positions })
+    expect(heard!.faint).toBe(true)
+    const [both] = boardLines([rel('a', 'b', 'heard'), rel('a', 'b', 'works')], TYPES, {
+      at: null,
+      positions,
+    })
+    expect(both!.relationships.map((r) => r.type)).toEqual(['works'])
+    expect(both!.faint).toBe(false)
+  })
+
+  it('reads the right way round, with names', () => {
+    const names: Record<string, string> = { a: 'Rodney', b: 'Josh' }
+    const [line] = boardLines([rel('a', 'b', 'works')], TYPES, { at: null, positions })
+    expect(describeLine(line!, TYPES, positions, (id) => names[id]!)).toBe('Rodney works for Josh')
+  })
+})

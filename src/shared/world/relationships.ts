@@ -15,10 +15,36 @@ export const BUILT_IN_RELATIONSHIP_TYPES: readonly RelationshipType[] = [
   { id: 'romance', label: 'Romance', colour: '#e05f9a' },
   { id: 'mentor', label: 'Mentor / loyal to', colour: '#d4a017' },
   { id: 'rivals', label: 'Rivals', colour: '#8b5cc6' },
+  { id: 'works', label: 'Works for', colour: '#2f9fb3', oneWay: true, verb: 'works for' },
+  {
+    id: 'heard',
+    label: 'Heard of',
+    colour: '#9a9a9a',
+    oneWay: true,
+    verb: 'has heard of',
+    faint: true,
+  },
+  { id: 'betrayed', label: 'Betrayed', colour: '#9c2f1f', oneWay: true, verb: 'betrayed' },
+  { id: 'exes', label: 'Exes', colour: '#b77a95' },
 ]
 
+/** Ties that only show when nothing stronger does (they've met; one has heard of the other). */
+const WEAK = new Set(['met', 'heard'])
+
 /** Strongest first: when lines don't blend, a line takes the strongest type's colour. */
-const STRENGTH = ['family', 'romance', 'enemies', 'rivals', 'mentor', 'friends', 'met']
+const STRENGTH = [
+  'family',
+  'romance',
+  'betrayed',
+  'enemies',
+  'exes',
+  'rivals',
+  'mentor',
+  'works',
+  'friends',
+  'met',
+  'heard',
+]
 
 export function relationshipTypes(custom: readonly RelationshipType[]): RelationshipType[] {
   const byId = new Map(BUILT_IN_RELATIONSHIP_TYPES.map((t) => [t.id, t]))
@@ -51,6 +77,10 @@ export interface BoardLine {
   colours: string[]
   /** Every relationship on it is over. */
   over: boolean
+  /** Arrowheads for one-way ties: pointing at a, at b. */
+  arrows: { toA: boolean; toB: boolean }
+  /** Only weak ties drawn faint (having heard of someone). */
+  faint: boolean
 }
 
 /**
@@ -69,6 +99,8 @@ export function boardLines(
   },
 ): BoardLine[] {
   const colour = new Map(types.map((t) => [t.id, t.colour]))
+  const oneWay = new Set(types.filter((t) => t.oneWay).map((t) => t.id))
+  const faint = new Set(types.filter((t) => t.faint).map((t) => t.id))
   const groups = new Map<
     string,
     { a: string; b: string; rels: { rel: RelationshipFile; over: boolean }[] }
@@ -85,7 +117,7 @@ export function boardLines(
   }
   const out: BoardLine[] = []
   for (const g of groups.values()) {
-    const real = g.rels.filter((r) => r.rel.type !== 'met')
+    const real = g.rels.filter((r) => !WEAK.has(r.rel.type))
     const shown = real.length ? real : g.rels
     const inTime = [...shown].sort(
       (x, y) => startOf(x.rel, options.positions) - startOf(y.rel, options.positions),
@@ -100,6 +132,11 @@ export function boardLines(
       relationships: inTime.map((r) => r.rel),
       colours: typeIds.map((id) => colour.get(id) ?? '#8a8a8a'),
       over: inTime.every((r) => r.over),
+      arrows: {
+        toA: inTime.some((r) => oneWay.has(r.rel.type) && r.rel.to === g.a),
+        toB: inTime.some((r) => oneWay.has(r.rel.type) && r.rel.to === g.b),
+      },
+      faint: inTime.every((r) => faint.has(r.rel.type)),
     })
   }
   return out
@@ -133,13 +170,20 @@ export function describeLine(
   line: Pick<BoardLine, 'relationships'>,
   types: readonly RelationshipType[],
   positions: ChapterPositions,
+  /** Names, so one-way ties read the right way round ("Rodney works for Josh"). */
+  nameOf?: (entryId: string) => string,
 ): string {
-  const label = (rel: RelationshipFile) =>
-    rel.label || (types.find((t) => t.id === rel.type)?.label ?? rel.type)
+  const label = (rel: RelationshipFile) => {
+    const t = types.find((x) => x.id === rel.type)
+    if (t?.oneWay && nameOf && !rel.label)
+      return `${nameOf(rel.from)} ${t.verb ?? t.label.toLowerCase()} ${nameOf(rel.to)}`
+    return rel.label || (t?.label ?? rel.type)
+  }
   const parts: string[] = []
   let last: number | null = null
   for (const rel of line.relationships) {
-    const words = label(rel).toLowerCase()
+    const t = types.find((x) => x.id === rel.type)
+    const words = t?.oneWay && nameOf && !rel.label ? label(rel) : label(rel).toLowerCase()
     const s = startOf(rel, positions)
     const over = rel.over || rel.end ? ' (over)' : ''
     if (!parts.length) parts.push(words + over)

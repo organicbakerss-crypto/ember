@@ -546,6 +546,12 @@ export const relationshipTypeSchema = z.looseObject({
   id: relationshipTypeIdSchema,
   label: z.string().trim().min(1).max(40),
   colour: z.string().regex(/^#[0-9a-f]{6}$/i),
+  /** Goes one way (drawn with an arrow from → to): works for, has heard of, betrayed. */
+  oneWay: z.boolean().optional().catch(undefined),
+  /** How it reads from → to ("works for"), for a one-way type. */
+  verb: z.string().trim().max(40).optional().catch(undefined),
+  /** Drawn faint (a weak tie, like having heard of someone). */
+  faint: z.boolean().optional().catch(undefined),
 })
 export type RelationshipType = z.infer<typeof relationshipTypeSchema>
 

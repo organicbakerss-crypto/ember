@@ -43,6 +43,9 @@ export function RelationshipEditor(props: {
     rel?.kin === 'parent' ? 'parentOf' : rel?.kin === 'partner' ? 'partner' : 'sibling',
   )
   const [over, setOver] = useState(rel?.over ?? false)
+  /** For a one-way type: whether it goes to → from instead (the other way round). */
+  const [reversed, setReversed] = useState(false)
+  const typeOf = world.view.relationshipTypes.find((t) => t.id === type)
   // A new link made with the scrubber at a moment starts there.
   const { stop } = useTime()
   const [start, setStart] = useState(anchorKey(rel ? rel.start : stop && anchorOf(stop)))
@@ -53,7 +56,7 @@ export function RelationshipEditor(props: {
 
   const save = () => {
     if (!from || !to) return
-    const swap = type === 'family' && kin === 'childOf'
+    const swap = (type === 'family' && kin === 'childOf') || (!!typeOf?.oneWay && reversed)
     props.onSave({
       id: rel?.id,
       from: swap ? to : from,
@@ -141,6 +144,26 @@ export function RelationshipEditor(props: {
             </button>
           ))}
         </div>
+        {typeOf?.oneWay && from && to && (
+          <div className="kin-choices small" role="radiogroup" aria-label="Which way">
+            {(
+              [
+                [false, `${name(from)} ${typeOf.verb ?? typeOf.label.toLowerCase()} ${name(to)}`],
+                [true, `${name(to)} ${typeOf.verb ?? typeOf.label.toLowerCase()} ${name(from)}`],
+              ] as [boolean, string][]
+            ).map(([value, text]) => (
+              <label key={String(value)} className="radio">
+                <input
+                  type="radio"
+                  name="direction"
+                  checked={reversed === value}
+                  onChange={() => setReversed(value)}
+                />
+                {text}
+              </label>
+            ))}
+          </div>
+        )}
         {type === 'family' && from && to && (
           <div className="kin-choices small" role="radiogroup" aria-label="Family">
             {(
