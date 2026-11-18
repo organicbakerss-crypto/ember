@@ -1156,6 +1156,12 @@ export const ipcInputs = {
   /** Tidy up: the AI suggests links, merges, moves, filing and splits (progress as ai:progress). */
   'memory:tidy': z.object({ seriesId: id('series'), requestId: z.string().min(1).max(80) }),
   'memory:checks': z.object({ seriesId: id('series') }),
+  /** Goes over a book (or the whole story): catches up unread chapters, then looks for gaps. */
+  'ai:goOver': z.object({
+    requestId: z.string().min(1).max(80),
+    seriesId: id('series'),
+    volumeId: id('volume').nullable(),
+  }),
   'memory:add': z
     .object({
       seriesId: id('series'),
@@ -1519,6 +1525,7 @@ export interface IpcResults {
   'memory:tidy': { suggestions: TidySuggestion[]; topics: number }
   'memory:tidyApply': { changed: number; removed: number }
   'memory:checks': IdeaCheck[]
+  'ai:goOver': { read: number; found: number; questions: number }
   'memory:add': { changeId: string | null; summary: string; parts: number }
   'memory:checkStory': { added: number; chapters: number }
   'memory:checksApply': { applied: number }

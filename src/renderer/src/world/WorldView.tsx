@@ -26,6 +26,7 @@ import { PeopleBoard } from './board/PeopleBoard'
 import { RelationshipsTable } from './board/RelationshipsTable'
 import { worldMapOf } from './map/mapModel'
 import { useSettings } from '../useTheme'
+import { GoOverDialog } from './GoOverDialog'
 import { TimeContext, type TimeState } from './time/TimeContext'
 import { useWords } from '../skins/useWords'
 import { usePane } from '../panes/PaneContext'
@@ -118,6 +119,9 @@ export function WorldView(props: {
     template?: string
   } | null>(null)
   const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [goOver, setGoOver] = useState(false)
+  const stories = props.series.filter((s) => s.worldId === worldId)
+  const canGoOver = settings.ai.enabled && stories.length > 0
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [digest, setDigest] = useState<string | null>(null)
   // The side panel's search (a tag clicked on an entry fills it with "#tag").
@@ -246,6 +250,15 @@ export function WorldView(props: {
           },
           { id: 'world-templates', title: 'Edit templates', run: () => setTemplatesOpen(true) },
           { id: 'world-digest', title: 'View the world as text', run: showDigest },
+          ...(canGoOver
+            ? [
+                {
+                  id: 'world-go-over',
+                  title: 'Go over the whole story (fill in the world’s gaps)',
+                  run: () => setGoOver(true),
+                },
+              ]
+            : []),
           { id: 'world-back', title: 'Back', shortcut: 'Alt+←', run: back },
           { id: 'world-forward', title: 'Forward', shortcut: 'Alt+→', run: forward },
           ...(props.onWrite
@@ -372,6 +385,9 @@ export function WorldView(props: {
                   onSelect: () => setQuickAdd({}),
                 },
                 { label: 'Templates…', onSelect: () => setTemplatesOpen(true) },
+                ...(canGoOver
+                  ? [{ label: 'Go over the whole story…', onSelect: () => setGoOver(true) }]
+                  : []),
                 { label: 'View the world as text', onSelect: showDigest },
                 { label: 'Export the world (PDF series bible)…', onSelect: exportBible },
                 {
@@ -681,6 +697,16 @@ export function WorldView(props: {
           />
         )}
         {templatesOpen && <TemplateDialog world={world} onClose={() => setTemplatesOpen(false)} />}
+        {goOver && (
+          <GoOverDialog
+            stories={stories}
+            onClose={() => setGoOver(false)}
+            onOpenInbox={() => {
+              setGoOver(false)
+              go({ kind: 'inbox' })
+            }}
+          />
+        )}
         {digest !== null && (
           <TextFormDialog
             title={`${view.world.name} as text`}

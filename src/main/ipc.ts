@@ -451,6 +451,10 @@ export function registerIpc(
       ),
     'memory:tidyApply': (input) => ai.applyTidy(input.seriesId, input.kept),
     'memory:checks': (input) => ai.ideaChecks.list(input.seriesId),
+    'ai:goOver': (input) =>
+      ai.goOverStory(input, (text) =>
+        broadcast('ai:progress', { requestId: input.requestId, text }),
+      ),
     'memory:add': (input) =>
       ai.addToIdeas(input, (text) =>
         broadcast('ai:progress', { requestId: input.requestId, text }),

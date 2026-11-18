@@ -57,6 +57,10 @@ import {
 import { newId } from '@shared/ids'
 import { MemoryBuilds } from './memoryBuild'
 import { MemoryLog } from './memoryLog'
+import fs from 'node:fs'
+import { join } from 'node:path'
+import { writeJsonFile } from '../fs/jsonFile'
+import { identityLines } from '@shared/world/identity'
 import { IdeaChecks } from './ideaChecks'
 import { applyChecks, checkMessages, parseCheck, type IdeaCheck } from '@shared/memory/check'
 import {
@@ -101,6 +105,7 @@ import { Ollama, type ChatMessage } from './ollama'
 import {
   chapterParts,
   checkFindings,
+  gapMessages,
   combineMessages,
   entryNote,
   findingsMessages,
@@ -2116,6 +2121,150 @@ export class AiService {
     })
   }
 
+  /* ---------- going over the whole story ---------- */
+
+  /** Which chapters Update the world has read, and the version it read (this computer only). */
+  private readFile(seriesId: string): string {
+    return join(this.options.host.current.paths.localDir, 'world-read', `${seriesId}.json`)
+  }
+
+  private async readRecord(seriesId: string): Promise<Record<string, string> | null> {
+    let raw: string
+    try {
+      raw = await fs.promises.readFile(this.readFile(seriesId), 'utf8')
+    } catch {
+      return {}
+    }
+    try {
+      const data = JSON.parse(raw) as { chapters?: Record<string, string> }
+      return data && typeof data.chapters === 'object' ? { ...data.chapters } : null
+    } catch {
+      // Unreadable: every chapter counts as not read, and the file is left as it is.
+      return null
+    }
+  }
+
+  private async markRead(seriesId: string, chapterId: string, hash: string): Promise<void> {
+    const record = await this.readRecord(seriesId)
+    if (!record) return
+    record[chapterId] = hash
+    await fs.promises.mkdir(join(this.readFile(seriesId), '..'), { recursive: true })
+    await writeJsonFile(this.readFile(seriesId), { formatVersion: 1, chapters: record })
+  }
+
+  /**
+   * Goes over a whole book or story: first every chapter Update the world
+   * hasn't read (or that changed since) is read as usual, then the AI looks
+   * across all the chapter summaries and the world for what reading one
+   * chapter at a time can't see. What it finds waits in the inbox.
+   */
+  async goOverStory(
+    input: { requestId: string; seriesId: string; volumeId: string | null },
+    onProgress: (text: string) => void,
+  ): Promise<{ read: number; found: number; questions: number }> {
+    const provider = await this.client()
+    const library = this.options.host.current
+    const series = await library.getSeries(input.seriesId)
+    if (!series.worldId)
+      throw new AppError('invalid-input', 'This story has no world to update. Link one first.')
+    const worldId = series.worldId
+    return this.track(input.requestId, async (signal) => {
+      const inScope = (await library.storySummaries(input.seriesId)).filter(
+        (s) =>
+          (!input.volumeId || s.chapter.volumeId === input.volumeId) &&
+          s.paragraphs.some((p) => p.trim()),
+      )
+      const record = (await this.readRecord(input.seriesId)) ?? {}
+      const todo = inScope.filter((s) => record[s.chapter.id] !== s.textHash)
+      // Each chapter is its own job; stopping this stops the one running.
+      const inner = `${input.requestId}/chapter`
+      signal.addEventListener('abort', () => this.cancel(inner))
+      for (const [i, s] of todo.entries()) {
+        if (signal.aborted) throw new AppError('cancelled', 'Stopped.')
+        onProgress(
+          `Catching up: reading “${s.chapter.title || 'Untitled'}” (${i + 1} of ${todo.length})…`,
+        )
+        await this.updateWorld(
+          {
+            requestId: inner,
+            seriesId: input.seriesId,
+            volumeId: s.chapter.volumeId,
+            chapterId: s.chapter.id,
+          },
+          () => {},
+        )
+      }
+      if (signal.aborted) throw new AppError('cancelled', 'Stopped.')
+
+      onProgress('Looking across the story for gaps…')
+      const fresh = (await library.storySummaries(input.seriesId)).filter(
+        (s) =>
+          (!input.volumeId || s.chapter.volumeId === input.volumeId) &&
+          s.paragraphs.some((p) => p.trim()),
+      )
+      const volumes = new Set(fresh.map((s) => s.chapter.volumeId)).size
+      const summaries = fresh.map(
+        (s) =>
+          `${volumes > 1 ? `${s.chapter.volumeName} › ` : ''}${s.chapter.label} “${s.chapter.title || 'Untitled'}”: ${s.summary ?? '(no summary)'}`,
+      )
+      const [view, answers, digest] = await Promise.all([
+        library.world.view(worldId),
+        library.world.answers(worldId),
+        library.world.digest(worldId),
+      ])
+      const identities = view.entries.flatMap((e) => {
+        const lines = identityLines(e, view.entries, () => null)
+        return lines.length ? [`${e.name}: ${lines.join('; ')}`] : []
+      })
+      const reply = await provider.chat({
+        messages: gapMessages({
+          storyName: series.name,
+          summaries,
+          digest,
+          identities,
+          relationshipTypes: view.relationshipTypes,
+          answers,
+        }),
+        json: true,
+        temperature: 0.2,
+        signal,
+      })
+      const raw = parseFindings(reply)
+      if (!raw)
+        throw new AppError(
+          'invalid-input',
+          'The AI’s answer couldn’t be read. Try again; a larger model does this better.',
+        )
+      const findings = checkFindings([raw], '', {
+        entries: view.entries,
+        templates: view.templates,
+        relationshipTypes: view.relationshipTypes,
+        relationships: view.relationships,
+        answered: answers.map((a) => a.question),
+      }).map((f) => (f.kind === 'suggestion' ? { ...f, implied: true } : f))
+      const last = fresh.at(-1)
+      if (findings.length && last) {
+        await library.world.addFindings(
+          worldId,
+          {
+            seriesId: input.seriesId,
+            volumeId: last.chapter.volumeId,
+            chapterId: last.chapter.id,
+            chapterTitle: `the whole ${input.volumeId ? 'book' : 'story'} (gone over)`,
+          },
+          findings,
+          false,
+        )
+      }
+      onProgress('')
+      return {
+        read: todo.length,
+        found: findings.filter((f) => f.kind === 'suggestion').length,
+        questions: findings.filter((f) => f.kind === 'question').length,
+      }
+    })
+  }
+
   /**
    * Reads a chapter for the world: its summary is kept beside the chapter,
    * and what the AI found (checked against the world) goes to the inbox.
@@ -2263,6 +2412,7 @@ export class AiService {
         )
       }
       await library.world.addFindings(worldId, source, findings)
+      await this.markRead(input.seriesId, input.chapterId, chapterTextHash(paragraphs))
       // The page also checks General ideas (never the other way round). It never fails the update.
       let ideas = 0
       try {

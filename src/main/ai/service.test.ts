@@ -1116,6 +1116,56 @@ describe('the story memory', () => {
     expect(await fs.promises.readFile(file, 'utf8')).toBe('{ not json')
   })
 
+  it('goes over the whole story: catches up unread chapters once, then looks for gaps', async () => {
+    let gapPrompt = ''
+    fake = await startFakeOllama((r) => {
+      const system = r.messages[0]!.content
+      if (system.includes('You go over a whole novel')) {
+        gapPrompt = r.messages[1]!.content
+        return JSON.stringify({
+          relationships: [
+            { from: 'Mara', to: 'Kestrel Bay', type: 'met', how: 'implied', quote: '' },
+          ],
+          questions: [{ question: 'Has Mara been to Kestrel Bay before?', quote: '' }],
+        })
+      }
+      if (system.includes('You check a writer')) return '{}'
+      return JSON.stringify({ summary: 'Mara runs to the harbour.' })
+    })
+    const ref = await story()
+    const ai = service({})
+    const first = await ai.goOverStory(
+      { requestId: 'r-go', seriesId: ref.seriesId, volumeId: null },
+      () => {},
+    )
+    expect(first).toEqual({ read: 1, found: 1, questions: 1 })
+    // The AI saw the chapter's summary and the world.
+    expect(gapPrompt).toContain('Mara runs to the harbour.')
+    expect(gapPrompt).toContain('Kestrel Bay')
+    const inbox = await lib.world.inbox(ref.worldId, false)
+    expect(inbox.captured.some((i) => i.text.includes('read between the lines'))).toBe(true)
+    // Nothing new to catch up on the second time; a changed chapter is read again.
+    expect(
+      (
+        await ai.goOverStory(
+          { requestId: 'r-go2', seriesId: ref.seriesId, volumeId: null },
+          () => {},
+        )
+      ).read,
+    ).toBe(0)
+    await lib.saveChapter(ref.seriesId, ref.volumeId, ref.chapterId, {
+      content: doc('Mara ran to the harbour, then back.'),
+    })
+    expect(
+      (
+        await ai.goOverStory(
+          { requestId: 'r-go3', seriesId: ref.seriesId, volumeId: null },
+          () => {},
+        )
+      ).read,
+    ).toBe(1)
+  })
+
   it('updating the world also checks the ideas against that chapter', async () => {
     fake = await startFakeOllama((r) => {
       const system = r.messages[0]!.content

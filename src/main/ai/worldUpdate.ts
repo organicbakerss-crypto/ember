@@ -107,6 +107,57 @@ export function combineMessages(summaries: string[]): ChatMessage[] {
   ]
 }
 
+/**
+ * Going over the whole story for gaps: chapter by chapter reading can't see
+ * what builds up across chapters. The AI gets every chapter's summary and the
+ * world, and answers in the same shape as for one chapter (no quotes).
+ */
+export function gapMessages(input: {
+  storyName: string
+  /** "Ch 3 “Title”: summary", in story order. */
+  summaries: string[]
+  /** The world, one line per entry (with its ties). */
+  digest: string
+  /** Each person's other names and identities, as lines. */
+  identities: string[]
+  relationshipTypes: RelationshipType[]
+  answers: { question: string; answer: string }[]
+}): ChatMessage[] {
+  const types = input.relationshipTypes
+    .map((t) =>
+      t.oneWay
+        ? `${t.id} (one-way: "from" ${t.verb ?? t.label.toLowerCase()} "to")`
+        : `${t.id} (${t.label})`,
+    )
+    .join(', ')
+  const system = `You go over a whole novel, “${input.storyName}”, to fill in what the writer's world notes are missing. Each chapter was read on its own before, so look for what only shows across chapters: two people connected over several chapters (one calls him "Dad" in one chapter, another says "Uncle Pete" in another), people who turn out to be the same person or become someone else, facts that are out of date by the latest chapter, and anyone who keeps turning up but isn't in the world. Base everything on the summaries and the notes; reading between the lines is fine where they point to it; never invent. Reply with JSON only, exactly this shape:
+{"new":[{"name":"","kind":"","about":"","quote":""}],"facts":[{"entry":"","field":"","value":"","quote":""}],"relationships":[{"from":"","to":"","type":"","words":"","how":"told|implied","quote":""}],"names":[{"entry":"","name":"","usedBy":"","kind":"nickname|alias|disguise|secret","quote":""}],"identities":[{"a":"","b":"","kind":"same|becomes","quote":""}],"questions":[{"question":"","quote":""}]}
+- new: people, places or groups that come up in several chapters but aren't in the world. kind is one of: ${Object.keys(NEW_KINDS).join(', ')}. about: one short line.
+- facts: what's out of date or missing for an entry by the end (where someone is now, a new role, someone died). entry: exact name; field: a field name from the notes; value: a few words.
+- relationships: two entries connected across the story, if the notes don't say so already. type is one of: ${types}; "met" when nothing more is clear. how: "told" or "implied".
+- names: another name for an entry, and who uses it ("" if everyone).
+- identities: two entries that are the same person (kind "same"), or one who becomes the other ("becomes": a was, b becomes).
+- questions: at most 8 things only the writer can answer (who a name means, whether two people are one).
+- quote: the chapter it shows in ("Ch 7"), or "".
+When you're not sure, ask instead of guessing. Don't repeat what the notes already say. Leave a list empty when there's nothing for it.`
+  const user = [
+    `The world:\n${input.digest}`,
+    input.identities.length
+      ? `Names and identities already known:\n${input.identities.join('\n')}`
+      : '',
+    input.answers.length
+      ? `The writer told you:\n${input.answers.map((a) => `- ${a.question} ${a.answer}`).join('\n')}`
+      : '',
+    `The story, chapter by chapter:\n${input.summaries.join('\n')}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ]
+}
+
 /* ---------- reading the answer ---------- */
 
 export interface RawFindings {
